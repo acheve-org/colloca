@@ -1,0 +1,16 @@
+services:
+  corpus:
+    build:
+      context: .
+      args:
+        SPACY_SIZE: md          # sm | md | lg
+    ports:
+      - "127.0.0.1:8000:8000"   # local only; change deliberately to expose on a network
+    volumes:
+      - corpus-data:/data       # SQLite database lives here
+    environment:
+      # ALLOW_PRIVATE_URLS: "1" # allow fetching intranet URLs (off by default)
+      MAX_DOWNLOAD_MB: "15"
+    restart: unless-stopped
+volumes:
+  corpus-data:
