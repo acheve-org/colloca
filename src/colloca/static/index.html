@@ -45,6 +45,27 @@
 <datalist id="tagList"></datalist>
 <datalist id="typeList"></datalist>
 
+<dialog id="termDlg">
+  <form method="dialog" id="termForm">
+    <h3 id="termTitle">Add term</h3>
+    <p class="muted" id="termLangs"></p>
+    <label>Source term <input id="tmSrc" required></label>
+    <label>Translation <input id="tmTgt" placeholder="leave empty for a candidate still to translate"></label>
+    <div class="row">
+      <label>Status <select id="tmStatus"><option value="candidate">candidate</option><option value="approved">approved</option><option value="forbidden">forbidden (do not use)</option></select></label>
+      <label>Part of speech <select id="tmPos"><option value="">—</option><option>noun</option><option>verb</option><option>adjective</option><option>adverb</option><option>properNoun</option><option>other</option></select></label>
+      <label>Domain <input id="tmDomain" list="domainList" size="14"></label>
+    </div>
+    <label>Definition <textarea id="tmDef" rows="2"></textarea></label>
+    <label>Notes <textarea id="tmNotes" rows="2"></textarea></label>
+    <label>Example sentence <textarea id="tmCtx" rows="2"></textarea></label>
+    <div class="row"><button type="button" id="tmFind">Find examples in this corpus</button><span id="tmSrcDoc" class="muted"></span></div>
+    <div id="tmExamples"></div>
+    <menu><button value="cancel" formnovalidate>Cancel</button><button id="tmOk" value="ok" class="primary">Save</button></menu>
+  </form>
+</dialog>
+<datalist id="domainList"></datalist>
+
 <dialog id="newDlg">
   <form method="dialog" id="newForm">
     <h3>New corpus</h3>
@@ -63,6 +84,7 @@
   <button data-tab="ngrams">N-grams</button>
   <button data-tab="keyness">Keyness</button>
   <button data-tab="cloud">Word cloud</button>
+  <button data-tab="terms">Termbase</button>
   <button data-tab="base">Base corpora</button>
 </nav>
 <div id="filterBar" hidden>
@@ -143,7 +165,7 @@
     <label>Match <select id="ccUnit"><option value="lemma">lemma</option><option value="form">exact form</option></select></label>
     <label>Context <input id="ccW" type="number" value="8" min="2" max="40" style="width:4em"></label>
     <label>Sort <select id="ccSort"><option value="doc">document</option><option value="left">left context</option><option value="right">right context</option></select></label>
-    <button id="ccGo" class="primary">Search</button><a id="ccCsv" class="csv">CSV</a>
+    <button id="ccGo" class="primary">Search</button><button id="ccTerm" title="Add the searched word or phrase to the termbase">+ term</button><a id="ccCsv" class="csv">CSV</a>
   </div>
   <div id="ccInfo" class="muted"></div>
   <div class="result" id="ccOut"></div>
@@ -195,6 +217,27 @@
     <button id="wcGo" class="primary">Draw</button><button id="wcPng">Save PNG</button>
   </div>
   <canvas id="wcCanvas" width="1000" height="560"></canvas>
+</section>
+
+<section id="tab-terms" class="tab">
+  <div class="controls">
+    <label>Termbase of <select id="tbScope"></select></label>
+    <label>Status <select id="tbStatus"><option value="">all</option><option>candidate</option><option>approved</option><option>forbidden</option></select></label>
+    <input id="tbQ" placeholder="search terms" size="18">
+    <span id="tbCount" class="muted"></span>
+  </div>
+  <div class="controls">
+    <b>Export</b>
+    <label title="By default only approved entries are exported"><input type="checkbox" id="tbCand"> include candidates</label>
+    <a id="tbTbx" class="csv">TBX (ISO 2019)</a>
+    <a id="tbTbx2" class="csv" title="Older TBX structure, read by most CAT tools">TBX 2008 (most CAT tools)</a>
+    <a id="tbXlsx" class="csv">Excel</a>
+    <a id="tbCsv" class="csv">CSV</a>
+  </div>
+  <p class="muted">Add terms with <b>+ term</b> from the Frequency, Collocations, N-grams and Keyness tables or the Concordance search.
+  Entries belong to the project of the corpus they were added from. Approved and forbidden entries need a translation.
+  Check the exported TBX by importing it into your CAT tool before relying on it.</p>
+  <div class="result" id="tbOut"></div>
 </section>
 
 <section id="tab-base" class="tab">

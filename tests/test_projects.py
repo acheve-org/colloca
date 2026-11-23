@@ -1,3 +1,4 @@
+import itertools
 import sqlite3
 
 import pytest
@@ -6,9 +7,12 @@ from colloca import analysis, db, metadata
 
 from .test_api import ES_TEXT, add, make_corpus, wait_for_jobs
 
+_project_seq = itertools.count(1)
 
-def project(client, name="Client X"):
-    r = client.post("/api/projects", json={"name": name})
+
+def project(client, name=None):
+    """A new project; names are unique per call because the test database is shared by the whole run."""
+    r = client.post("/api/projects", json={"name": name or f"Client {next(_project_seq)}"})
     assert r.status_code == 201, r.text
     return r.json()["id"]
 
@@ -29,7 +33,7 @@ MANUAL = "El manual describe el funcionamiento del motor y las instrucciones de 
 
 # --------------------------------------------------------------------------- projects
 def test_project_crud_and_corpus_assignment(client):
-    pid = project(client)
+    pid = project(client, "Client X")
     assert client.post("/api/projects", json={"name": "client x"}).status_code == 409   # case-insensitive
     cid = client.post("/api/corpora", json={"name": "c", "lang": "es", "project_id": pid}).json()["id"]
     assert client.post("/api/corpora", json={"name": "c", "lang": "es", "project_id": 9999}).status_code == 404
@@ -38,6 +42,7 @@ def test_project_crud_and_corpus_assignment(client):
 
     assert client.patch(f"/api/projects/{pid}", json={"name": "Client Y", "notes": "NDA"}).status_code == 200
     assert next(p for p in client.get("/api/projects").json() if p["id"] == pid)["name"] == "Client Y"
+    assert client.delete(f"/api/projects/{pid}").status_code == 204
 
 
 def test_move_and_rename_corpus(client):

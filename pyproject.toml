@@ -17,6 +17,7 @@ dependencies = [
     # Swap "sm" for "md"/"lg" (and set SPACY_SIZE) for better lemmas.
     "es-core-news-sm",
     "it-core-news-sm",
+    "openpyxl>=3.1.5",
 ]
 
 [project.scripts]

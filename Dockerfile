@@ -11,7 +11,7 @@ COPY pyproject.toml uv.lock README.md ./
 RUN uv sync --frozen --no-dev --no-install-project
 
 # NLP models. SPACY_SIZE: sm (fast, ~15 MB) | md (default, better lemmas) | lg
-ARG SPACY_SIZE=md
+ARG SPACY_SIZE=lg
 ENV SPACY_SIZE=${SPACY_SIZE}
 RUN if [ "$SPACY_SIZE" != "sm" ]; then \
       base=https://github.com/explosion/spacy-models/releases/download; \
