@@ -123,8 +123,10 @@
       { value: 'new', label: t('src.pair.newCorpus') },
     ];
   });
+  // Like the old select (re-rendered after every reload): the first option until one is picked.
+  let partnerPicked = false;
   $effect(() => {
-    if (!partnerOptions.some((o) => o.value === partner)) partner = partnerOptions[0].value;
+    if (!partnerPicked || !partnerOptions.some((o) => o.value === partner)) partner = partnerOptions[0].value;
   });
 
   // The settings follow the current corpus (as the old tab did after every reload).
@@ -238,6 +240,7 @@
     jobLog = [];
     preview = null;
     busy = null;
+    partnerPicked = false;
     stopJobs?.();
     stopJobs = null;
     if (corpusStore.currentId !== null) start();
@@ -371,6 +374,8 @@
       if (!still(id)) return;
       pairFile = null;
       pairName = '';
+      partnerPicked = false; // back to the first option, which may be the corpus just created
+      partner = '';
       if (pairInput) pairInput.value = '';
       const bad = res.filter((r) => !r.ok);
       if (bad.length) messages.say(t('src.pair.rejected', { error: bad[0].error ?? '' }), 'err');
@@ -615,7 +620,7 @@
             onchange={(e) => (pairFile = e.currentTarget.files?.[0] ?? null)}
           />
           <Field label={t('src.pair.partner')}>
-            <Select label={t('src.pair.partner')} bind:value={partner} options={partnerOptions} />
+            <Select label={t('src.pair.partner')} bind:value={partner} options={partnerOptions} onchange={() => (partnerPicked = true)} />
           </Field>
           {#if partner === 'new'}
             <input bind:value={pairName} maxlength="120" placeholder={t('src.pair.namePlaceholder')} aria-label={t('src.pair.name')} />
@@ -741,16 +746,16 @@
 </Dialog>
 
 <style>
+  /* One scrolling page: the add forms, then the documents table at a usable height. */
   .sources {
     display: flex;
     flex-direction: column;
     flex: 1;
     min-height: 0;
+    overflow: auto;
   }
   .scroll {
     flex: none;
-    max-height: 55%;
-    overflow: auto;
     border-bottom: 1px solid var(--line);
   }
   .contents {
@@ -877,11 +882,15 @@
   .table {
     display: flex;
     flex-direction: column;
-    flex: 1;
-    min-height: 8rem;
+    flex: none;
+    height: max(18rem, 55vh);
   }
   .table :global(.dt) {
     border-width: 0;
+  }
+  /* muted cell text (author, date) stays legible on the accent background of the selected row */
+  .table :global(.body.selected .muted) {
+    color: var(--accent-fg);
   }
   .title {
     display: flex;
@@ -899,8 +908,6 @@
   }
   .detail {
     flex: none;
-    max-height: 40%;
-    overflow: auto;
   }
   .detail :global(.strip) {
     max-height: none;

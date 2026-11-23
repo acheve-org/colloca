@@ -134,7 +134,7 @@ describe('watchJobs', () => {
     expect(screen.queryByText(/job running/)).not.toBeInTheDocument();
     watchJobs(4, () => {});
     await vi.advanceTimersByTimeAsync(0);
-    expect(screen.getByText('Importing: 1 job running')).toBeInTheDocument();
+    expect(screen.getByText('1 background job running')).toBeInTheDocument();
     expect(screen.getByRole('progressbar')).toHaveAttribute('value', '25');
     await vi.advanceTimersByTimeAsync(1000);
     expect(screen.queryByText(/job running/)).not.toBeInTheDocument();
