@@ -1,4 +1,5 @@
 import io
+import time
 
 import pytest
 from docx import Document
@@ -22,6 +23,17 @@ def make_corpus(client, lang="es", name="t"):
 
 def add(client, cid, text, title="doc"):
     return client.post(f"/api/corpora/{cid}/documents", json={"title": title, "text": text})
+
+
+def wait_for_jobs(client, cid, timeout=60):
+    """Poll until every background job of the corpus has finished; returns the jobs."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        jobs = client.get(f"/api/corpora/{cid}/jobs").json()
+        if jobs and all(j["status"] in ("done", "error") for j in jobs):
+            return jobs
+        time.sleep(0.05)
+    raise AssertionError("jobs did not finish")
 
 
 def test_unsupported_language(client):
@@ -120,7 +132,10 @@ def test_upload_docx_txt_and_errors(client):
         ("files", ("foto.png", b"\x89PNG", "image/png")),
     ]
     res = client.post(f"/api/corpora/{cid}/upload", files=files).json()
-    assert [r["ok"] for r in res] == [True, True, False]
+    assert [r["ok"] for r in res] == [True, True, True]   # accepted; the bad file fails in its job
+    jobs = {j["label"]: j for j in wait_for_jobs(client, cid)}
+    assert jobs["foto.png"]["status"] == "error" and "Unsupported" in jobs["foto.png"]["error"]
+    assert jobs["nota.txt"]["status"] == "done"
     docs = client.get(f"/api/corpora/{cid}/documents").json()
     assert {d["title"] for d in docs} == {"contrato", "nota"}
     text = client.get(f"/api/documents/{docs[0]['id']}").json()["text"]
@@ -186,3 +201,123 @@ def test_paragraph_boundary_has_space_in_concordance(client):
                        params={"q": "energía", "width": 12}).json()["lines"]
     assert "costa. La" in lines[0]["left"] or lines[0]["left"].endswith("costa.")
     assert ".La" not in lines[0]["left"]
+
+
+# --------------------------------------------------------------------------- language check
+def test_language_mismatch_rejected_unless_forced(client):
+    cid = make_corpus(client, "es")
+    r = add(client, cid, IT_TEXT)
+    assert r.status_code == 422 and "Italian" in r.json()["detail"]
+    assert client.get(f"/api/corpora/{cid}/documents").json() == []
+
+    r = client.post(f"/api/corpora/{cid}/documents", params={"force_language": True},
+                    json={"title": "forced", "text": IT_TEXT})
+    assert r.status_code == 201 and r.json()["lang_check"] == "mismatch" and r.json()["warnings"]
+    assert client.get(f"/api/corpora/{cid}/documents").json()[0]["lang_check"] == "mismatch"
+
+
+def test_matching_language_is_recorded_as_ok(client):
+    cid = make_corpus(client, "es")
+    assert add(client, cid, ES_TEXT).json()["lang_check"] == "ok"
+
+
+def test_background_mismatch_reports_error_in_job(client):
+    cid = make_corpus(client, "es")
+    r = client.post(f"/api/corpora/{cid}/documents", params={"background": True},
+                    json={"title": "x", "text": IT_TEXT})
+    assert r.status_code == 202
+    job = wait_for_jobs(client, cid)[0]
+    assert job["status"] == "error" and job["code"] == "language_mismatch"
+
+
+# --------------------------------------------------------------------------- upload limits & jobs
+def test_upload_file_too_large(client, monkeypatch):
+    monkeypatch.setattr("colloca.ingest.MAX_UPLOAD_BYTES", 100)
+    cid = make_corpus(client)
+    res = client.post(f"/api/corpora/{cid}/upload",
+                      files=[("files", ("big.txt", b"x" * 101, "text/plain"))]).json()
+    assert res[0]["ok"] is False and "larger than" in res[0]["error"]
+    assert client.get(f"/api/corpora/{cid}/jobs").json() == []          # nothing was queued
+
+
+def test_upload_too_many_files(client, monkeypatch):
+    monkeypatch.setattr("colloca.ingest.MAX_UPLOAD_FILES", 1)
+    cid = make_corpus(client)
+    files = [("files", (f"{i}.txt", b"hola", "text/plain")) for i in range(2)]
+    assert client.post(f"/api/corpora/{cid}/upload", files=files).status_code == 413
+
+
+def test_pdf_page_limit(monkeypatch):
+    from pypdf import PdfWriter
+
+    from colloca import ingest
+    w = PdfWriter()
+    for _ in range(3):
+        w.add_blank_page(200, 200)
+    buf = io.BytesIO()
+    w.write(buf)
+    monkeypatch.setattr(ingest, "MAX_PDF_PAGES", 2)
+    with pytest.raises(ingest.IngestError, match="3 pages"):
+        ingest.extract_pdf(buf.getvalue())
+
+
+def test_job_progress_and_result(client):
+    cid = make_corpus(client)
+    r = client.post(f"/api/corpora/{cid}/documents", params={"background": True},
+                    json={"title": "bg", "text": ES_TEXT})
+    job_id = r.json()["job_id"]
+    job = wait_for_jobs(client, cid)[0]
+    assert job["id"] == job_id and job["status"] == "done" and job["progress"] == 1.0
+    assert job["result"]["tokens"] > 20
+    assert client.get(f"/api/jobs/{job_id}").json()["status"] == "done"
+    assert client.get("/api/jobs/999999").status_code == 404
+
+
+def test_duplicate_in_background_is_a_job_error(client):
+    cid = make_corpus(client)
+    add(client, cid, ES_TEXT)
+    client.post(f"/api/corpora/{cid}/documents", params={"background": True}, json={"text": ES_TEXT})
+    job = wait_for_jobs(client, cid)[0]
+    assert job["status"] == "error" and job["code"] == "duplicate"
+
+
+# --------------------------------------------------------------------------- CSV safety
+def test_csv_neutralises_formulas():
+    from colloca.main import _reply
+    rows = [{"item": "=HYPERLINK(\"http://x\")", "a": "+1", "b": "-2", "c": "@x", "d": "ok", "n": -3}]
+    text = _reply(rows, "csv", "t").body.decode("utf-8-sig")
+    data = text.splitlines()[1]
+    assert "'=HYPERLINK" in data and "'+1" in data and "'-2" in data and "'@x" in data
+    assert ",ok," in data and data.endswith(",-3")                    # plain text and real numbers untouched
+
+
+# --------------------------------------------------------------------------- re-annotation
+def test_reannotate_outdated_documents(client):
+    from colloca import db
+    cid = make_corpus(client)
+    add(client, cid, ES_TEXT)
+    doc = client.get(f"/api/corpora/{cid}/documents").json()[0]
+    assert doc["stale"] is False
+    before = client.get(f"/api/corpora/{cid}/frequency").json()
+
+    with db.session() as conn:                                        # pretend an older model annotated it
+        conn.execute("UPDATE documents SET pipeline='es_core_news_sm 0.0.1', n_tokens=1 WHERE id=?", (doc["id"],))
+        conn.execute("DELETE FROM tokens WHERE doc_id=? AND pos>5", (doc["id"],))
+    assert client.get(f"/api/corpora/{cid}/documents").json()[0]["stale"] is True
+
+    assert client.post(f"/api/corpora/{cid}/reannotate").status_code == 202
+    job = wait_for_jobs(client, cid)[0]
+    assert job["status"] == "done" and job["result"] == {"updated": 1}
+    after = client.get(f"/api/corpora/{cid}/documents").json()[0]
+    assert after["stale"] is False and after["n_tokens"] > 20
+    assert client.get(f"/api/corpora/{cid}/frequency").json() == before   # tokens fully restored
+
+    # nothing is outdated now: a second run touches nothing
+    client.post(f"/api/corpora/{cid}/reannotate")
+    deadline = time.time() + 30
+    while time.time() < deadline:
+        jobs = client.get(f"/api/corpora/{cid}/jobs").json()
+        if len(jobs) == 2 and jobs[1]["status"] == "done":
+            break
+        time.sleep(0.05)
+    assert jobs[1]["result"] == {"updated": 0}

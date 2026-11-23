@@ -43,6 +43,7 @@ Tooling: [mise](https://mise.jdx.dev) (Python 3.14 + uv) and [uv](https://docs.a
 mise install                  # Python 3.14 and uv
 mise run sync                 # uv sync: dependencies + spaCy models (sm)
 mise run test                 # uv run pytest
+mise run lint                 # uv run ruff check . (CI runs lint + tests on every push and PR)
 mise run dev                  # uvicorn with auto-reload on http://localhost:8000
 ```
 
@@ -53,12 +54,31 @@ Layout (`src` layout): `src/colloca/ingest.py` (URL/DOCX/PDF → text), `nlp.py`
 `analysis.py` (all statistics, SQL + Python), `main.py` (API), `static/` (UI, no build step);
 tests in `tests/`.
 
+## Safeguards
+
+- **Language check**: every import is compared with the corpus language (Spanish/Italian stopword profile).
+  A clear mismatch is rejected unless you tick “import even if the language looks wrong”; unclear or very
+  short texts are imported with a warning badge. The result is stored per document (`lang_check`).
+- **Limits** (environment variables): `MAX_UPLOAD_MB` (25 per file), `MAX_UPLOAD_FILES` (50 per request),
+  `MAX_PDF_PAGES` (1000), `MAX_TEXT_MB` (10 per document), `MAX_DOWNLOAD_MB` (15 per URL).
+- **CSV export** prefixes cells that start with `=`, `+`, `-`, `@` with `'`, so scraped text cannot run as a
+  spreadsheet formula.
+- **Background imports**: uploads, URL additions and pasted texts are queued and processed one at a time; the
+  Sources tab shows progress and per-file errors.
+- **Database upgrades**: the schema is versioned (`PRAGMA user_version`, migrations in `db.py`). Before an
+  existing database is migrated, a copy is written next to it (`corpus.db.bak-v<old version>`). A database from
+  a newer Colloca is refused rather than corrupted.
+- **Re-annotate**: after changing `SPACY_SIZE` or updating spaCy, documents annotated with another model are
+  flagged “older model”; *Re-annotate with current model* (or `POST /api/corpora/{id}/reannotate`) redoes them
+  from the stored text, so the whole corpus uses one pipeline.
+
 ## Known limitations
 
 - No OCR: scanned PDFs are rejected. No JavaScript rendering for URLs (pages that need it fail to extract).
 - Extraction is heuristic: always review the preview. URL fetching respects no robots.txt (you choose the URLs);
   it blocks private/internal addresses (`ALLOW_PRIVATE_URLS=1` to override). No authentication: bind to localhost only.
-- Small spaCy models make lemma/POS errors; use `md`/`lg` for better quality. Language is not auto-detected;
-  a wrong-language document is annotated with the corpus language model.
+- Small spaCy models make lemma/POS errors; use `md`/`lg` for better quality. A document in the
+  wrong language is only caught when the check is confident (see Safeguards).
 - No synonym/related-term module yet (planned: thesaurus + embeddings, labelled as "related terms").
-- Imports are synchronous (a large document blocks its request for a few seconds).
+- Jobs are kept in memory: a server restart forgets their status (documents already imported stay).
+- The language check only separates Spanish from Italian reliably; other languages are flagged “unclear”.
