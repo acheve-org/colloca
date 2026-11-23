@@ -34,6 +34,7 @@
   <button data-tab="ngrams">N-grams</button>
   <button data-tab="keyness">Keyness</button>
   <button data-tab="cloud">Word cloud</button>
+  <button data-tab="base">Base corpora</button>
 </nav>
 <div id="msg" role="status"></div>
 
@@ -76,6 +77,7 @@
     <label>POS <input id="fqPos" placeholder="NOUN,VERB" size="12"></label>
     <label>Min freq <input id="fqMin" type="number" value="2" min="1" style="width:4em"></label>
     <label><input type="checkbox" id="fqStop" checked> hide stopwords</label>
+    <label title="Adds the frequency of each item in the language's base corpus"><input type="checkbox" id="fqRef"> compare with base corpus</label>
     <button id="fqGo" class="primary">Show</button><a id="fqCsv" class="csv">CSV</a>
   </div>
   <div class="result" id="fqOut"></div>
@@ -101,6 +103,7 @@
     <label>Min freq <input id="coMin" type="number" value="2" min="1" style="width:3.5em"></label>
     <label>POS <input id="coPos" placeholder="e.g. VERB" size="8"></label>
     <label><input type="checkbox" id="coStop" checked> hide stopwords</label>
+    <label title="Adds the frequency of each collocate in the language's base corpus"><input type="checkbox" id="coRef"> compare with base corpus</label>
     <button id="coGo" class="primary">Find</button><a id="coCsv" class="csv">CSV</a>
   </div>
   <div id="coInfo" class="muted"></div>
@@ -126,7 +129,7 @@
     <label>POS <input id="kyPos" placeholder="NOUN,ADJ" size="10"></label>
     <button id="kyGo" class="primary">Compare</button><a id="kyCsv" class="csv">CSV</a>
   </div>
-  <p class="muted">Positive LL: more frequent in this corpus than in the reference. Create another corpus (same language) to use as reference.</p>
+  <p class="muted">Positive LL: more frequent in this corpus than in the reference. By default the reference is the language's base corpus (see the Base corpora tab); you can also pick another corpus of the same language.</p>
   <div class="result" id="kyOut"></div>
 </section>
 
@@ -138,6 +141,17 @@
     <button id="wcGo" class="primary">Draw</button><button id="wcPng">Save PNG</button>
   </div>
   <canvas id="wcCanvas" width="1000" height="560"></canvas>
+</section>
+
+<section id="tab-base" class="tab">
+  <p class="muted">A general-language <b>base corpus</b> per language gives small corpora something to be compared with: it is the default
+  reference for keyness and adds “per million in general language” columns to frequency and collocations. It is kept
+  apart from your own corpora, so it never dilutes their concordances or counts.</p>
+  <label class="force"><input type="checkbox" id="refForce"> import even if the language looks wrong</label>
+  <div id="baseCards" class="cards"></div>
+  <p class="muted">Fill it with sentence files (one sentence per line; <a href="https://wortschatz.uni-leipzig.de/en/download" target="_blank" rel="noopener noreferrer">Leipzig Corpora Collection</a>
+  files work as they are, check their licence). Files up to 25 MB can be uploaded here; for larger ones use
+  <code>colloca-import-reference</code> (see the README). Sentences are shuffled in those corpora, so the “Docs” columns are meaningless for the base corpus.</p>
 </section>
 </main>
 <script src="app.js"></script>

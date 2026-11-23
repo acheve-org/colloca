@@ -139,13 +139,18 @@ def extract_docx(data: bytes) -> str:
     return normalize_text("\n".join(parts))
 
 
-def decode_text(data: bytes) -> str:
+def decode_bytes(data: bytes) -> str:
+    """Raw text of a file, without normalisation (tabs and blank lines are kept)."""
     for enc in ("utf-8-sig", "cp1252", "latin-1"):
         try:
-            return normalize_text(data.decode(enc))
+            return data.decode(enc)
         except UnicodeDecodeError:
             continue
     raise IngestError("Cannot decode text file")
+
+
+def decode_text(data: bytes) -> str:
+    return normalize_text(decode_bytes(data))
 
 
 # --------------------------------------------------------------------------- entry points

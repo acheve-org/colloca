@@ -23,6 +23,36 @@ def n_docs(conn, corpus_id) -> int:
     return conn.execute("SELECT COUNT(*) FROM documents WHERE corpus_id=?", (corpus_id,)).fetchone()[0]
 
 
+# --------------------------------------------------------------------------- reference (base) corpora
+def reference_corpus(conn, lang: str):
+    """The base corpus of `lang` (a corpora row) or None."""
+    return conn.execute("SELECT * FROM corpora WHERE lang=? AND is_reference=1", (lang,)).fetchone()
+
+
+def reference_counts(conn, ref_id: int, unit: str, items) -> dict[str, int]:
+    """Frequency of each of `items` (lemmas or forms) in the reference corpus; absent items map to 0."""
+    col = _unit(unit)
+    items = list(dict.fromkeys(items))
+    out = dict.fromkeys(items, 0)
+    for i in range(0, len(items), 500):                 # stay well below SQLite's parameter limit
+        chunk = items[i:i + 500]
+        rows = conn.execute(
+            f"""SELECT t.{col} AS item, COUNT(*) AS c FROM tokens t JOIN documents d ON d.id=t.doc_id
+                WHERE d.corpus_id=? AND t.alpha=1 AND t.{col} IN ({",".join("?" * len(chunk))})
+                GROUP BY t.{col}""", [ref_id, *chunk]).fetchall()
+        out.update({r["item"]: r["c"] for r in rows})
+    return out
+
+
+def add_reference_columns(conn, rows: list[dict], ref_id: int, unit: str) -> None:
+    """Annotate frequency/collocation rows in place with the item's frequency in the reference corpus."""
+    size = max(corpus_size(conn, ref_id), 1)
+    counts = reference_counts(conn, ref_id, unit, (r["item"] for r in rows))
+    for r in rows:
+        r["ref_freq"] = counts[r["item"]]
+        r["ref_per_million"] = round(counts[r["item"]] * 1_000_000 / size, 1)
+
+
 # --------------------------------------------------------------------------- frequency
 def frequency(conn, corpus_id, unit="lemma", pos=None, min_freq=1, exclude_stop=True,
               alpha_only=True, limit=500):

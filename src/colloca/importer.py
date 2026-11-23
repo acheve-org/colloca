@@ -7,8 +7,10 @@ not thread-safe, and SQLite allows a single writer anyway.
 import hashlib
 import itertools
 import logging
+import math
+import re
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Iterable, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field
 
@@ -86,6 +88,64 @@ def reannotate_document(conn, doc_id: int, progress: Callable[[float], None] | N
     return True
 
 
+# --------------------------------------------------------------------------- sentence files (reference corpora)
+SENTENCES_PER_DOC = 5000     # sentence files are split into documents of this many sentences
+_LEIPZIG_ID = re.compile(r"^\d+\t")
+
+
+def parse_sentences(lines: Iterable[str]) -> Iterator[str]:
+    """One sentence per line. Leipzig Corpora Collection files (`<id><TAB><sentence>`) lose their id."""
+    for line in lines:
+        line = _LEIPZIG_ID.sub("", line.rstrip("\r\n")).replace("\t", " ").strip()
+        if line:
+            yield line
+
+
+def chunk_sentences(sentences: Iterable[str], size: int | None = None) -> Iterator[list[str]]:
+    size = size or SENTENCES_PER_DOC
+    chunk: list[str] = []
+    for sentence in sentences:
+        chunk.append(sentence)
+        if len(chunk) >= size:
+            yield chunk
+            chunk = []
+    if chunk:
+        yield chunk
+
+
+def count_chunks(n_sentences: int, size: int | None = None) -> int:
+    return math.ceil(n_sentences / (size or SENTENCES_PER_DOC))
+
+
+def import_sentence_chunks(corpus_id: int, chunks: Iterable[list[str]], title: str, source: str,
+                           force_language: bool = False, total_chunks: int | None = None,
+                           progress: Callable[[float], None] | None = None) -> dict:
+    """Store each chunk of sentences as its own document (one transaction each, so a failure
+    keeps what was already imported). Exact duplicate chunks are skipped."""
+    docs = tokens = skipped = 0
+    for i, chunk in enumerate(chunks):
+        def part(fraction: float, i=i) -> None:
+            if progress and total_chunks:
+                progress((i + fraction) / total_chunks)
+        with db.session() as conn:
+            corpus = conn.execute("SELECT * FROM corpora WHERE id=?", (corpus_id,)).fetchone()
+            if not corpus:
+                raise ImportRejected(404, "Corpus no longer exists", "gone")
+            try:
+                res = add_document(conn, corpus, f"{title} (part {i + 1})", "\n".join(chunk), source,
+                                   "sentences", "", force_language, part)
+            except ImportRejected as exc:
+                if exc.code != "duplicate":
+                    if docs:
+                        exc.message += f" ({docs} earlier parts were imported.)"
+                    raise
+                skipped += 1
+                continue
+        docs += 1
+        tokens += res["tokens"]
+    return {"documents": docs, "tokens": tokens, "skipped_duplicates": skipped}
+
+
 def is_stale(doc_pipeline: str, current: str) -> bool:
     return doc_pipeline != current
 
@@ -143,6 +203,13 @@ def get_job(job_id: int) -> Job | None:
     return _jobs.get(job_id)
 
 
+def forget_jobs(corpus_id: int) -> None:
+    """Drop the job history of a deleted corpus (SQLite may reuse its id for a new one)."""
+    with _lock:
+        for job_id in [j.id for j in _jobs.values() if j.corpus_id == corpus_id]:
+            del _jobs[job_id]
+
+
 def jobs_for(corpus_id: int) -> list[dict]:
     with _lock:
         return [asdict(j) for j in _jobs.values() if j.corpus_id == corpus_id]
@@ -162,8 +229,14 @@ def import_text(corpus_id: int, title: str, text: str, source: str, kind: str, t
 
 
 def import_file(corpus_id: int, filename: str, data: bytes, tags: str,
-                force_language: bool) -> Callable[[Job], dict]:
+                force_language: bool, sentences: bool = False) -> Callable[[Job], dict]:
     def work(job: Job) -> dict:
+        if sentences:
+            lines = list(parse_sentences(ingest.decode_bytes(data).splitlines()))
+            if not lines:
+                raise ImportRejected(400, "File contains no sentences")
+            return import_sentence_chunks(corpus_id, chunk_sentences(lines), filename, filename,
+                                          force_language, count_chunks(len(lines)), job.set_progress)
         parsed = ingest.read_file(filename, data)
         return import_text(corpus_id, parsed["title"], parsed["text"], filename, "file", tags,
                            force_language)(job)
