@@ -29,6 +29,13 @@
   --hit-term-deco: solid underline;
   --hit-forbidden-deco: line-through;
 
+  /* Rail: dark in every theme. */
+  --rail-bg: #1f2430;
+  --rail-fg: #e4e7ec;
+  --rail-muted: #9aa4b5;
+  --rail-hover: #2d3445;
+  --rail-accent: #6ba3f5;
+
   --s-1: 4px;
   --s-2: 8px;
   --s-3: 12px;
