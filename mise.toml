@@ -1,0 +1,15 @@
+[tools]
+python = "3.14"
+uv = "latest"
+
+[tasks.sync]
+description = "Install dependencies (incl. spaCy models)"
+run = "uv sync"
+
+[tasks.test]
+description = "Run the test suite"
+run = "uv run pytest"
+
+[tasks.dev]
+description = "Run the dev server with auto-reload"
+run = "uv run uvicorn colloca.main:app --reload"

@@ -19,7 +19,7 @@ async def lifespan(_app):
     yield
 
 
-app = FastAPI(title="Corpus Tool", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="Colloca", version="0.1.0", lifespan=lifespan)
 STATIC = os.path.join(os.path.dirname(__file__), "static")
 
 

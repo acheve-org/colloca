@@ -12,7 +12,7 @@ import httpx
 
 MAX_BYTES = int(os.environ.get("MAX_DOWNLOAD_MB", "15")) * 1024 * 1024
 ALLOW_PRIVATE = os.environ.get("ALLOW_PRIVATE_URLS", "") == "1"
-USER_AGENT = "corpus-tool/0.1 (personal terminology research)"
+USER_AGENT = "colloca/0.1 (personal terminology research)"
 
 
 class IngestError(ValueError):

@@ -166,7 +166,7 @@ def test_url_preview_extracts_main_text(client, monkeypatch):
 
     srv = http.server.HTTPServer(("127.0.0.1", 0), H)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
-    monkeypatch.setattr("app.ingest.ALLOW_PRIVATE", True)
+    monkeypatch.setattr("colloca.ingest.ALLOW_PRIVATE", True)
     monkeypatch.setenv("NO_PROXY", "127.0.0.1")
     try:
         r = client.post("/api/preview-url", json={"url": f"http://127.0.0.1:{srv.server_port}/"})

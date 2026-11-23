@@ -3,7 +3,7 @@ import os
 import sqlite3
 from contextlib import contextmanager
 
-DATA_DIR = os.environ.get("CORPUS_DATA_DIR", "./data")
+DATA_DIR = os.environ.get("COLLOCA_DATA_DIR", "./data")
 DB_PATH = os.path.join(DATA_DIR, "corpus.db")
 
 SCHEMA = """
