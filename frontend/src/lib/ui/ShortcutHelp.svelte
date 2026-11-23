@@ -6,10 +6,30 @@
 
   let { open = $bindable() }: { open: boolean } = $props();
 
+  interface Row {
+    id: string;
+    keys: string[];
+    label: string;
+  }
+
+  // Keys handled by the components themselves (DataTable, Dialog), not registered shortcuts.
+  const builtIn = (scope: 'global' | 'table'): Row[] =>
+    scope === 'table'
+      ? [
+          { id: 'rows', keys: ['ArrowUp', 'ArrowDown'], label: t('shortcuts.rows') },
+          { id: 'activate', keys: ['Enter'], label: t('shortcuts.activate') },
+        ]
+      : [{ id: 'close', keys: ['Escape'], label: t('shortcuts.close') }];
+
+  const registered = (scope: 'global' | 'table'): Row[] =>
+    listShortcuts()
+      .filter((s) => (s.scope ?? 'global') === scope)
+      .map((s) => ({ id: s.id, keys: [s.keys], label: s.label }));
+
   const groups = $derived([
-    { name: t('shortcuts.global'), items: listShortcuts().filter((s) => (s.scope ?? 'global') === 'global') },
-    { name: t('shortcuts.table'), items: listShortcuts().filter((s) => s.scope === 'table') },
-  ].filter((g) => g.items.length));
+    { name: t('shortcuts.global'), items: [...registered('global'), ...builtIn('global')] },
+    { name: t('shortcuts.table'), items: [...registered('table'), ...builtIn('table')] },
+  ]);
 </script>
 
 <Dialog bind:open title={t('shortcuts.title')}>
@@ -18,7 +38,9 @@
       <h3>{g.name}</h3>
       <dl>
         {#each g.items as s (s.id)}
-          <dt><Kbd keys={s.keys} /></dt>
+          <dt>
+            {#each s.keys as k (k)}<Kbd keys={k} />{/each}
+          </dt>
           <dd>{s.label}</dd>
         {/each}
       </dl>
@@ -36,5 +58,9 @@
   dd,
   dt {
     margin: 0;
+  }
+  dt {
+    display: flex;
+    gap: 2px;
   }
 </style>

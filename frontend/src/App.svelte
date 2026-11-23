@@ -7,7 +7,6 @@
   import { go, route } from './lib/router.svelte';
   import { registerShortcut } from './lib/shortcuts.svelte';
   import AppShell from './lib/ui/AppShell.svelte';
-  import EmptyState from './lib/ui/EmptyState.svelte';
   import ShortcutHelp from './lib/ui/ShortcutHelp.svelte';
   import type { Component } from 'svelte';
   import type { ScreenId } from './lib/router.svelte';
@@ -24,8 +23,8 @@
   import TermDialog from './screens/TermDialog.svelte';
   import WordCloud from './screens/WordCloud.svelte';
 
-  // Screen outlet: a screen without a component renders the placeholder.
-  const SCREEN_COMPONENTS: Partial<Record<ScreenId, Component>> = {
+  // Screen outlet: every route has its screen.
+  const SCREEN_COMPONENTS: Record<ScreenId, Component> = {
     sources: Sources,
     base: BaseCorpora,
     concordance: Concordance,
@@ -53,6 +52,8 @@
         id: 'search',
         keys: 'Mod+K',
         label: t('shortcuts.search'),
+        // Not from inside a modal (the term dialog, the shortcut help): it would navigate behind it.
+        when: () => !document.querySelector('dialog[open]'),
         run: async () => {
           // Keep the current search params when already on the concordance.
           if (route.screen !== 'concordance') go('concordance');
@@ -75,19 +76,7 @@
 </script>
 
 <AppShell>
-  {#if Screen}
-    {#key route.screen}<Screen />{/key}
-  {:else}
-    <div class="screen">
-      <EmptyState title={t(`nav.${route.screen}`)} hint={t('screen.placeholder')} />
-    </div>
-  {/if}
+  {#key route.screen}<Screen />{/key}
 </AppShell>
 <ShortcutHelp bind:open={helpOpen} />
 <TermDialog />
-
-<style>
-  .screen {
-    padding: var(--s-3);
-  }
-</style>

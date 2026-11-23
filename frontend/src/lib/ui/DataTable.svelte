@@ -10,12 +10,16 @@
 
 <script lang="ts" generics="Row">
   import { tick, untrack, type Snippet } from 'svelte';
-    import { t } from '../i18n';
+  import { t } from '../i18n';
   import { cellValue, type Column, type SortState } from './DataTable.types';
 
   interface Props {
     columns: Column<Row>[];
     rows: Row[];
+    /**
+     * Must return a unique key per row. Duplicates do not throw, but only the first
+     * occurrence can be selected/highlighted, and a warning is logged once in development.
+     */
     rowKey: (r: Row, i: number) => string | number;
     selected?: Row | null;
     filter?: string;

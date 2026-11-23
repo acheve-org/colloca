@@ -82,7 +82,7 @@ function onKeydown(e: KeyboardEvent): void {
 
 window.addEventListener('keydown', onKeydown);
 
-const SYMBOLS: Record<string, string> = { Escape: 'Esc' };
+const SYMBOLS: Record<string, string> = { Escape: 'Esc', ArrowUp: '↑', ArrowDown: '↓' };
 
 /** Human-readable keys: "⌘K" on macOS, "Ctrl+K" elsewhere. */
 export function formatKeys(keys: string): string {

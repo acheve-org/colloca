@@ -7,7 +7,7 @@ import TermDialog from '../src/screens/TermDialog.svelte';
 import StatusLine from '../src/lib/ui/StatusLine.svelte';
 import { CORPUS_CHANGED, corpusStore } from '../src/lib/corpus.svelte';
 import { messages } from '../src/lib/messages.svelte';
-import { go } from '../src/lib/router.svelte';
+import { go, route } from '../src/lib/router.svelte';
 import { setPlatform } from '../src/lib/shortcuts.svelte';
 import { termStore } from '../src/lib/term.svelte';
 import type { ConcLine } from '../src/lib/types';
@@ -302,6 +302,16 @@ describe('Concordance', () => {
     queryInput().blur();
     await fireEvent.keyDown(document.body, { key: 'k', ctrlKey: true });
     await waitFor(() => expect(document.activeElement).toBe(queryInput()));
+  });
+
+  it('Mod+K does nothing while a modal dialog is open', async () => {
+    go('job');
+    render(App);
+    await fireEvent.keyDown(document.body, { key: '?' });
+    await waitFor(() => expect(document.querySelector('dialog[open]')).not.toBeNull());
+    await fireEvent.keyDown(document.body, { key: 'k', ctrlKey: true });
+    await tick();
+    expect(route.screen).toBe('job');
   });
 
   it('restores the query and options from route params and runs the search', async () => {

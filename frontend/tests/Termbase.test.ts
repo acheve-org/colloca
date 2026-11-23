@@ -50,8 +50,10 @@ beforeEach(() => {
       if (gate) await gate;
       return res(terms.status, terms.body);
     }
-    if (/^\/api\/terms\/\d+$/.test(p) && method === 'PATCH') { if (patchGate) await patchGate; }
-    if (/^\/api\/terms\/\d+$/.test(p) && method === 'PATCH') return res(patchStatus, patchStatus < 400 ? { ok: true } : { detail: 'An approved term needs a translation' });
+    if (/^\/api\/terms\/\d+$/.test(p) && method === 'PATCH') {
+      if (patchGate) await patchGate;
+      return res(patchStatus, patchStatus < 400 ? { ok: true } : { detail: 'An approved term needs a translation' });
+    }
     if (/^\/api\/terms\/\d+$/.test(p) && method === 'DELETE') return { ok: true, status: 204, statusText: '', json: async () => null };
     if (p === '/api/projects') return res(200, [{ id: 7, name: 'Acme', corpora: 1 }]);
     if (p === '/api/languages') return res(200, { es: 'Spanish', it: 'Italian' });

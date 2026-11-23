@@ -47,11 +47,10 @@ describe('corpusStore', () => {
     expect(spy).toHaveBeenCalledTimes(1);
   });
 
-  it('scopeParams maps to API names and omits project', async () => {
+  it('scopeParams maps to API names', async () => {
     const { corpusStore, scopeParams } = await load([c(1)]);
     corpusStore.scope.type = 'law';
     corpusStore.scope.from = '2020';
-    corpusStore.scope.project = '3';
     expect(scopeParams()).toEqual({ tags: '', text_type: 'law', date_from: '2020', date_to: '' });
     corpusStore.clearScope();
     expect(corpusStore.scope.type).toBe('');

@@ -9,10 +9,9 @@ export interface Scope {
   type: string;
   from: string;
   to: string;
-  project: string;
 }
 
-const emptyScope = (): Scope => ({ tags: '', type: '', from: '', to: '', project: '' });
+const emptyScope = (): Scope => ({ tags: '', type: '', from: '', to: '' });
 
 interface CorpusStore {
   list: Corpus[];
@@ -83,7 +82,7 @@ async function loadAligned(): Promise<void> {
   if (corpusStore.currentId === id) corpusStore.aligned = p.documents > 0;
 }
 
-/** Query params the API expects for the active document filter (`project` is UI-only). */
+/** Query params the API expects for the active document filter. */
 export function scopeParams(): Record<string, string> {
   const s = corpusStore.scope;
   return { tags: s.tags, text_type: s.type, date_from: s.from, date_to: s.to };

@@ -23,12 +23,6 @@
   --status-approved: #166534;
   --status-forbidden: #b42318;
 
-  /* Decorations: colour is never the only cue. */
-  --hit-query-deco: bold;
-  --hit-equiv-deco: dotted underline;
-  --hit-term-deco: solid underline;
-  --hit-forbidden-deco: line-through;
-
   /* Rail: dark in every theme. */
   --rail-bg: #1f2430;
   --rail-fg: #e4e7ec;
