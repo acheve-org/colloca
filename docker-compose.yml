@@ -11,19 +11,19 @@ services:
     ports:
       - "127.0.0.1:8000:8000"   # local only; change deliberately to expose on a network
     environment:
-      SPACY_SIZE: md            # preferred model size: sm | md | lg
+      SPACY_SIZE: lg            # preferred model size: sm | md | lg
       # ALLOW_PRIVATE_URLS: "1" # allow fetching intranet URLs (off by default)
       MAX_DOWNLOAD_MB: "15"
     restart: unless-stopped
 
   # One-off: download the spaCy models into ~/.spacy.
-  #   docker compose run --rm models                  # md (default)
+  #   docker compose run --rm models                  # md (default lg)
   #   SPACY_SIZE=lg docker compose run --rm models    # or sm | lg
   models:
     <<: *colloca
     profiles: ["setup"]
     environment:
-      SPACY_SIZE: ${SPACY_SIZE:-md}
+      SPACY_SIZE: ${SPACY_SIZE:-lg}
     entrypoint: ["sh", "-c"]
     command:
       - |

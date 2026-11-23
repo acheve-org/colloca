@@ -1,0 +1,145 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font: var(--fs-base) / var(--lh) var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3 {
+  margin: 0;
+  font-weight: 600;
+}
+h1 { font-size: 16px; }
+h2 { font-size: 14px; }
+h3 { font-size: var(--fs-base); }
+
+a {
+  color: var(--accent);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* Compact controls */
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+button,
+input,
+select {
+  height: calc(var(--row-h) - var(--s-1));
+  padding: 0 var(--s-2);
+}
+
+textarea {
+  padding: var(--s-1) var(--s-2);
+  resize: vertical;
+}
+
+button {
+  cursor: pointer;
+  background: var(--surface);
+}
+button:hover:not(:disabled) {
+  border-color: var(--muted);
+}
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+button.primary {
+  background: var(--accent);
+  color: var(--accent-fg);
+  border-color: var(--accent);
+}
+
+/* Keyboard hint */
+kbd,
+.kbd {
+  display: inline-block;
+  min-width: 18px;
+  padding: 0 var(--s-1);
+  font: var(--fs-small) / 16px var(--font-mono);
+  text-align: center;
+  color: var(--muted);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius: var(--radius);
+}
+
+/* Tables: compact rows, sticky header */
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+th,
+td {
+  height: var(--row-h);
+  padding: 0 var(--s-2);
+  text-align: left;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--line);
+}
+thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: var(--fs-small);
+  font-weight: 600;
+}
+
+/* Hit styling: colour plus a non-colour cue */
+.hit-query,
+.hit-equiv,
+.hit-term,
+.hit-forbidden {
+  border-radius: 2px;
+  padding: 0 1px;
+}
+.hit-query {
+  background: var(--hit-query-bg);
+  color: var(--hit-query-fg);
+  font-weight: 700;
+}
+.hit-equiv {
+  background: var(--hit-equiv-bg);
+  color: var(--hit-equiv-fg);
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+}
+.hit-term {
+  background: var(--hit-term-bg);
+  color: var(--hit-term-fg);
+  text-decoration: underline solid;
+  text-underline-offset: 2px;
+}
+.hit-forbidden {
+  background: var(--hit-forbidden-bg);
+  color: var(--hit-forbidden-fg);
+  text-decoration: line-through;
+}

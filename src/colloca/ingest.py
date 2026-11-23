@@ -11,7 +11,11 @@ from urllib.parse import urljoin, urlparse
 import httpx
 
 MAX_BYTES = int(os.environ.get("MAX_DOWNLOAD_MB", "15")) * 1024 * 1024
-ALLOW_PRIVATE = os.environ.get("ALLOW_PRIVATE_URLS", "") == "1"
+MAX_UPLOAD_BYTES = int(os.environ.get("MAX_UPLOAD_MB", "25")) * 1024 * 1024   # per uploaded file
+MAX_UPLOAD_FILES = int(os.environ.get("MAX_UPLOAD_FILES", "50"))              # per upload request
+MAX_PDF_PAGES = int(os.environ.get("MAX_PDF_PAGES", "1000"))
+MAX_TEXT_CHARS = int(os.environ.get("MAX_TEXT_MB", "10")) * 1024 * 1024       # per document, after extraction
+ALLOW_PRIVATE =os.environ.get("ALLOW_PRIVATE_URLS", "") == "1"
 USER_AGENT = "colloca/0.1 (personal terminology research)"
 
 
@@ -95,20 +99,22 @@ def extract_html(data: bytes) -> tuple[str, str]:
 def extract_pdf(data: bytes) -> str:
     from pypdf import PdfReader
     reader = PdfReader(io.BytesIO(data))
+    if len(reader.pages) > MAX_PDF_PAGES:
+        raise IngestError(f"PDF has {len(reader.pages)} pages (limit {MAX_PDF_PAGES}; set MAX_PDF_PAGES)")
     pages = [(p.extract_text() or "") for p in reader.pages]
     if not any(p.strip() for p in pages):
         raise IngestError("PDF has no text layer (scanned PDFs need OCR, not supported yet)")
     # drop running headers/footers: short lines repeated on many pages
     line_pages = Counter()
     for p in pages:
-        for ln in {l.strip() for l in p.splitlines() if l.strip()}:
+        for ln in {ln.strip() for ln in p.splitlines() if ln.strip()}:
             line_pages[ln] += 1
     threshold = max(3, len(pages) // 2)
     repeated = {ln for ln, c in line_pages.items() if c >= threshold and len(ln) < 80}
     out = []
     for p in pages:
-        lines = [l.strip() for l in p.splitlines() if l.strip() and l.strip() not in repeated
-                 and not re.fullmatch(r"\d{1,4}", l.strip())]
+        lines = [ln.strip() for ln in p.splitlines() if ln.strip() and ln.strip() not in repeated
+                 and not re.fullmatch(r"\d{1,4}", ln.strip())]
         out.append("\n".join(lines))
     text = "\n".join(out)
     text = re.sub(r"(\w)-\n(\w)", r"\1\2", text)           # de-hyphenate line breaks
@@ -133,13 +139,18 @@ def extract_docx(data: bytes) -> str:
     return normalize_text("\n".join(parts))
 
 
-def decode_text(data: bytes) -> str:
+def decode_bytes(data: bytes) -> str:
+    """Raw text of a file, without normalisation (tabs and blank lines are kept)."""
     for enc in ("utf-8-sig", "cp1252", "latin-1"):
         try:
-            return normalize_text(data.decode(enc))
+            return data.decode(enc)
         except UnicodeDecodeError:
             continue
     raise IngestError("Cannot decode text file")
+
+
+def decode_text(data: bytes) -> str:
+    return normalize_text(decode_bytes(data))
 
 
 # --------------------------------------------------------------------------- entry points

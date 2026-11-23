@@ -4,3 +4,8 @@ data/
 tests
 **/__pycache__
 .pytest_cache
+frontend/node_modules
+frontend/test-results
+frontend/playwright-report
+# a local UI build: the image builds its own in the ui stage
+src/colloca/static

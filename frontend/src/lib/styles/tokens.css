@@ -1,0 +1,103 @@
+/* Colloca design tokens. Light is the default; dark applies via
+   data-theme="dark" or, when no data-theme is set, prefers-color-scheme. */
+:root {
+  --bg: #ffffff;
+  --surface: #f6f7f9;
+  --line: #d5d9e0;
+  --fg: #1d2330;
+  --muted: #596273;
+  --accent: #1f5fbf;
+  --accent-fg: #ffffff;
+  --danger: #b42318;
+
+  --hit-query-bg: #fff3c4;
+  --hit-query-fg: #5c4400;
+  --hit-equiv-bg: #e2f4e6;
+  --hit-equiv-fg: #135b2a;
+  --hit-term-bg: #e3efff;
+  --hit-term-fg: #0f3f86;
+  --hit-forbidden-bg: #fde4e1;
+  --hit-forbidden-fg: #8a1c12;
+
+  --status-candidate: #8a5a00;
+  --status-approved: #166534;
+  --status-forbidden: #b42318;
+
+  /* Rail: dark in every theme. */
+  --rail-bg: #1f2430;
+  --rail-fg: #e4e7ec;
+  --rail-muted: #9aa4b5;
+  --rail-hover: #2d3445;
+  --rail-accent: #6ba3f5;
+
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 20px;
+  --s-6: 24px;
+  --radius: 4px;
+  --row-h: 28px;
+
+  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --fs-base: 13px;
+  --fs-small: 12px;
+  --lh: 1.4;
+
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --bg: #14171c;
+  --surface: #1b1f26;
+  --line: #333a47;
+  --fg: #e4e7ec;
+  --muted: #9aa4b5;
+  --accent: #6ba3f5;
+  --accent-fg: #0b1220;
+  --danger: #ff8a80;
+
+  --hit-query-bg: #4a3d0c;
+  --hit-query-fg: #fbe38b;
+  --hit-equiv-bg: #17391f;
+  --hit-equiv-fg: #9fdcae;
+  --hit-term-bg: #17304f;
+  --hit-term-fg: #a9ccff;
+  --hit-forbidden-bg: #4a1f1b;
+  --hit-forbidden-fg: #ffb4ab;
+
+  --status-candidate: #f0b94d;
+  --status-approved: #6fd08c;
+  --status-forbidden: #ff8a80;
+
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --bg: #14171c;
+    --surface: #1b1f26;
+    --line: #333a47;
+    --fg: #e4e7ec;
+    --muted: #9aa4b5;
+    --accent: #6ba3f5;
+    --accent-fg: #0b1220;
+    --danger: #ff8a80;
+
+    --hit-query-bg: #4a3d0c;
+    --hit-query-fg: #fbe38b;
+    --hit-equiv-bg: #17391f;
+    --hit-equiv-fg: #9fdcae;
+    --hit-term-bg: #17304f;
+    --hit-term-fg: #a9ccff;
+    --hit-forbidden-bg: #4a1f1b;
+    --hit-forbidden-fg: #ffb4ab;
+
+    --status-candidate: #f0b94d;
+    --status-approved: #6fd08c;
+    --status-forbidden: #ff8a80;
+
+    color-scheme: dark;
+  }
+}

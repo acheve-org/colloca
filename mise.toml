@@ -1,6 +1,7 @@
 [tools]
 python = "3.14"
 uv = "latest"
+node = "lts"
 
 [tasks.sync]
 description = "Install dependencies (incl. spaCy models)"
@@ -10,6 +11,35 @@ run = "uv sync"
 description = "Run the test suite"
 run = "uv run pytest"
 
+[tasks.lint]
+description = "Static checks (ruff)"
+run = "uv run ruff check ."
+
 [tasks.dev]
 description = "Run the dev server with auto-reload"
 run = "uv run uvicorn colloca.main:app --reload"
+
+[tasks."ui:dev"]
+description = "Run the Vite dev server (proxies /api to :8000)"
+dir = "frontend"
+run = "npm run dev"
+
+[tasks."ui:build"]
+description = "Build the frontend"
+dir = "frontend"
+run = "npm ci && npm run build"
+
+[tasks."ui:test"]
+description = "Run the frontend tests"
+dir = "frontend"
+run = "npm test"
+
+[tasks."ui:lint"]
+description = "Lint and type-check the frontend"
+dir = "frontend"
+run = "npm run lint && npm run check"
+
+[tasks."ui:e2e"]
+description = "Build the frontend and run the Playwright end-to-end tests"
+dir = "frontend"
+run = "npm ci && npx playwright install chromium && npm run e2e"
