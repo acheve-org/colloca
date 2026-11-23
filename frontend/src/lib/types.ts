@@ -105,6 +105,8 @@ export interface BilingualResult {
   total: number;
   lines: BilingualLine[];
 }
+/** A concordance line from either endpoint; `source`/`target` only in bilingual results. */
+export type ConcLine = ConcordanceLine & Partial<Pick<BilingualLine, 'source' | 'target'>>;
 
 export interface CollocationRow {
   item: string;

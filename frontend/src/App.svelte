@@ -8,6 +8,14 @@
   import AppShell from './lib/ui/AppShell.svelte';
   import EmptyState from './lib/ui/EmptyState.svelte';
   import ShortcutHelp from './lib/ui/ShortcutHelp.svelte';
+  import type { Component } from 'svelte';
+  import type { ScreenId } from './lib/router.svelte';
+  import Concordance from './screens/Concordance.svelte';
+  import TermDialog from './screens/TermDialog.svelte';
+
+  // Screen outlet: screens not built yet render the placeholder.
+  const SCREEN_COMPONENTS: Partial<Record<ScreenId, Component>> = { concordance: Concordance };
+  const Screen = $derived(SCREEN_COMPONENTS[route.screen]);
 
   let helpOpen = $state(false);
 
@@ -21,7 +29,8 @@
         keys: 'Mod+K',
         label: t('shortcuts.search'),
         run: async () => {
-          go('concordance');
+          // Keep the current search params when already on the concordance.
+          if (route.screen !== 'concordance') go('concordance');
           await tick();
           requestAnimationFrame(() => document.getElementById('cc-query')?.focus());
         },
@@ -38,13 +47,16 @@
 </script>
 
 <AppShell>
-  <!-- Screens arrive in later tasks; each will own its toolbar, table and DetailStrip. -->
-  <div class="screen">
-    <h1>{t(`nav.${route.screen}`)}</h1>
-    <EmptyState title={t(`nav.${route.screen}`)} hint={t('screen.placeholder')} />
-  </div>
+  {#if Screen}
+    {#key route.screen}<Screen />{/key}
+  {:else}
+    <div class="screen">
+      <EmptyState title={t(`nav.${route.screen}`)} hint={t('screen.placeholder')} />
+    </div>
+  {/if}
 </AppShell>
 <ShortcutHelp bind:open={helpOpen} />
+<TermDialog />
 
 <style>
   .screen {
