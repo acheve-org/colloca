@@ -10,7 +10,7 @@ Everything stays on your machine: one SQLite file in a Docker volume, no externa
 ## Run
 
 ```bash
-docker compose up --build        # first build downloads the spaCy models
+docker compose up --build        # first build downloads the spaCy models and builds the UI
 # open http://localhost:8000
 ```
 
@@ -20,10 +20,12 @@ Use faster/smaller models with `SPACY_SIZE=sm` (edit `docker-compose.yml`). Data
 ## Workflow
 
 1. **New corpus** (name + language), e.g. "Client X – wind energy [es]". Group the corpora of a client under a
-   **project** (header: *Projects…*); the Project selector narrows the corpus list.
+   **project** (the *…* button next to the project selector at the top of the left rail opens *Manage projects*);
+   the project selector narrows the corpus list.
 2. **Sources**: paste a URL → *Fetch & preview* → trim noise in the text box → *Add*.
    Or upload DOCX / PDF (text layer) / TXT / HTML. Exact duplicates are rejected.
-3. Explore with the tabs. Click any word in a table to jump to its concordance. Every table has a CSV export.
+3. Explore with the screens of the left rail. Click any word in a table to jump to its concordance. Every table
+   sorts by a click on its header, has a *Filter in results* box, and a CSV export.
 4. **Keyness**: compares your corpus with the language's **base corpus** (below) by default, or with any other
    corpus of the same language you pick.
 
@@ -34,7 +36,7 @@ Use faster/smaller models with `SPACY_SIZE=sm` (edit `docker-compose.yml`). Data
 - **Document details**: every document can carry **tags**, a **text type** (contract, manual…), a **date**
   (`2024`, `2024-05` or `2024-05-17`) and an **author**. Set them for the documents you are about to add (the
   “Details” box in *Sources*; it applies to URL, upload and pasted text alike) or edit them later with *Edit*.
-- **Filter bar** (above every analysis tab): restrict the analysis to documents with *all* the given tags, a text
+- **Document filter** (*Only documents with…*, above every analysis screen and the Job screen): restrict the analysis to documents with *all* the given tags, a text
   type, and/or a date range. Everything is recomputed on that subset, including the sizes behind *per million*,
   the *Docs %* column, collocation statistics and keyness (the filter narrows the studied corpus; the reference
   stays whole). CSV exports use the same filter. A partial date counts as its first day; undated documents never
@@ -55,22 +57,23 @@ and search them side by side:
   on it, and the target-language side is a ready corpus of the client's Italian). They are linked segment by
   segment: segment N of one is the translation of segment N of the other. Re-annotating keeps the alignment.
   Removing one side's document unlinks the other.
-- **Concordance → “show translation”** (appears when the corpus has aligned texts) adds the aligned target segment
-  under every hit; run it on the target-language corpus to search by the translation instead.
-- **Equivalents** tab: candidate translations of a word or phrase, i.e. the target lemmas that keep appearing in
+- **Concordance → *Source + target*** (appears when the corpus has aligned texts) shows each hit as its source
+  segment next to the aligned target segment; run it on the target-language corpus to search by the translation
+  instead.
+- **Equivalents** screen (in the rail only when the corpus has aligned texts): candidate translations of a word or phrase, i.e. the target lemmas that keep appearing in
   the aligned segments of its occurrences, scored by Dice against their overall frequency in the target text (so
   everyday words score low). Single words only on the target side, and a statistical hint, not a verdict: confirm
-  with the translated concordance, then **+ term** adds the pair to the termbase with the example sentence.
+  with the translated concordance, then **+ Term** adds the pair to the termbase with the example sentence.
 - TMX is parsed with `defusedxml`, so a hostile file (entity bombs, external entities) is refused.
 
 ## Analyse a job before translating
 
-The **Job** tab takes the text you are about to translate (a DOCX, PDF, TXT or HTML file, or pasted text) and reports,
-against the current corpus (narrowed by the filter bar, if set) and the termbase of its project:
+The **Job** screen takes the text you are about to translate (a DOCX, PDF, TXT or HTML file, or pasted text) and reports,
+against the current corpus (narrowed by the document filter, if set) and the termbase of its project:
 
 - **Coverage**: the share of the text's content words whose lemma occurs at least *N* times in the corpus (default 3),
   the share seen at all, and the number of different words below the threshold.
-- **Gaps**: the words the corpus has little or no evidence for, least evidence first, each with a **+ term** link.
+- **Gaps**: the words the corpus has little or no evidence for, least evidence first, each with a **+ Term** button.
 - **Key terms**: the words characteristic of the text compared with the language's base corpus (log-likelihood; words
   that occur at least twice). Without a base corpus the most frequent words are listed instead.
 - **Termbase terms in the text**: every entry whose source term occurs (by word form or lemma, so inflected entries
@@ -86,16 +89,19 @@ The text is analysed and then forgotten: nothing is added to any corpus. The ana
 
 Turn what you find into terminology you can reuse and hand over:
 
-- **Add**: click **+ term** next to any row of *Frequency*, *Collocations*, *N-grams* or *Keyness* (or the *+ term*
-  button next to the concordance search). The dialog pre-fills the term and its part of speech, and *Find examples*
-  lists whole sentences from the corpus (respecting the filter bar) to pick an example from.
+- **Add**: click **+ Term** next to any row of *Frequency*, *Collocations*, *N-grams*, *Keyness*, *Equivalents* or
+  the Job report, use the *+ Term* button next to the concordance search, or select a hit in the *Concordance* and
+  press **Ctrl/Cmd+E** (with text selected in the hit, the selection becomes the term, or the translation when it is
+  in the target segment). The dialog pre-fills the term, its part of speech and the example sentence, and *Find
+  examples* lists whole sentences from the current corpus (respecting the document filter) to pick an example from.
 - **Entries** are (source term, translation) pairs with part of speech, status, domain, definition, notes and an
   example sentence. *Status*: `candidate` (to be reviewed; the translation may be empty), `approved` (the term to
   use) or `forbidden` (a translation that must **not** be used; it is exported as a deprecated term). Approved and
   forbidden entries need a translation. Target language is the other supported language.
 - **Scope**: entries belong to the project of the corpus they were added from (corpora without a project share a
-  general termbase). The *Termbase* tab lists, searches, edits and deletes them.
-- **Export** (same tab, or `GET /api/terms/export?format=...&project=...&status=...`): `tbx`, `tbx2`, `xlsx`, `csv`.
+  general termbase). The *Termbase* screen lists, searches, filters by status, edits, approves, marks forbidden and
+  deletes them.
+- **Export** (same screen, or `GET /api/terms/export?format=...&project=...&status=...`): `tbx`, `tbx2`, `xlsx`, `csv`.
   By default only *approved* entries are exported; tick *include candidates* to add the rest.
   - **TBX** (TermBase eXchange, ISO 30042) with TBX-Basic data categories only. `tbx` uses the 2019 structure
     (`conceptEntry / langSec / termSec`), `tbx2` the 2008 one (`termEntry / langSet / tig`) that most CAT tools read.
@@ -115,7 +121,7 @@ in the corpus selector, and it never mixes into their concordances, frequencies 
 - **Frequency and Collocations**: tick “compare with base corpus” to add *Base per M* (how common the item is in
   general language), which separates domain vocabulary from everyday words.
 
-Create and fill it in the **Base corpora** tab. Sentence files (one sentence per line, or Leipzig Corpora
+Create and fill it in the **Base corpora** screen. Sentence files (one sentence per line, or Leipzig Corpora
 Collection `<id><TAB><sentence>` lines) are split into documents of 5000 sentences. The web upload takes files up
 to 25 MB; bigger files go through the command line, which streams from disk:
 
@@ -156,8 +162,40 @@ The loader falls back to whichever installed model size is available (`SPACY_SIZ
 Add dependencies with `uv add <pkg>`; `uv.lock` is committed.
 
 Layout (`src` layout): `src/colloca/ingest.py` (URL/DOCX/PDF → text), `nlp.py` (spaCy),
-`analysis.py` (all statistics, SQL + Python), `main.py` (API), `static/` (UI, no build step);
-tests in `tests/`.
+`analysis.py` (all statistics, SQL + Python), `main.py` (API, also serves the built UI from `static/`);
+tests in `tests/`. The UI source is in `frontend/` (see below); its build output `src/colloca/static/` is git-ignored.
+
+## Frontend development
+
+The interface is a Svelte 5 + TypeScript single-page app built with Vite, in `frontend/`. mise pins Node (LTS).
+
+```bash
+mise run ui:build             # npm ci + vite build into src/colloca/static/ (git-ignored), served by `mise run dev`
+mise run dev                  # API (and the built UI) on http://localhost:8000
+mise run ui:dev               # Vite dev server with hot reload; proxies /api to the API on port 8000
+mise run ui:test              # Vitest unit and component tests
+mise run ui:lint              # eslint + svelte-check (type checking)
+mise run ui:e2e               # builds the UI and runs the Playwright end-to-end tests against a real API
+```
+
+- **Build output**: Vite writes straight into `src/colloca/static/` and empties it first (the config refuses any
+  other directory). A fresh checkout has no UI until `mise run ui:build`; until then `/` answers with a
+  *UI not built* page (the API works). `docker compose up --build` builds the UI in a Node stage, so Docker users
+  need neither Node nor a build. A wheel (`uv build`) includes the UI only if it was built first.
+- **Layout**: a left rail with the corpus switcher (project filter, *…* to manage projects, corpus selector with
+  its language, documents and words, *New corpus*, *Delete*), the screens grouped as **Corpus** (Sources, Base
+  corpora), **Explore** (Concordance, Collocations, N-grams, Frequency, Keyness, Word cloud, Equivalents),
+  **Terms** (Termbase) and **Job**, and the theme switch (Auto, Light, Dark). The work area shows a toolbar with
+  the options, the document filter, a result strip (counts and *Filter in results*), the sortable table and, for
+  the selected row, a detail strip with its actions. Messages appear in the status line at the top. The screen
+  and its options are kept in the address (`#/concordance?q=...`), so reload, back and bookmarks work.
+- **Keyboard**: **Ctrl/Cmd+K** goes to the Concordance and focuses the query; **↑/↓** (and PageUp/PageDown,
+  Home/End) move through the rows of a focused table, **Enter** opens the selected row (edit a document or a term);
+  **Ctrl/Cmd+E** adds the selected concordance hit (or the selected text) as a term; **Esc** closes a dialog;
+  **?** lists the shortcuts.
+- Code: screens in `frontend/src/screens/`, reusable components in `frontend/src/lib/ui/`, API client, stores,
+  routing and the interface strings (`i18n.ts`, English only for now) in `frontend/src/lib/`, colour and spacing
+  tokens in `frontend/src/lib/styles/`. Tests in `frontend/tests/` (Vitest) and `frontend/e2e/` (Playwright).
 
 ## Safeguards
 
@@ -169,7 +207,7 @@ tests in `tests/`.
 - **CSV export** prefixes cells that start with `=`, `+`, `-`, `@` with `'`, so scraped text cannot run as a
   spreadsheet formula.
 - **Background imports**: uploads, URL additions and pasted texts are queued and processed one at a time; the
-  Sources tab shows progress and per-file errors.
+  Sources screen shows progress and per-file errors (progress is followed whatever screen is open).
 - **Database upgrades**: the schema is versioned (`PRAGMA user_version`, migrations in `db.py`). Before an
   existing database is migrated, a copy is written next to it (`corpus.db.bak-v<old version>`). A database from
   a newer Colloca is refused rather than corrupted.

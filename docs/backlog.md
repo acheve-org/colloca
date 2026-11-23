@@ -36,7 +36,7 @@ The T-numbers are stable labels used for cross-references; the **row order is th
 | T02 | Candidate review: accept / drop, "already in termbase" badge, stop list | High | M | P1 | Research #3 |
 | T03 | Glossary import (TBX, CSV, Excel) with column mapping and a duplicate report | High | M | P1 | Research #10 |
 | T04 | Concordance search options: case, wildcard, any order, limit, filter inside results, random sample | High | M | P1 | Roadmap 10, Research #7 |
-| T05 | Sortable analysis tables with a quick filter box | High | S | P1 | Research #13 |
+| T05 | Sortable analysis tables with a quick filter box (**done**, UI redesign) | High | S | P1 | Research #13 |
 | T06 | Hit detail panel and "open the document at this hit" | High | M | P1 | Roadmap 10, Research #8 |
 | T07 | Validate the TBX export against the official schema and a real CAT tool | High | S | P1 | Research #10, README caveat |
 | T08 | Align two documents automatically when no TMX exists | High | L | P1 | New |
@@ -50,11 +50,11 @@ The T-numbers are stable labels used for cross-references; the **row order is th
 | T16 | Near-duplicate document detection | Medium | M | P2 | Roadmap 13 |
 | T17 | Query performance for large corpora | Medium | M | P2 | Roadmap 16 |
 | T18 | Segment lookup with match percentages (fuzzy matching against aligned texts) | Medium | L | P2 | Research #9 |
-| T28 | Engineering health: browser tests, split `app.js`, logging, type checking | Medium | M | P2 | Audit |
+| T28 | Engineering health: browser tests, split `app.js`, logging, type checking (**partly done**: browser tests, UI split) | Medium | M | P2 | Audit |
 | T19 | Term entry model: several terms per language, term-level notes, gender and number | Medium | L | P3 | Research #11 |
 | T20 | TMX export of aligned corpora, keep TMX inline markup | Low | M | P3 | Research #10 |
 | T21 | Related-term suggestions from word embeddings | Low | L | P3 | Roadmap 14 |
-| T22 | Interface language (Spanish, Italian) and a semantic colour system | Low | M | P3 | Audit, Research #12 |
+| T22 | Interface language (Spanish, Italian) and a semantic colour system (**partly done**: catalogue, colour tokens) | Low | M | P3 | Audit, Research #12 |
 | T23 | Optional authentication and encryption at rest | Low | M | P3 | Roadmap 15 |
 | T24 | PDF extraction robustness | Low | M | P3 | Audit |
 | T25 | URL fetching: DNS-rebinding hardening, import a list of URLs | Low | S | P3 | Audit |
@@ -81,16 +81,16 @@ The "value" of T28 is indirect: every other task gets cheaper and safer. It is r
 
 ## 3. Quick wins (slot in at any time)
 
-Each is about a day or less and independent of the rest: **Q1**, **Q2**, **T05**, **T07**, **T27**, **T25**.
+Each is about a day or less and independent of the rest: **Q1**, **Q2**, **T07**, **T27**, **T25**. (T05 is done.)
 
 ## 4. Suggested milestones
 
 | Milestone | Tasks | What the translator gets |
 |---|---|---|
-| **M1: trusted concordance** | T01, T04, T05, T06, T07, Q1, Q2 | A concordance that points at the equivalent, filters, samples and shows its evidence; tables that sort; a verified export. |
+| **M1: trusted concordance** | T01, T04, T06, T07, Q1, Q2 (T05 done) | A concordance that points at the equivalent, filters, samples and shows its evidence; a verified export. (Tables already sort and filter.) |
 | **M2: terminology pipeline** | T02, T03, T10, T15 | Import existing glossaries, triage candidates, edit the termbase comfortably, see term hits while reading. |
 | **M3: more material in** | T08, T12, T16, T14 | More ways to build corpora (document pairs, scans, XLIFF), safer data, no duplicates. |
-| **M4: speed and keys** | T09, T13, T17, T28 | Keyboard workflow, a stronger query language, big corpora stay fast, safer to change. |
+| **M4: speed and keys** | T09, T13, T17, T28 (rest) | Keyboard workflow, a stronger query language, big corpora stay fast, safer to change. |
 | **M5: later** | T11, T18, T19, T20 to T27 | The rest, in the order of the table. |
 
 ## 5. Task details
@@ -128,7 +128,9 @@ equivalent and flag it as a guess. The hard part (the data) already exists: `par
 - No line is mis-highlighted when the same word occurs twice, or when the lemma differs from the surface form ("contratti").
 - The API still returns the old fields; CSV export is unchanged.
 
-**Notes.** Touches `parallel.bilingual_concordance`, the `ccGo` handler in `static/app.js` and the `.kwic` styles. Beware
+**Notes.** Touches `parallel.bilingual_concordance` and, in the front end, the `likelyEquiv` slot of
+`frontend/src/screens/Concordance.svelte` (already wired to `Kwic` and `Highlight` with the `--hit-equiv` token and the
+"guess" badge; it is empty until this task fills it). Beware
 tokens vs characters: offsets must be computed from the same `form` + `sp` join used by `segment_text`.
 
 ---
@@ -223,6 +225,10 @@ diverge.
 ### T05. Sortable analysis tables with a quick filter box
 
 **Priority** P1 · **Value** High · **Effort** S · **Source** Research #13
+
+**Status: done** (UI redesign, 2026-11). Every table is the shared `DataTable` component (`frontend/src/lib/ui/`):
+click a header to sort (numbers numerically, text accent- and case-insensitively), a *Filter in results* box above it,
+keyboard row navigation, no re-query; CSV links still export the full result. The text below is kept for reference.
 
 **Why it matters.** Every table (frequency, keyness, collocations, n-grams, equivalents, job report, termbase) is sorted by the
 server; changing the order means a new query, and there is no way to find a row in a long table. Translators expect to click a
@@ -570,6 +576,12 @@ source with its licence recorded.
 
 **Priority** P3 · **Value** Low · **Effort** M · **Source** Audit, Research #12
 
+**Status: partly done** (UI redesign, 2026-11). Done: every interface string comes from one catalogue
+(`frontend/src/lib/i18n.ts`, English only), and semantic colour tokens exist for query hit, likely equivalent, termbase
+hit, forbidden term and the candidate / approved / forbidden statuses, each with a non-colour cue, in both themes
+(`frontend/src/lib/styles/tokens.css`, contrast checked by a unit test). Remaining: the Spanish and Italian
+catalogues with a language switch, and the contrast ratios written up as documentation.
+
 **Why it matters.** The interface is English only while the users work in Spanish and Italian. The research also found one accent colour and badges only in the
 termbase, where memoQ and Phrase use a fixed colour per kind of information. (A light and dark theme already exist.)
 
@@ -652,6 +664,12 @@ that are fetched as background jobs with a per-URL report (the trimming step bec
 
 **Priority** P2 · **Value** Medium (indirect) · **Effort** M · **Source** Audit
 
+**Status: partly done** (UI redesign, 2026-11). Done: the front end is a typed Svelte/Vite app in `frontend/` split
+into screens, components and stores (replacing `app.js`), with eslint and svelte-check, Vitest unit and component
+tests, and Playwright browser tests of the main flow (create corpus, upload, concordance, add term, termbase, CSV
+export), all in CI. Remaining: the other browser flows (aligned texts, job analysis), logging, Python type checking
+and coverage, the Python version floor, offline model install, and the sample-data generator.
+
 **Why it matters.** The back end has 130 tests; the front end has none, and `static/app.js` is one 600-line file whose long lines hold most of the interface logic.
 Each new feature is verified by hand in a browser. The server logs almost nothing. These make every other task slower and riskier.
 
@@ -717,5 +735,6 @@ These change priorities, so answers are worth getting early:
 | #5 | Termbase, TBX (2008 and 2019 structure), Excel and CSV export |
 | #6 | Aligned texts: TMX and two-column import, translated concordance, Equivalents |
 | #7 | Job analysis: coverage, gaps, key terms, termbase hits, repeated phrases, job glossary export |
+| UI redesign | New interface (Svelte/Vite, `frontend/`): left-rail layout, CAT terminology, sortable and filterable tables (T05), keyboard shortcuts, colour tokens and string catalogue (part of T22), unit and browser tests (part of T28) |
 
-Corrections to the first audit: a light and dark theme already exists (`prefers-color-scheme` in `static/style.css`), so no "dark mode" task is needed.
+Corrections to the first audit: a light and dark theme already exists (`prefers-color-scheme`, now in `frontend/src/lib/styles/tokens.css` with a manual Auto / Light / Dark switch), so no "dark mode" task is needed.
