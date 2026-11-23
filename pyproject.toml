@@ -19,6 +19,9 @@ dependencies = [
     "it-core-news-sm",
 ]
 
+[project.scripts]
+colloca-import-reference = "colloca.cli:main"
+
 [dependency-groups]
 dev = [
     "pytest>=8",

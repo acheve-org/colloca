@@ -54,6 +54,19 @@ def _reply(rows: list[dict], fmt: str, name: str):
     return rows
 
 
+def _base_corpus_id(conn, corpus) -> int:
+    """The language's base corpus, for comparing `corpus` against general language."""
+    if corpus["is_reference"]:
+        raise HTTPException(400, "This is the base corpus itself; pick another corpus to compare against")
+    lang = nlp.SUPPORTED[corpus["lang"]]
+    ref = analysis.reference_corpus(conn, corpus["lang"])
+    if not ref:
+        raise HTTPException(400, f"There is no {lang} base corpus yet (create and fill it in the Base corpora tab)")
+    if analysis.corpus_size(conn, ref["id"]) == 0:
+        raise HTTPException(400, f"The {lang} base corpus is empty")
+    return ref["id"]
+
+
 def _pos_list(pos: str | None) -> list[str] | None:
     return [p.strip().upper() for p in pos.split(",") if p.strip()] if pos else None
 
@@ -77,13 +90,44 @@ def languages():
     return nlp.SUPPORTED
 
 
+_CORPUS_STATS = """SELECT c.*, COUNT(d.id) AS docs, COALESCE(SUM(d.n_tokens),0) AS tokens
+                   FROM corpora c LEFT JOIN documents d ON d.corpus_id=c.id
+                   WHERE c.is_reference=? GROUP BY c.id ORDER BY c.id"""
+
+
 @app.get("/api/corpora")
 def list_corpora():
+    """Your own corpora. The per-language base corpora are listed by /api/references."""
     with db.session() as conn:
-        rows = conn.execute(
-            """SELECT c.*, COUNT(d.id) AS docs, COALESCE(SUM(d.n_tokens),0) AS tokens
-               FROM corpora c LEFT JOIN documents d ON d.corpus_id=c.id GROUP BY c.id ORDER BY c.id""").fetchall()
-        return [dict(r) for r in rows]
+        return [dict(r) for r in conn.execute(_CORPUS_STATS, (0,)).fetchall()]
+
+
+class ReferenceIn(BaseModel):
+    lang: str
+    name: str = Field(default="", max_length=120)
+
+
+@app.get("/api/references")
+def list_references():
+    """The general (base) corpus of each language, used as reference for keyness and frequency comparison."""
+    with db.session() as conn:
+        return [dict(r) for r in conn.execute(_CORPUS_STATS, (1,)).fetchall()]
+
+
+@app.post("/api/references", status_code=201)
+def create_reference(body: ReferenceIn):
+    """Create the (empty) base corpus of a language; fill it through the normal upload endpoints
+    (`?sentences=true` for Leipzig-style sentence files) or with `colloca-import-reference`."""
+    if body.lang not in nlp.SUPPORTED:
+        raise HTTPException(400, f"Language must be one of {list(nlp.SUPPORTED)}")
+    with db.session() as conn:
+        if analysis.reference_corpus(conn, body.lang):
+            raise HTTPException(409, f"A base corpus for {nlp.SUPPORTED[body.lang]} already exists "
+                                     "(delete it first to replace it)")
+        name = body.name.strip() or f"General {nlp.SUPPORTED[body.lang]} (base corpus)"
+        cur = conn.execute("INSERT INTO corpora (name,lang,description,is_reference) VALUES (?,?,?,1)",
+                           (name, body.lang, "General-language reference corpus"))
+        return {"id": cur.lastrowid}
 
 
 @app.post("/api/corpora", status_code=201)
@@ -101,6 +145,7 @@ def delete_corpus(corpus_id: int):
     with db.session() as conn:
         _corpus(conn, corpus_id)
         conn.execute("DELETE FROM corpora WHERE id=?", (corpus_id,))
+    importer.forget_jobs(corpus_id)
 
 
 # --------------------------------------------------------------------------- documents
@@ -165,8 +210,11 @@ def add_document(corpus_id: int, body: DocIn, background: bool = False, force_la
 
 @app.post("/api/corpora/{corpus_id}/upload", status_code=202)
 async def upload(corpus_id: int, files: list[UploadFile] = File(...), tags: str = "",
-                 force_language: bool = False):
-    """Queue each file as a background job. Per-file answers: {file, ok, job_id} or {file, ok:false, error}."""
+                 force_language: bool = False, sentences: bool = False):
+    """Queue each file as a background job. Per-file answers: {file, ok, job_id} or {file, ok:false, error}.
+
+    With ?sentences=true a file is read as one sentence per line (Leipzig Corpora Collection files work as
+    they are) and split into several documents."""
     with db.session() as conn:
         _corpus(conn, corpus_id)
     if len(files) > ingest.MAX_UPLOAD_FILES:
@@ -181,7 +229,7 @@ async def upload(corpus_id: int, files: list[UploadFile] = File(...), tags: str 
                             "error": f"File is larger than {limit_mb} MB (set MAX_UPLOAD_MB to change)"})
             continue
         job = importer.submit(corpus_id, "import", name,
-                              importer.import_file(corpus_id, name, data, tags, force_language))
+                              importer.import_file(corpus_id, name, data, tags, force_language, sentences))
         results.append({"file": name, "ok": True, "job_id": job.id})
     return results
 
@@ -227,11 +275,16 @@ def delete_document(doc_id: int):
 # --------------------------------------------------------------------------- analyses
 @app.get("/api/corpora/{corpus_id}/frequency")
 def frequency(corpus_id: int, unit: str = "lemma", pos: str | None = None, min_freq: int = 1,
-              exclude_stop: bool = True, limit: int = Query(500, le=5000), format: str = "json"):
+              exclude_stop: bool = True, limit: int = Query(500, le=5000), format: str = "json",
+              with_reference: bool = False):
+    """`with_reference=true` adds ref_freq / ref_per_million from the language's base corpus."""
     with db.session() as conn:
-        _corpus(conn, corpus_id)
+        corpus = _corpus(conn, corpus_id)
+        ref_id = _base_corpus_id(conn, corpus) if with_reference else None
         rows = _run(analysis.frequency, conn, corpus_id, unit, _pos_list(pos), min_freq,
                     exclude_stop, True, limit)
+        if ref_id:
+            analysis.add_reference_columns(conn, rows, ref_id, unit)
     return _reply(rows, format, "frequency")
 
 
@@ -250,11 +303,16 @@ def concordance(corpus_id: int, q: str, unit: str = "lemma", width: int = Query(
 @app.get("/api/corpora/{corpus_id}/collocations")
 def collocations(corpus_id: int, q: str, left: int = Query(4, ge=0, le=15),
                  right: int = Query(4, ge=0, le=15), min_freq: int = 2, exclude_stop: bool = True,
-                 pos: str | None = None, limit: int = Query(200, le=2000), format: str = "json"):
+                 pos: str | None = None, limit: int = Query(200, le=2000), format: str = "json",
+                 with_reference: bool = False):
+    """`with_reference=true` adds the collocate's ref_freq / ref_per_million from the base corpus."""
     with db.session() as conn:
-        _corpus(conn, corpus_id)
+        corpus = _corpus(conn, corpus_id)
+        ref_id = _base_corpus_id(conn, corpus) if with_reference else None
         res = _run(analysis.collocations, conn, corpus_id, q, left, right, min_freq,
                    exclude_stop, _pos_list(pos), limit)
+        if ref_id:
+            analysis.add_reference_columns(conn, res["rows"], ref_id, "lemma")
     return _reply(res["rows"], format, "collocations") if format == "csv" else res
 
 
@@ -268,13 +326,17 @@ def ngrams(corpus_id: int, n: int = 3, unit: str = "form", min_freq: int = 2, mi
 
 
 @app.get("/api/corpora/{corpus_id}/keyness")
-def keyness(corpus_id: int, ref: int, unit: str = "lemma", min_freq: int = 3,
+def keyness(corpus_id: int, ref: int | None = None, unit: str = "lemma", min_freq: int = 3,
             exclude_stop: bool = True, pos: str | None = None,
             limit: int = Query(300, le=3000), format: str = "json"):
+    """Compare against `ref`, or, when omitted, against the language's base corpus."""
     with db.session() as conn:
         c = _corpus(conn, corpus_id)
-        r = _corpus(conn, ref)
-        if c["lang"] != r["lang"]:
+        if ref is None:
+            ref = _base_corpus_id(conn, c)
+        elif ref == corpus_id:
+            raise HTTPException(400, "A corpus cannot be compared with itself")
+        elif _corpus(conn, ref)["lang"] != c["lang"]:
             raise HTTPException(400, "Reference corpus must have the same language")
         rows = _run(analysis.keyness, conn, corpus_id, ref, unit, min_freq, exclude_stop,
                     _pos_list(pos), limit)

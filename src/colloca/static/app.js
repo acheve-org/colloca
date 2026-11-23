@@ -1,7 +1,7 @@
 "use strict";
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-const state = { corpora: [], id: null, langs: {} };
+const state = { corpora: [], refs: [], id: null, langs: {} };
 
 // ------------------------------------------------------------------ helpers
 function say(text, kind = "") { const m = $("msg"); m.textContent = text; m.className = kind; }
@@ -57,7 +57,10 @@ async function loadCorpora(select) {
   const cur = state.corpora.find((c) => c.id === state.id);
   $("corpusInfo").textContent = cur ? `${cur.docs} docs · ${cur.tokens.toLocaleString()} words` : "No corpus yet — click “+ New”.";
   const refs = state.corpora.filter((c) => cur && c.id !== cur.id && c.lang === cur.lang);
-  $("kyRef").innerHTML = refs.map((c) => `<option value="${c.id}">${esc(c.name)} (${c.tokens.toLocaleString()} words)</option>`).join("") || "<option value=''>— no other corpus —</option>";
+  const base = state.refs.find((r) => cur && r.lang === cur.lang && r.tokens > 0);
+  $("kyRef").innerHTML = (base ? `<option value="">Base corpus — ${esc(base.name)} (${base.tokens.toLocaleString()} words)</option>` : "")
+    + refs.map((c) => `<option value="${c.id}">${esc(c.name)} (${c.tokens.toLocaleString()} words)</option>`).join("")
+    || "<option value='none'>— no base or other corpus —</option>";
   if (cur) { await loadDocs(); await pollJobs(); }
   else { $("docsTable").innerHTML = ""; $("jobs").innerHTML = ""; }
 }
@@ -66,6 +69,7 @@ $("corpusSel").addEventListener("change", (e) => loadCorpora(+e.target.value));
 async function init() {
   state.langs = await api("/api/languages");
   $("newLang").innerHTML = Object.entries(state.langs).map(([k, v]) => `<option value="${k}">${v}</option>`).join("");
+  await loadRefs();
   await loadCorpora();
 }
 $("newCorpusBtn").onclick = () => { $("newName").value = ""; $("newDlg").showModal(); };
@@ -156,11 +160,12 @@ function setCsv(id, path, params) { $(id).href = `${base()}/${path}?${qs({ ...pa
 const posParam = (id) => $(id).value.trim();
 
 $("fqGo").onclick = busy($("fqGo"), async () => {
-  const p = { unit: $("fqUnit").value, pos: posParam("fqPos"), min_freq: $("fqMin").value, exclude_stop: $("fqStop").checked, limit: 1000 };
+  const p = { unit: $("fqUnit").value, pos: posParam("fqPos"), min_freq: $("fqMin").value, exclude_stop: $("fqStop").checked, with_reference: $("fqRef").checked, limit: 1000 };
   state.lastUnit = p.unit;
   const rows = await api(`${base()}/frequency?${qs(p)}`); setCsv("fqCsv", "frequency", p);
   table([{ key: "item", label: p.unit }, { key: "pos", label: "POS" }, { key: "freq", label: "Freq", num: 1 }, { key: "per_million", label: "Per million", num: 1 },
-         { key: "docs", label: "Docs", num: 1 }, { key: "docs_pct", label: "Docs %", num: 1 }], rows, $("fqOut"), ["item"]);
+         { key: "docs", label: "Docs", num: 1 }, { key: "docs_pct", label: "Docs %", num: 1 },
+         ...(p.with_reference ? [{ key: "ref_per_million", label: "Base per M", num: 1 }] : [])], rows, $("fqOut"), ["item"]);
   say(`${rows.length} items (click a word for its concordance).`, "ok");
 });
 
@@ -177,14 +182,15 @@ $("ccGo").onclick = busy($("ccGo"), async () => {
 $("ccQ").addEventListener("keydown", (e) => { if (e.key === "Enter") $("ccGo").click(); });
 
 $("coGo").onclick = busy($("coGo"), async () => {
-  const p = { q: $("coQ").value, left: $("coL").value, right: $("coR").value, min_freq: $("coMin").value, pos: posParam("coPos"), exclude_stop: $("coStop").checked };
+  const p = { q: $("coQ").value, left: $("coL").value, right: $("coR").value, min_freq: $("coMin").value, pos: posParam("coPos"), exclude_stop: $("coStop").checked, with_reference: $("coRef").checked };
   if (!p.q.trim()) return say("Type a node word.", "err");
   state.lastUnit = "lemma";
   const r = await api(`${base()}/collocations?${qs(p)}`); setCsv("coCsv", "collocations", p);
   $("coInfo").textContent = `Node “${p.q}”: ${r.node_freq} occurrences · sorted by logDice. Low counts are unreliable — check the concordance.`;
   table([{ key: "item", label: "Collocate (lemma)" }, { key: "pos", label: "POS" }, { key: "cooc", label: "Co-occ", num: 1 }, { key: "freq", label: "Corpus freq", num: 1 },
          { key: "docs", label: "Docs", num: 1 }, { key: "logdice", label: "logDice", num: 1 }, { key: "mi", label: "MI", num: 1 },
-         { key: "tscore", label: "t-score", num: 1 }, { key: "ll", label: "LL", num: 1 }], r.rows, $("coOut"), ["item"]);
+         { key: "tscore", label: "t-score", num: 1 }, { key: "ll", label: "LL", num: 1 },
+         ...(p.with_reference ? [{ key: "ref_per_million", label: "Base per M", num: 1 }] : [])], r.rows, $("coOut"), ["item"]);
   say("");
 });
 $("coQ").addEventListener("keydown", (e) => { if (e.key === "Enter") $("coGo").click(); });
@@ -198,7 +204,7 @@ $("ngGo").onclick = busy($("ngGo"), async () => {
 });
 
 $("kyGo").onclick = busy($("kyGo"), async () => {
-  if (!$("kyRef").value) return say("Create a second corpus of the same language to use as reference.", "err");
+  if ($("kyRef").value === "none") return say("Create a base corpus (Base corpora tab) or a second corpus of the same language to use as reference.", "err");
   const p = { ref: $("kyRef").value, min_freq: $("kyMin").value, pos: posParam("kyPos") };
   state.lastUnit = "lemma";
   const rows = await api(`${base()}/keyness?${qs(p)}`); setCsv("kyCsv", "keyness", p);
@@ -207,6 +213,63 @@ $("kyGo").onclick = busy($("kyGo"), async () => {
          { key: "per_million", label: "Per M", num: 1 }, { key: "ref_per_million", label: "Ref per M", num: 1 }, { key: "log_ratio", label: "Log ratio", num: 1 },
          { key: "ll", label: "LL", num: 1 }], rows, $("kyOut"), ["item"]);
   say("");
+});
+
+// ------------------------------------------------------------------ base (reference) corpora
+let refTimer = null;
+async function loadRefs() {
+  state.refs = await api("/api/references");
+  renderRefs();
+}
+function renderRefs() {
+  $("baseCards").innerHTML = Object.entries(state.langs).map(([lang, name]) => {
+    const r = state.refs.find((x) => x.lang === lang);
+    if (!r) return `<div class="card"><h3>${esc(name)}</h3><p class="muted">No base corpus yet.</p>
+      <button class="primary" data-ref-create="${lang}">Create ${esc(name)} base corpus</button></div>`;
+    return `<div class="card"><h3>${esc(name)}</h3>
+      <p><b>${esc(r.name)}</b><br><span class="muted">${r.docs} parts · ${r.tokens.toLocaleString()} words</span></p>
+      <input type="file" data-ref-file="${r.id}" multiple accept=".txt,.csv,.tsv">
+      <button class="primary" data-ref-upload="${r.id}">Upload sentence files</button>
+      <button class="danger" data-ref-del="${r.id}">Delete</button>
+      <div class="refjobs" id="refjobs-${r.id}" aria-live="polite"></div></div>`;
+  }).join("");
+  pollRefJobs();
+}
+async function pollRefJobs() {
+  clearTimeout(refTimer);
+  let active = false;
+  for (const r of state.refs) {
+    const jobs = await api(`/api/corpora/${r.id}/jobs`);
+    const box = $(`refjobs-${r.id}`);
+    if (box) box.innerHTML = jobs.slice(-4).reverse().map((j) => {
+      const pct = Math.round(j.progress * 100);
+      const st = j.status === "error" ? `<span class="err">${esc(j.error)}</span>`
+        : j.status === "done" ? `<span class="ok">done — ${j.result.documents ?? 0} parts, ${(j.result.tokens ?? 0).toLocaleString()} words</span>`
+        : j.status === "running" ? `<progress max="100" value="${pct}"></progress> ${pct}%` : "queued";
+      return `<div class="job"><b>${esc(j.label)}</b> ${st}</div>`;
+    }).join("");
+    if (jobs.some((j) => j.status === "queued" || j.status === "running")) active = true;
+  }
+  if (active) { state.refJobsActive = true; refTimer = setTimeout(() => pollRefJobs().catch(() => {}), 1000); }
+  else if (state.refJobsActive) { state.refJobsActive = false; await loadRefs(); await loadCorpora(state.id); }
+}
+$("baseCards").addEventListener("click", async (e) => {
+  const d = e.target.dataset;
+  try {
+    if (d.refCreate) { await post("/api/references", { lang: d.refCreate }); await loadRefs(); await loadCorpora(state.id); say("Base corpus created. Now upload sentence files.", "ok"); }
+    else if (d.refDel) {
+      if (!confirm("Delete this base corpus and all its texts? Keyness will have no default reference until you build another.")) return;
+      await api(`/api/corpora/${d.refDel}`, { method: "DELETE" }); await loadRefs(); await loadCorpora(state.id); say("Base corpus deleted.", "ok");
+    } else if (d.refUpload) {
+      const files = document.querySelector(`[data-ref-file="${d.refUpload}"]`).files;
+      if (!files.length) return say("Choose sentence files first.", "err");
+      const fd = new FormData(); for (const f of files) fd.append("files", f);
+      const res = await api(`/api/corpora/${d.refUpload}/upload?${qs({ sentences: true, force_language: $("refForce").checked })}`, { method: "POST", body: fd });
+      const bad = res.filter((r) => !r.ok);
+      say(`${res.length - bad.length} queued` + (bad.length ? `; rejected: ` + bad.map((b) => `${b.file} (${b.error})`).join("; ") : "."), bad.length ? "err" : "ok");
+      await pollRefJobs();
+    }
+  } catch (err) { say(err.message, "err"); }
 });
 
 // ------------------------------------------------------------------ word cloud (self-contained spiral layout)

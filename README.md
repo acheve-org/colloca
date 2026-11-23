@@ -23,7 +23,33 @@ Use faster/smaller models with `SPACY_SIZE=sm` (edit `docker-compose.yml`). Data
 2. **Sources**: paste a URL → *Fetch & preview* → trim noise in the text box → *Add*.
    Or upload DOCX / PDF (text layer) / TXT / HTML. Exact duplicates are rejected.
 3. Explore with the tabs. Click any word in a table to jump to its concordance. Every table has a CSV export.
-4. **Keyness**: create a second corpus (same language, e.g. a general one) and compare.
+4. **Keyness**: compares your corpus with the language's **base corpus** (below) by default, or with any other
+   corpus of the same language you pick.
+
+## Base corpora (general language per language)
+
+A corpus built for one client is usually small, so its statistics need something to be compared with. Each
+language can have **one base corpus**: a general-language reference kept apart from your own corpora (it is not
+in the corpus selector, and it never mixes into their concordances, frequencies or n-grams). It is used for:
+
+- **Keyness**: the default reference (pick another corpus in the list if you prefer).
+- **Frequency and Collocations**: tick “compare with base corpus” to add *Base per M* (how common the item is in
+  general language), which separates domain vocabulary from everyday words.
+
+Create and fill it in the **Base corpora** tab. Sentence files (one sentence per line, or Leipzig Corpora
+Collection `<id><TAB><sentence>` lines) are split into documents of 5000 sentences. The web upload takes files up
+to 25 MB; bigger files go through the command line, which streams from disk:
+
+```bash
+uv run colloca-import-reference --lang es spa_news_2023_300K-sentences.txt --max-sentences 300000
+# Docker: mount the folder with the file
+docker compose run --rm -v "$PWD/corpora:/in" colloca colloca-import-reference --lang es /in/spa_news_2023_300K-sentences.txt
+```
+
+Colloca does not download anything for you: get a file yourself and check its licence (the Leipzig files are
+CC BY). Notes: 300k sentences (about 7M words) take well over half an hour to annotate with the `sm` models, so
+start with `--max-sentences 100000`. Pick a register close to your work (news vs. web) since keyness also picks up
+register differences. Those corpora have shuffled sentences, so “Docs” columns mean nothing for the base corpus.
 
 ## Measures
 

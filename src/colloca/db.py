@@ -60,7 +60,13 @@ _V2 = """
 ALTER TABLE documents ADD COLUMN lang_check TEXT NOT NULL DEFAULT '';  -- ok|mismatch|uncertain|short
 """
 
-MIGRATIONS: list[tuple[int, str]] = [(1, _V1), (2, _V2)]
+# --- v3: a corpus can be the language's general "base" (reference) corpus; at most one per language
+_V3 = """
+ALTER TABLE corpora ADD COLUMN is_reference INTEGER NOT NULL DEFAULT 0;
+CREATE UNIQUE INDEX idx_one_reference_per_lang ON corpora(lang) WHERE is_reference = 1;
+"""
+
+MIGRATIONS: list[tuple[int, str]] = [(1, _V1), (2, _V2), (3, _V3)]
 SCHEMA_VERSION = MIGRATIONS[-1][0]
 
 
