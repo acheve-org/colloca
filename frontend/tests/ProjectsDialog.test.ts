@@ -136,10 +136,10 @@ describe('CorpusSwitcher project filter', () => {
     await waitFor(() => expect(screen.getByRole('option', { name: 'Acme (1)' })).toBeInTheDocument());
     await fireEvent.change(screen.getByLabelText('Project'), { target: { value: '7' } });
     await waitFor(() => expect(corpusStore.currentId).toBe(2));
-    expect(corpusOptions()).toEqual(['C2', 'C3']);
+    expect(corpusOptions()).toEqual(['C2 [es]', 'C3 [es]']);
     await fireEvent.change(screen.getByLabelText('Project'), { target: { value: 'none' } });
     await waitFor(() => expect(corpusStore.currentId).toBe(1));
-    expect(corpusOptions()).toEqual(['C1']);
+    expect(corpusOptions()).toEqual(['C1 [es]']);
   });
 
   it('creates a corpus in the filtered project by default', async () => {

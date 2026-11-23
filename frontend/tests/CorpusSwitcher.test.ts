@@ -62,6 +62,19 @@ async function openNew() {
 }
 
 describe('CorpusSwitcher', () => {
+  it('shows the language, document and word counts of the current corpus (old header info)', async () => {
+    corpusStore.list = [{ ...corpus(1, 'Alpha'), docs: 3, tokens: 12345 }];
+    render(CorpusSwitcher);
+    await waitFor(() => expect(screen.getByText(/Spanish · 3 docs · 12,345 words/)).toBeInTheDocument());
+  });
+
+  it('labels each corpus with its language code, as the old corpus select did', async () => {
+    corpusStore.list = [corpus(1, 'Eólica'), { ...corpus(2, 'Eólica'), lang: 'it' }];
+    render(CorpusSwitcher);
+    const select = screen.getByLabelText('Corpus') as HTMLSelectElement;
+    expect([...select.querySelectorAll('option')].map((o) => o.textContent)).toEqual(['Eólica [es]', 'Eólica [it]']);
+  });
+
   it('creates with the trimmed name and selects the new corpus', async () => {
     const dlg = await openNew();
     await fireEvent.input(within(dlg).getByRole('textbox'), { target: { value: '  Beta  ' } });

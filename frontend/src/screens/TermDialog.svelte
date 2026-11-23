@@ -3,6 +3,7 @@
 </script>
 
 <script lang="ts">
+  import { corpusStore } from '../lib/corpus.svelte';
   import { t } from '../lib/i18n';
   import { findExamples, saveTerm, TERM_POS, termStore, useExample } from '../lib/term.svelte';
   import Button from '../lib/ui/Button.svelte';
@@ -26,6 +27,12 @@
     const pair = t('term.langs', { src: l[c.src_lang] ?? c.src_lang, tgt: l[c.tgt_lang] ?? (c.tgt_lang || '?') });
     return c.project_id == null && termStore.editingId === null ? `${pair} · ${t('term.general')}` : pair;
   });
+
+  // Examples come from the current corpus: when editing, only if it has the entry's source language.
+  const canFind = $derived(
+    termStore.editingId === null ||
+      (corpusStore.current !== null && corpusStore.current.lang === termStore.ctx?.src_lang),
+  );
 
   async function submit(e: SubmitEvent): Promise<void> {
     e.preventDefault();
@@ -69,7 +76,7 @@
     <Field label={t('term.exampleSource')}>
       <input bind:value={termStore.draft.context_source} />
     </Field>
-    {#if termStore.editingId === null}
+    {#if canFind}
     <div class="examples">
       <Button onclick={() => findExamples(false)}>{t('term.findExamples')}</Button>
       {#if termStore.examples.length}

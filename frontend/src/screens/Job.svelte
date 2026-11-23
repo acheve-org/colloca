@@ -162,7 +162,8 @@
   const summary = $derived(report?.summary);
   const termIds = $derived(report ? report.known_terms.flatMap((k) => k.ids) : []);
 
-  const tableHeight = (n: number) => `min(calc(${Math.max(n, 1) + 1} * var(--row-h) + 2px), 20rem)`;
+  // + room for a horizontal scrollbar, which wide tables (the known terms) show.
+  const tableHeight = (n: number) => `min(calc(${Math.max(n, 1) + 1} * var(--row-h) + 18px), 20rem)`;
 
   const lemmaCols = $derived<Column<JobGap>[]>([
     { key: 'item', label: t('job.col.lemma'), width: 'minmax(12rem, 2fr)' },

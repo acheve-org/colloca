@@ -246,6 +246,45 @@ describe('Termbase', () => {
     await waitFor(() => expect(listCalls().length).toBe(2));
   });
 
+  it('Edit offers "Find examples" in the current corpus when it has the source language (old dialog)', async () => {
+    terms.body = [term(1)];
+    type Fetch = (url: string, init?: RequestInit) => Promise<unknown>;
+    const fetchMock = vi.mocked(globalThis.fetch as unknown as Fetch);
+    const inner = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (new URL(url, 'http://x').pathname === '/api/corpora/1/examples') {
+        calls.push({ method: 'GET', path: '/api/corpora/1/examples', params: new URL(url, 'http://x').searchParams });
+        return res(200, [{ sentence: 'Un term1 aquí.', doc: 'Doc A' }]);
+      }
+      return inner(url, init);
+    });
+    render(Termbase);
+    render(TermDialog);
+    await waitFor(() => expect(bodyRows().length).toBe(1));
+    await fireEvent.click(bodyRows()[0]);
+    await fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    const dlg = screen.getByRole('dialog');
+    // nothing is searched until asked: the entry keeps its own example
+    expect(calls.some((c) => c.path.endsWith('/examples'))).toBe(false);
+    await fireEvent.click(within(dlg).getByRole('button', { name: 'Find examples in this corpus' }));
+    const ex = await within(dlg).findByRole('button', { name: /Un term1 aquí/ });
+    expect(calls.find((c) => c.path.endsWith('/examples'))!.params.get('q')).toBe('term1');
+    await fireEvent.click(ex);
+    expect((within(dlg).getByLabelText('Example sentence') as HTMLTextAreaElement).value).toBe('Un term1 aquí.');
+    expect((within(dlg).getByLabelText('Example source') as HTMLInputElement).value).toBe('Doc A');
+  });
+
+  it('Edit hides "Find examples" when the current corpus is in another language than the entry', async () => {
+    terms.body = [term(1, { src_lang: 'it', tgt_lang: 'es' })];
+    render(Termbase);
+    render(TermDialog);
+    await waitFor(() => expect(bodyRows().length).toBe(1));
+    await fireEvent.click(bodyRows()[0]);
+    await fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    const dlg = screen.getByRole('dialog');
+    expect(within(dlg).queryByRole('button', { name: 'Find examples in this corpus' })).toBeNull();
+  });
+
   it('shows an empty state when there are no entries', async () => {
     terms.body = [];
     render(Termbase);

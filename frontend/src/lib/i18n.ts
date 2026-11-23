@@ -39,7 +39,7 @@ const en: Record<string, string> = {
   'corpus.language': 'Language',
   'corpus.create': 'Create',
   'corpus.confirmDelete': 'Delete corpus "{name}" and all its documents? This cannot be undone.',
-  'corpus.meta': '{lang} · {docs} docs',
+  'corpus.meta': '{lang} · {docs} docs · {words} words',
   'common.close': 'Close',
   'screen.placeholder': 'This screen is not built yet.',
   'status.label': 'Status',

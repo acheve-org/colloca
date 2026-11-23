@@ -80,7 +80,11 @@
   // The API does not report the spaCy model name yet: show the language only.
   const meta = $derived(
     current
-      ? t('corpus.meta', { lang: languages[current.lang] ?? current.lang, docs: current.docs })
+      ? t('corpus.meta', {
+          lang: languages[current.lang] ?? current.lang,
+          docs: current.docs,
+          words: current.tokens.toLocaleString(),
+        })
       : '',
   );
 
@@ -130,11 +134,11 @@
       {#if groups}
         {#each groups as g (g.label)}
           <optgroup label={g.label}>
-            {#each g.corpora as c (c.id)}<option value={String(c.id)}>{c.name}</option>{/each}
+            {#each g.corpora as c (c.id)}<option value={String(c.id)}>{c.name} [{c.lang}]</option>{/each}
           </optgroup>
         {/each}
       {:else}
-        {#each visible as c (c.id)}<option value={String(c.id)}>{c.name}</option>{/each}
+        {#each visible as c (c.id)}<option value={String(c.id)}>{c.name} [{c.lang}]</option>{/each}
       {/if}
     </select>
     <div class="meta">{meta}</div>
