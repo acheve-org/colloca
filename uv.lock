@@ -211,10 +211,8 @@ name = "colloca"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "es-core-news-sm" },
     { name = "fastapi" },
     { name = "httpx" },
-    { name = "it-core-news-sm" },
     { name = "pypdf" },
     { name = "python-docx" },
     { name = "python-multipart" },
@@ -225,15 +223,15 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "es-core-news-sm" },
+    { name = "it-core-news-sm" },
     { name = "pytest" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "es-core-news-sm", url = "https://github.com/explosion/spacy-models/releases/download/es_core_news_sm-3.8.0/es_core_news_sm-3.8.0-py3-none-any.whl" },
     { name = "fastapi", specifier = ">=0.110" },
     { name = "httpx", specifier = ">=0.27" },
-    { name = "it-core-news-sm", url = "https://github.com/explosion/spacy-models/releases/download/it_core_news_sm-3.8.0/it_core_news_sm-3.8.0-py3-none-any.whl" },
     { name = "pypdf", specifier = ">=4.2" },
     { name = "python-docx", specifier = ">=1.1" },
     { name = "python-multipart", specifier = ">=0.0.9" },
@@ -243,7 +241,11 @@ requires-dist = [
 ]
 
 [package.metadata.requires-dev]
-dev = [{ name = "pytest", specifier = ">=8" }]
+dev = [
+    { name = "es-core-news-sm", url = "https://github.com/explosion/spacy-models/releases/download/es_core_news_sm-3.8.0/es_core_news_sm-3.8.0-py3-none-any.whl" },
+    { name = "it-core-news-sm", url = "https://github.com/explosion/spacy-models/releases/download/it_core_news_sm-3.8.0/it_core_news_sm-3.8.0-py3-none-any.whl" },
+    { name = "pytest", specifier = ">=8" },
+]
 
 [[package]]
 name = "colorama"

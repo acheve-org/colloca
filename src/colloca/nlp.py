@@ -26,7 +26,8 @@ def load_model(lang: str):
                 return nlp
             except OSError:
                 continue
-        raise RuntimeError(f"No spaCy model installed for '{lang}' (expected {lang}_core_news_*)")
+        raise RuntimeError(f"No spaCy model installed for '{lang}' (expected {lang}_core_news_*). "
+                           "In Docker run: docker compose run --rm models")
 
 
 def pipeline_name(lang: str) -> str:
