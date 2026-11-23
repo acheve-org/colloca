@@ -36,7 +36,7 @@ describe('findRanges', () => {
 
   it('returns offsets into the original string with combining characters', () => {
     const text = 'una canción aquí';
-    expect(text.length).toBe(16);
+    expect(text.length).toBe(17);
     const r = findRanges(text, ['cancion'], 'query', { accentInsensitive: true });
     expect(r).toEqual([{ start: 4, end: 12, kind: 'query' }]);
     expect(text.slice(r[0].start, r[0].end)).toBe('canción');
