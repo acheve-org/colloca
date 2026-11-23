@@ -39,7 +39,7 @@
 
 <script lang="ts">
   import { t } from '../i18n';
-  import { go, route } from '../router.svelte';
+  import { go, route, screenHref } from '../router.svelte';
   import { setMode, theme, type ThemeMode } from '../theme.svelte';
   import CorpusSwitcher from './CorpusSwitcher.svelte';
 
@@ -65,7 +65,7 @@
           <div class="group-name">{t(g.group)}</div>
           {#each items as i (i.id)}
             <a
-              href="#/{i.id}"
+              href={screenHref(i.id)}
               class:active={route.screen === i.id}
               aria-current={route.screen === i.id ? 'page' : undefined}>{t(i.label)}</a
             >

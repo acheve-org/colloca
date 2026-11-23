@@ -53,4 +53,42 @@ describe('router', () => {
     const { route } = await load();
     expect(route.params).toEqual({ q: 'a?b' });
   });
+
+  describe('screenHref (the rail links)', () => {
+    it('links a screen never visited bare', async () => {
+      const { screenHref } = await load();
+      expect(screenHref('termbase')).toBe('#/termbase');
+    });
+
+    it('carries the params a screen was last on, after leaving it', async () => {
+      const { go, screenHref } = await load();
+      go('concordance', { q: 'x y', unit: 'lemma' });
+      go('termbase');
+      expect(screenHref('concordance')).toBe('#/concordance?q=x%20y&unit=lemma');
+      expect(screenHref('termbase')).toBe('#/termbase');
+    });
+
+    it('learns params from hash changes too (back/forward, a typed link)', async () => {
+      const { screenHref } = await load();
+      location.hash = '#/ngrams?q=de';
+      window.dispatchEvent(new HashChangeEvent('hashchange'));
+      location.hash = '#/sources';
+      window.dispatchEvent(new HashChangeEvent('hashchange'));
+      expect(screenHref('ngrams')).toBe('#/ngrams?q=de');
+    });
+
+    it('forgets params once the screen is shown without them', async () => {
+      const { go, screenHref } = await load();
+      go('concordance', { q: 'x' });
+      go('concordance');
+      go('termbase');
+      expect(screenHref('concordance')).toBe('#/concordance');
+    });
+
+    it('remembers the params of a deep link the app was opened with', async () => {
+      location.hash = '#/collocations?q=casa';
+      const { screenHref } = await load();
+      expect(screenHref('collocations')).toBe('#/collocations?q=casa');
+    });
+  });
 });

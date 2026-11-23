@@ -38,6 +38,17 @@ describe('Rail', () => {
     expect(screen.getByRole('link', { name: 'Equivalents' })).toBeInTheDocument();
   });
 
+  it('links each screen with the params it was last on', async () => {
+    go('concordance', { q: 'x' });
+    go('termbase');
+    render(Rail);
+    expect(screen.getByRole('link', { name: 'Concordance' })).toHaveAttribute('href', '#/concordance?q=x');
+    expect(screen.getByRole('link', { name: 'Keyness' })).toHaveAttribute('href', '#/keyness');
+    go('concordance', { q: 'y' });
+    await tick();
+    expect(screen.getByRole('link', { name: 'Concordance' })).toHaveAttribute('href', '#/concordance?q=y');
+  });
+
   it('theme toggle in the footer switches mode', async () => {
     render(Rail);
     const dark = screen.getByRole('button', { name: 'Dark' });
