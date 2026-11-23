@@ -14,7 +14,7 @@ from collections.abc import Callable, Iterable, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field
 
-from . import db, ingest, langcheck, nlp
+from . import db, ingest, langcheck, metadata, nlp
 
 log = logging.getLogger("colloca.importer")
 
@@ -34,8 +34,9 @@ class ImportRejected(Exception):
 
 
 # --------------------------------------------------------------------------- documents
-def add_document(conn, corpus, title: str, text: str, source: str, kind: str, tags: str,
+def add_document(conn, corpus, title: str, text: str, source: str, kind: str, meta: dict | None = None,
                  force_language: bool = False, progress: Callable[[float], None] | None = None) -> dict:
+    meta = meta or {}   # validated by metadata.clean_meta/normalize_tags: tags, text_type, doc_date, author
     text = ingest.normalize_text(text)
     if len(text) < MIN_CHARS:
         raise ImportRejected(400, "Text is too short")
@@ -59,11 +60,14 @@ def add_document(conn, corpus, title: str, text: str, source: str, kind: str, ta
         raise ImportRejected(500, str(exc), "nlp_error") from exc
     n_alpha = sum(t[6] for t in tokens)
     cur = conn.execute(
-        """INSERT INTO documents (corpus_id,title,source,kind,tags,text,text_hash,n_tokens,pipeline,lang_check)
-           VALUES (?,?,?,?,?,?,?,?,?,?)""",
-        (corpus["id"], title.strip() or "Untitled", source, kind, tags, text, digest, n_alpha,
-         pipeline, check["verdict"]))
+        """INSERT INTO documents (corpus_id,title,source,kind,text,text_hash,n_tokens,pipeline,lang_check,
+                                  text_type,doc_date,author)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (corpus["id"], title.strip() or "Untitled", source, kind, text, digest, n_alpha,
+         pipeline, check["verdict"], meta.get("text_type", ""), meta.get("doc_date", ""),
+         meta.get("author", "")))
     doc_id = cur.lastrowid
+    metadata.set_tags(conn, doc_id, meta.get("tags", []))
     conn.executemany("INSERT INTO tokens VALUES (?,?,?,?,?,?,?,?,?,?)", ((doc_id,) + t for t in tokens))
     warnings = [LANG_WARNINGS[check["verdict"]]] if check["verdict"] in LANG_WARNINGS else []
     if check["verdict"] == "mismatch":
@@ -133,7 +137,7 @@ def import_sentence_chunks(corpus_id: int, chunks: Iterable[list[str]], title: s
                 raise ImportRejected(404, "Corpus no longer exists", "gone")
             try:
                 res = add_document(conn, corpus, f"{title} (part {i + 1})", "\n".join(chunk), source,
-                                   "sentences", "", force_language, part)
+                                   "sentences", None, force_language, part)
             except ImportRejected as exc:
                 if exc.code != "duplicate":
                     if docs:
@@ -216,19 +220,19 @@ def jobs_for(corpus_id: int) -> list[dict]:
 
 
 # Work units executed inside the worker thread -------------------------------------------------
-def import_text(corpus_id: int, title: str, text: str, source: str, kind: str, tags: str,
+def import_text(corpus_id: int, title: str, text: str, source: str, kind: str, meta: dict,
                 force_language: bool) -> Callable[[Job], dict]:
     def work(job: Job) -> dict:
         with db.session() as conn:
             corpus = conn.execute("SELECT * FROM corpora WHERE id=?", (corpus_id,)).fetchone()
             if not corpus:
                 raise ImportRejected(404, "Corpus no longer exists", "gone")
-            return add_document(conn, corpus, title, text, source, kind, tags, force_language,
+            return add_document(conn, corpus, title, text, source, kind, meta, force_language,
                                 job.set_progress)
     return work
 
 
-def import_file(corpus_id: int, filename: str, data: bytes, tags: str,
+def import_file(corpus_id: int, filename: str, data: bytes, meta: dict,
                 force_language: bool, sentences: bool = False) -> Callable[[Job], dict]:
     def work(job: Job) -> dict:
         if sentences:
@@ -238,7 +242,7 @@ def import_file(corpus_id: int, filename: str, data: bytes, tags: str,
             return import_sentence_chunks(corpus_id, chunk_sentences(lines), filename, filename,
                                           force_language, count_chunks(len(lines)), job.set_progress)
         parsed = ingest.read_file(filename, data)
-        return import_text(corpus_id, parsed["title"], parsed["text"], filename, "file", tags,
+        return import_text(corpus_id, parsed["title"], parsed["text"], filename, "file", meta,
                            force_language)(job)
     return work
 

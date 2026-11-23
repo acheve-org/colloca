@@ -5,12 +5,12 @@ import os
 from contextlib import asynccontextmanager
 from dataclasses import asdict
 
-from fastapi import FastAPI, File, HTTPException, Query, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import analysis, db, importer, ingest, nlp
+from . import analysis, db, importer, ingest, metadata, nlp
 
 
 @asynccontextmanager
@@ -67,6 +67,35 @@ def _base_corpus_id(conn, corpus) -> int:
     return ref["id"]
 
 
+def _meta(tags=None, text_type: str = "", doc_date: str = "", author: str = "") -> dict:
+    try:
+        return {"tags": metadata.normalize_tags(tags), **metadata.clean_meta(text_type, doc_date, author)}
+    except metadata.MetadataError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+class ScopeQuery:
+    """Query parameters restricting an analysis to some documents of the corpus.
+
+    tags=a,b (documents with ALL tags) · text_type · date_from / date_to (YYYY, YYYY-MM, YYYY-MM-DD)
+    · docs=1,2,3 (explicit document ids).
+    """
+
+    def __init__(self, tags: str = "", text_type: str = "", date_from: str = "", date_to: str = "",
+                 docs: str = ""):
+        self.tags, self.text_type, self.date_from, self.date_to, self.docs = tags, text_type, date_from, date_to, docs
+
+    def scope(self, corpus_id: int) -> analysis.Scope:
+        try:
+            ids = tuple(int(x) for x in self.docs.split(",") if x.strip())
+            return analysis.Scope(
+                corpus_id, tuple(metadata.normalize_tags(self.tags)),
+                " ".join(self.text_type.split()).lower(),
+                metadata.normalize_date(self.date_from), metadata.normalize_date(self.date_to), ids)
+        except (metadata.MetadataError, ValueError) as exc:
+            raise HTTPException(400, f"Invalid filter: {exc}") from exc
+
+
 def _pos_list(pos: str | None) -> list[str] | None:
     return [p.strip().upper() for p in pos.split(",") if p.strip()] if pos else None
 
@@ -78,11 +107,79 @@ def _run(fn, *args, **kwargs):
         raise HTTPException(400, str(exc)) from exc
 
 
+# --------------------------------------------------------------------------- projects (clients)
+class ProjectIn(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    notes: str = Field(default="", max_length=5000)
+
+
+class ProjectPatch(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    notes: str | None = Field(default=None, max_length=5000)
+
+
+def _project(conn, project_id: int):
+    row = conn.execute("SELECT * FROM projects WHERE id=?", (project_id,)).fetchone()
+    if not row:
+        raise HTTPException(404, "Project not found")
+    return row
+
+
+@app.get("/api/projects")
+def list_projects():
+    with db.session() as conn:
+        rows = conn.execute(
+            """SELECT p.*, COUNT(c.id) AS corpora FROM projects p
+               LEFT JOIN corpora c ON c.project_id=p.id AND c.is_reference=0
+               GROUP BY p.id ORDER BY p.name COLLATE NOCASE""").fetchall()
+        return [dict(r) for r in rows]
+
+
+@app.post("/api/projects", status_code=201)
+def create_project(body: ProjectIn):
+    with db.session() as conn:
+        name = body.name.strip()
+        if conn.execute("SELECT 1 FROM projects WHERE name=? COLLATE NOCASE", (name,)).fetchone():
+            raise HTTPException(409, f"A project called '{name}' already exists")
+        return {"id": conn.execute("INSERT INTO projects (name, notes) VALUES (?, ?)",
+                                   (name, body.notes)).lastrowid}
+
+
+@app.patch("/api/projects/{project_id}")
+def update_project(project_id: int, body: ProjectPatch):
+    with db.session() as conn:
+        _project(conn, project_id)
+        if body.name is not None:
+            name = body.name.strip()
+            if conn.execute("SELECT 1 FROM projects WHERE name=? COLLATE NOCASE AND id<>?",
+                            (name, project_id)).fetchone():
+                raise HTTPException(409, f"A project called '{name}' already exists")
+            conn.execute("UPDATE projects SET name=? WHERE id=?", (name, project_id))
+        if body.notes is not None:
+            conn.execute("UPDATE projects SET notes=? WHERE id=?", (body.notes, project_id))
+    return {"ok": True}
+
+
+@app.delete("/api/projects/{project_id}", status_code=204)
+def delete_project(project_id: int):
+    """Removes the grouping only: its corpora are kept and become unassigned."""
+    with db.session() as conn:
+        _project(conn, project_id)
+        conn.execute("DELETE FROM projects WHERE id=?", (project_id,))
+
+
 # --------------------------------------------------------------------------- corpora
 class CorpusIn(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     lang: str
     description: str = ""
+    project_id: int | None = None
+
+
+class CorpusPatch(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    description: str | None = None
+    project_id: int | None = None      # send null to take the corpus out of its project
 
 
 @app.get("/api/languages")
@@ -135,9 +232,29 @@ def create_corpus(body: CorpusIn):
     if body.lang not in nlp.SUPPORTED:
         raise HTTPException(400, f"Language must be one of {list(nlp.SUPPORTED)}")
     with db.session() as conn:
-        cur = conn.execute("INSERT INTO corpora (name,lang,description) VALUES (?,?,?)",
-                           (body.name.strip(), body.lang, body.description))
+        if body.project_id is not None:
+            _project(conn, body.project_id)
+        cur = conn.execute("INSERT INTO corpora (name,lang,description,project_id) VALUES (?,?,?,?)",
+                           (body.name.strip(), body.lang, body.description, body.project_id))
         return {"id": cur.lastrowid}
+
+
+@app.patch("/api/corpora/{corpus_id}")
+def update_corpus(corpus_id: int, body: CorpusPatch):
+    """Rename a corpus, change its description, or move it to another project (project_id null = none)."""
+    with db.session() as conn:
+        corpus = _corpus(conn, corpus_id)
+        if "project_id" in body.model_fields_set:
+            if corpus["is_reference"]:
+                raise HTTPException(400, "A base corpus belongs to no project")
+            if body.project_id is not None:
+                _project(conn, body.project_id)
+            conn.execute("UPDATE corpora SET project_id=? WHERE id=?", (body.project_id, corpus_id))
+        if body.name is not None:
+            conn.execute("UPDATE corpora SET name=? WHERE id=?", (body.name.strip(), corpus_id))
+        if body.description is not None:
+            conn.execute("UPDATE corpora SET description=? WHERE id=?", (body.description, corpus_id))
+    return {"ok": True}
 
 
 @app.delete("/api/corpora/{corpus_id}", status_code=204)
@@ -158,7 +275,18 @@ class DocIn(BaseModel):
     text: str = Field(max_length=ingest.MAX_TEXT_CHARS)
     source: str = ""
     kind: str = "paste"
-    tags: str = ""
+    tags: str | list[str] = ""          # comma-separated or a list
+    text_type: str = ""
+    doc_date: str = ""                  # YYYY, YYYY-MM or YYYY-MM-DD
+    author: str = ""
+
+
+class DocPatch(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=300)
+    tags: str | list[str] | None = None
+    text_type: str | None = None
+    doc_date: str | None = None
+    author: str | None = None
 
 
 def _rejected(exc: importer.ImportRejected) -> HTTPException:
@@ -176,45 +304,58 @@ def preview_url(body: UrlIn):
         raise HTTPException(502, f"Could not fetch URL: {exc}") from exc
 
 
+def _tags_by_doc(conn, corpus_id: int) -> dict[int, list[str]]:
+    out: dict[int, list[str]] = {}
+    for r in conn.execute("""SELECT g.doc_id, g.tag FROM doc_tags g JOIN documents d ON d.id=g.doc_id
+                             WHERE d.corpus_id=? ORDER BY g.tag""", (corpus_id,)):
+        out.setdefault(r["doc_id"], []).append(r["tag"])
+    return out
+
+
 @app.get("/api/corpora/{corpus_id}/documents")
 def list_documents(corpus_id: int):
     with db.session() as conn:
         corpus = _corpus(conn, corpus_id)
         rows = conn.execute(
-            """SELECT id,title,source,kind,tags,n_tokens,pipeline,lang_check,added,LENGTH(text) AS chars
+            """SELECT id,title,source,kind,text_type,doc_date,author,n_tokens,pipeline,lang_check,added,
+                      LENGTH(text) AS chars
                FROM documents WHERE corpus_id=? ORDER BY id""", (corpus_id,)).fetchall()
+        tags = _tags_by_doc(conn, corpus_id)
     try:
         current = nlp.pipeline_name(corpus["lang"])
     except (RuntimeError, ValueError):
         current = None   # no model installed: nothing can be re-annotated, so nothing is "stale"
-    return [{**dict(r), "stale": current is not None and importer.is_stale(r["pipeline"], current)}
-            for r in rows]
+    return [{**dict(r), "tags": tags.get(r["id"], []),
+             "stale": current is not None and importer.is_stale(r["pipeline"], current)} for r in rows]
 
 
 @app.post("/api/corpora/{corpus_id}/documents", status_code=201)
 def add_document(corpus_id: int, body: DocIn, background: bool = False, force_language: bool = False):
     """Add a text. With ?background=true it is queued and answered at once with 202 + a job."""
+    meta = _meta(body.tags, body.text_type, body.doc_date, body.author)
     with db.session() as conn:
         corpus = _corpus(conn, corpus_id)
         if not background:
             try:
                 return importer.add_document(conn, corpus, body.title, body.text, body.source,
-                                             body.kind, body.tags, force_language)
+                                             body.kind, meta, force_language)
             except importer.ImportRejected as exc:
                 raise _rejected(exc) from exc
     job = importer.submit(corpus_id, "import", body.title or "Pasted text",
                           importer.import_text(corpus_id, body.title, body.text, body.source,
-                                               body.kind, body.tags, force_language))
+                                               body.kind, meta, force_language))
     return JSONResponse({"job_id": job.id}, status_code=202)
 
 
 @app.post("/api/corpora/{corpus_id}/upload", status_code=202)
 async def upload(corpus_id: int, files: list[UploadFile] = File(...), tags: str = "",
+                 text_type: str = "", doc_date: str = "", author: str = "",
                  force_language: bool = False, sentences: bool = False):
     """Queue each file as a background job. Per-file answers: {file, ok, job_id} or {file, ok:false, error}.
 
     With ?sentences=true a file is read as one sentence per line (Leipzig Corpora Collection files work as
-    they are) and split into several documents."""
+    they are) and split into several documents. `tags`, `text_type`, `doc_date` and `author` apply to every file."""
+    meta = _meta(tags, text_type, doc_date, author)
     with db.session() as conn:
         _corpus(conn, corpus_id)
     if len(files) > ingest.MAX_UPLOAD_FILES:
@@ -229,7 +370,7 @@ async def upload(corpus_id: int, files: list[UploadFile] = File(...), tags: str 
                             "error": f"File is larger than {limit_mb} MB (set MAX_UPLOAD_MB to change)"})
             continue
         job = importer.submit(corpus_id, "import", name,
-                              importer.import_file(corpus_id, name, data, tags, force_language, sentences))
+                              importer.import_file(corpus_id, name, data, meta, force_language, sentences))
         results.append({"file": name, "ok": True, "job_id": job.id})
     return results
 
@@ -263,7 +404,29 @@ def get_document(doc_id: int):
         row = conn.execute("SELECT * FROM documents WHERE id=?", (doc_id,)).fetchone()
         if not row:
             raise HTTPException(404, "Document not found")
-        return dict(row)
+        tags = [r[0] for r in conn.execute("SELECT tag FROM doc_tags WHERE doc_id=? ORDER BY tag", (doc_id,))]
+        return {**dict(row), "tags": tags}
+
+
+@app.patch("/api/documents/{doc_id}")
+def update_document(doc_id: int, body: DocPatch):
+    """Edit a document's title and metadata (only the fields you send are changed)."""
+    sent = body.model_fields_set
+    with db.session() as conn:
+        row = conn.execute("SELECT * FROM documents WHERE id=?", (doc_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, "Document not found")
+        if "title" in sent and body.title:
+            conn.execute("UPDATE documents SET title=? WHERE id=?", (body.title.strip(), doc_id))
+        meta = _meta(body.tags if "tags" in sent else None,
+                     body.text_type if "text_type" in sent else row["text_type"],
+                     body.doc_date if "doc_date" in sent else row["doc_date"],
+                     body.author if "author" in sent else row["author"])
+        conn.execute("UPDATE documents SET text_type=?, doc_date=?, author=? WHERE id=?",
+                     (meta["text_type"], meta["doc_date"], meta["author"], doc_id))
+        if "tags" in sent:
+            metadata.set_tags(conn, doc_id, meta["tags"])
+    return {"ok": True}
 
 
 @app.delete("/api/documents/{doc_id}", status_code=204)
@@ -272,16 +435,42 @@ def delete_document(doc_id: int):
         conn.execute("DELETE FROM documents WHERE id=?", (doc_id,))
 
 
+@app.get("/api/corpora/{corpus_id}/facets")
+def facets(corpus_id: int):
+    """The metadata values present in a corpus, to build filters."""
+    with db.session() as conn:
+        _corpus(conn, corpus_id)
+        tags = conn.execute("""SELECT g.tag AS tag, COUNT(*) AS docs FROM doc_tags g JOIN documents d ON d.id=g.doc_id
+                               WHERE d.corpus_id=? GROUP BY g.tag ORDER BY docs DESC, tag""", (corpus_id,))
+        types = conn.execute("""SELECT text_type, COUNT(*) AS docs FROM documents WHERE corpus_id=? AND text_type<>''
+                                GROUP BY text_type ORDER BY docs DESC, text_type""", (corpus_id,))
+        dates = conn.execute("""SELECT MIN(doc_date), MAX(doc_date) FROM documents
+                                WHERE corpus_id=? AND doc_date<>''""", (corpus_id,)).fetchone()
+        return {"tags": [dict(r) for r in tags], "text_types": [dict(r) for r in types],
+                "date_min": dates[0] or "", "date_max": dates[1] or ""}
+
+
+@app.get("/api/corpora/{corpus_id}/scope")
+def scope_info(corpus_id: int, sq: ScopeQuery = Depends()):
+    """How many documents and words a filter selects (the size every analysis will then use)."""
+    with db.session() as conn:
+        _corpus(conn, corpus_id)
+        scope = sq.scope(corpus_id)
+        return {"filtered": scope.filtered, "docs": analysis.n_docs(conn, scope),
+                "words": analysis.corpus_size(conn, scope),
+                "total_docs": analysis.n_docs(conn, corpus_id), "total_words": analysis.corpus_size(conn, corpus_id)}
+
+
 # --------------------------------------------------------------------------- analyses
 @app.get("/api/corpora/{corpus_id}/frequency")
 def frequency(corpus_id: int, unit: str = "lemma", pos: str | None = None, min_freq: int = 1,
               exclude_stop: bool = True, limit: int = Query(500, le=5000), format: str = "json",
-              with_reference: bool = False):
+              with_reference: bool = False, sq: ScopeQuery = Depends()):
     """`with_reference=true` adds ref_freq / ref_per_million from the language's base corpus."""
     with db.session() as conn:
         corpus = _corpus(conn, corpus_id)
         ref_id = _base_corpus_id(conn, corpus) if with_reference else None
-        rows = _run(analysis.frequency, conn, corpus_id, unit, _pos_list(pos), min_freq,
+        rows = _run(analysis.frequency, conn, sq.scope(corpus_id), unit, _pos_list(pos), min_freq,
                     exclude_stop, True, limit)
         if ref_id:
             analysis.add_reference_columns(conn, rows, ref_id, unit)
@@ -290,10 +479,11 @@ def frequency(corpus_id: int, unit: str = "lemma", pos: str | None = None, min_f
 
 @app.get("/api/corpora/{corpus_id}/concordance")
 def concordance(corpus_id: int, q: str, unit: str = "lemma", width: int = Query(8, le=40),
-                limit: int = Query(300, le=2000), sort: str = "doc", format: str = "json"):
+                limit: int = Query(300, le=2000), sort: str = "doc", format: str = "json",
+                sq: ScopeQuery = Depends()):
     with db.session() as conn:
         _corpus(conn, corpus_id)
-        res = _run(analysis.concordance, conn, corpus_id, q, unit, width, limit, sort)
+        res = _run(analysis.concordance, conn, sq.scope(corpus_id), q, unit, width, limit, sort)
     if format == "csv":
         return _reply([{k: v for k, v in ln.items() if k != "pos"} for ln in res["lines"]],
                       format, "concordance")
@@ -304,12 +494,12 @@ def concordance(corpus_id: int, q: str, unit: str = "lemma", width: int = Query(
 def collocations(corpus_id: int, q: str, left: int = Query(4, ge=0, le=15),
                  right: int = Query(4, ge=0, le=15), min_freq: int = 2, exclude_stop: bool = True,
                  pos: str | None = None, limit: int = Query(200, le=2000), format: str = "json",
-                 with_reference: bool = False):
+                 with_reference: bool = False, sq: ScopeQuery = Depends()):
     """`with_reference=true` adds the collocate's ref_freq / ref_per_million from the base corpus."""
     with db.session() as conn:
         corpus = _corpus(conn, corpus_id)
         ref_id = _base_corpus_id(conn, corpus) if with_reference else None
-        res = _run(analysis.collocations, conn, corpus_id, q, left, right, min_freq,
+        res = _run(analysis.collocations, conn, sq.scope(corpus_id), q, left, right, min_freq,
                    exclude_stop, _pos_list(pos), limit)
         if ref_id:
             analysis.add_reference_columns(conn, res["rows"], ref_id, "lemma")
@@ -318,18 +508,20 @@ def collocations(corpus_id: int, q: str, left: int = Query(4, ge=0, le=15),
 
 @app.get("/api/corpora/{corpus_id}/ngrams")
 def ngrams(corpus_id: int, n: int = 3, unit: str = "form", min_freq: int = 2, min_docs: int = 1,
-           edge_stop: bool = False, limit: int = Query(300, le=3000), format: str = "json"):
+           edge_stop: bool = False, limit: int = Query(300, le=3000), format: str = "json",
+           sq: ScopeQuery = Depends()):
     with db.session() as conn:
         _corpus(conn, corpus_id)
-        rows = _run(analysis.ngrams, conn, corpus_id, n, unit, min_freq, min_docs, edge_stop, limit)
+        rows = _run(analysis.ngrams, conn, sq.scope(corpus_id), n, unit, min_freq, min_docs, edge_stop, limit)
     return _reply(rows, format, "ngrams")
 
 
 @app.get("/api/corpora/{corpus_id}/keyness")
 def keyness(corpus_id: int, ref: int | None = None, unit: str = "lemma", min_freq: int = 3,
             exclude_stop: bool = True, pos: str | None = None,
-            limit: int = Query(300, le=3000), format: str = "json"):
-    """Compare against `ref`, or, when omitted, against the language's base corpus."""
+            limit: int = Query(300, le=3000), format: str = "json", sq: ScopeQuery = Depends()):
+    """Compare (the selected documents of) this corpus with `ref`, or, when omitted, with the language's
+    base corpus. The filter narrows the studied corpus only, never the reference."""
     with db.session() as conn:
         c = _corpus(conn, corpus_id)
         if ref is None:
@@ -338,7 +530,7 @@ def keyness(corpus_id: int, ref: int | None = None, unit: str = "lemma", min_fre
             raise HTTPException(400, "A corpus cannot be compared with itself")
         elif _corpus(conn, ref)["lang"] != c["lang"]:
             raise HTTPException(400, "Reference corpus must have the same language")
-        rows = _run(analysis.keyness, conn, corpus_id, ref, unit, min_freq, exclude_stop,
+        rows = _run(analysis.keyness, conn, sq.scope(corpus_id), ref, unit, min_freq, exclude_stop,
                     _pos_list(pos), limit)
     return _reply(rows, format, "keyness")
 

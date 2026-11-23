@@ -51,4 +51,4 @@ src = ["src", "tests"]
 select = ["E", "F", "W", "I", "B", "UP", "SIM"]
 
 [tool.ruff.lint.flake8-bugbear]
-extend-immutable-calls = ["fastapi.File", "fastapi.Query"]   # FastAPI declares parameters this way
+extend-immutable-calls = ["fastapi.File", "fastapi.Query", "fastapi.Depends"]   # FastAPI declares parameters this way

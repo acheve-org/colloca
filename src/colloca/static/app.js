@@ -1,7 +1,7 @@
 "use strict";
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-const state = { corpora: [], refs: [], id: null, langs: {} };
+const state = { corpora: [], refs: [], projects: [], projFilter: "", id: null, langs: {}, facets: { tags: [], text_types: [] }, facetFor: null };
 
 // ------------------------------------------------------------------ helpers
 function say(text, kind = "") { const m = $("msg"); m.textContent = text; m.className = kind; }
@@ -45,24 +45,38 @@ document.addEventListener("click", (e) => {
 function showTab(name) {
   document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
   document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.id === "tab-" + name));
+  $("filterBar").hidden = !state.id || ["sources", "base"].includes(name);
 }
 $("tabs").addEventListener("click", (e) => { if (e.target.dataset.tab) showTab(e.target.dataset.tab); });
 
+const inProject = (c) => state.projFilter === "" || (state.projFilter === "none" ? c.project_id == null : c.project_id === +state.projFilter);
+function renderCorpusSelect(visible) {
+  const opt = (c) => `<option value="${c.id}" ${c.id === state.id ? "selected" : ""}>${esc(c.name)} [${c.lang}]</option>`;
+  if (state.projFilter !== "") { $("corpusSel").innerHTML = visible.map(opt).join("") || "<option>— none —</option>"; return; }
+  const groups = state.projects.map((p) => [p.name, visible.filter((c) => c.project_id === p.id)]).filter(([, cs]) => cs.length);
+  const loose = visible.filter((c) => c.project_id == null || !state.projects.some((p) => p.id === c.project_id));
+  $("corpusSel").innerHTML = (groups.map(([n, cs]) => `<optgroup label="${esc(n)}">${cs.map(opt).join("")}</optgroup>`).join("")
+    + (loose.length ? (groups.length ? `<optgroup label="No project">${loose.map(opt).join("")}</optgroup>` : loose.map(opt).join("")) : "")) || "<option>— none —</option>";
+}
 async function loadCorpora(select) {
   state.corpora = await api("/api/corpora");
-  if (select) state.id = select;
-  if (!state.corpora.find((c) => c.id === state.id)) state.id = state.corpora[0]?.id ?? null;
-  $("corpusSel").innerHTML = state.corpora.map((c) =>
-    `<option value="${c.id}" ${c.id === state.id ? "selected" : ""}>${esc(c.name)} [${c.lang}]</option>`).join("") || "<option>— none —</option>";
+  const visible = state.corpora.filter(inProject);
+  if (select) { const c = state.corpora.find((x) => x.id === select); if (c && !inProject(c)) state.projFilter = ""; state.id = select; }
+  const shown = state.corpora.filter(inProject);
+  if (!shown.find((c) => c.id === state.id)) state.id = shown[0]?.id ?? null;
+  renderCorpusSelect(shown);
   const cur = state.corpora.find((c) => c.id === state.id);
   $("corpusInfo").textContent = cur ? `${cur.docs} docs · ${cur.tokens.toLocaleString()} words` : "No corpus yet — click “+ New”.";
+  $("cSetName").value = cur?.name ?? ""; renderProjectSelects();
   const refs = state.corpora.filter((c) => cur && c.id !== cur.id && c.lang === cur.lang);
   const base = state.refs.find((r) => cur && r.lang === cur.lang && r.tokens > 0);
   $("kyRef").innerHTML = (base ? `<option value="">Base corpus — ${esc(base.name)} (${base.tokens.toLocaleString()} words)</option>` : "")
     + refs.map((c) => `<option value="${c.id}">${esc(c.name)} (${c.tokens.toLocaleString()} words)</option>`).join("")
     || "<option value='none'>— no base or other corpus —</option>";
-  if (cur) { await loadDocs(); await pollJobs(); }
-  else { $("docsTable").innerHTML = ""; $("jobs").innerHTML = ""; }
+  if (state.facetFor !== state.id) { clearFilters(); state.facetFor = state.id; }
+  if (cur) { await loadDocs(); await refreshFacets(); await pollJobs(); }
+  else { $("docsTable").innerHTML = ""; $("jobs").innerHTML = ""; $("filterBar").hidden = true; }
+  $("filterBar").hidden = !cur || $("tab-sources").classList.contains("active") || $("tab-base").classList.contains("active");
 }
 $("corpusSel").addEventListener("change", (e) => loadCorpora(+e.target.value));
 
@@ -70,12 +84,13 @@ async function init() {
   state.langs = await api("/api/languages");
   $("newLang").innerHTML = Object.entries(state.langs).map(([k, v]) => `<option value="${k}">${v}</option>`).join("");
   await loadRefs();
+  await loadProjects();
   await loadCorpora();
 }
-$("newCorpusBtn").onclick = () => { $("newName").value = ""; $("newDlg").showModal(); };
+$("newCorpusBtn").onclick = () => { $("newName").value = ""; renderProjectSelects(); $("newDlg").showModal(); };
 $("newForm").addEventListener("submit", async (e) => {
   if (e.submitter?.value !== "ok") return;
-  try { const r = await post("/api/corpora", { name: $("newName").value, lang: $("newLang").value }); await loadCorpora(r.id); say("Corpus created.", "ok"); }
+  try { const r = await post("/api/corpora", { name: $("newName").value, lang: $("newLang").value, project_id: $("newProj").value ? +$("newProj").value : null }); await loadCorpora(r.id); say("Corpus created.", "ok"); }
   catch (err) { say(err.message, "err"); }
 });
 $("delCorpusBtn").onclick = async () => {
@@ -84,26 +99,111 @@ $("delCorpusBtn").onclick = async () => {
   await api(base(), { method: "DELETE" }); await loadCorpora(); say("Corpus deleted.", "ok");
 };
 
+// ------------------------------------------------------------------ projects (clients)
+async function loadProjects() { state.projects = await api("/api/projects"); renderProjectSelects(); renderProjSel(); }
+function renderProjSel() {
+  $("projSel").innerHTML = `<option value="">All projects</option>` + state.projects.map((p) => `<option value="${p.id}">${esc(p.name)} (${p.corpora})</option>`).join("")
+    + `<option value="none">No project</option>`;
+  $("projSel").value = state.projFilter;
+}
+function renderProjectSelects() {
+  const opts = (sel) => `<option value="">— none —</option>` + state.projects.map((p) => `<option value="${p.id}" ${String(p.id) === String(sel) ? "selected" : ""}>${esc(p.name)}</option>`).join("");
+  const cur = state.corpora.find((c) => c.id === state.id);
+  $("cSetProj").innerHTML = opts(cur?.project_id ?? ""); $("newProj").innerHTML = opts(/^\d+$/.test(state.projFilter) ? state.projFilter : "");
+}
+$("projSel").addEventListener("change", async (e) => { state.projFilter = e.target.value; await loadCorpora(); });
+$("projBtn").onclick = () => { renderProjList(); $("projDlg").showModal(); };
+function renderProjList() {
+  $("projList").innerHTML = state.projects.map((p) => `<div class="row"><input data-pname="${p.id}" value="${esc(p.name)}">
+    <button type="button" data-psave="${p.id}">Rename</button><button type="button" class="danger" data-pdel="${p.id}">Delete</button>
+    <span class="muted">${p.corpora} corpora</span></div>`).join("") || `<p class="muted">No projects yet.</p>`;
+}
+const projChanged = async () => { await loadProjects(); await loadCorpora(state.id); renderProjList(); };
+$("projAdd").onclick = async () => {
+  try { await post("/api/projects", { name: $("projNew").value }); $("projNew").value = ""; await projChanged(); } catch (e) { say(e.message, "err"); }
+};
+$("projList").addEventListener("click", async (e) => {
+  const d = e.target.dataset;
+  try {
+    if (d.psave) { await api(`/api/projects/${d.psave}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: document.querySelector(`[data-pname="${d.psave}"]`).value }) }); await projChanged(); }
+    else if (d.pdel && confirm("Delete this project? Its corpora are kept and become unassigned.")) {
+      if (state.projFilter === d.pdel) state.projFilter = "";
+      await api(`/api/projects/${d.pdel}`, { method: "DELETE" }); await projChanged();
+    }
+  } catch (err) { say(err.message, "err"); }
+});
+$("cSetSave").onclick = async () => {
+  if (!state.id) return say("Create a corpus first.", "err");
+  try {
+    await api(base(), { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: $("cSetName").value, project_id: $("cSetProj").value ? +$("cSetProj").value : null }) });
+    await loadProjects(); await loadCorpora(state.id); say("Corpus saved.", "ok");
+  } catch (err) { say(err.message, "err"); }
+};
+
+// ------------------------------------------------------------------ document filter (applies to every analysis)
+const scopeParams = () => ({ tags: $("fTags").value, text_type: $("fType").value, date_from: $("fFrom").value.trim(), date_to: $("fTo").value.trim() });
+function clearFilters() { $("fTags").value = ""; $("fType").value = ""; $("fFrom").value = ""; $("fTo").value = ""; $("scopeInfo").textContent = ""; }
+async function refreshFacets() {
+  state.facets = await api(`${base()}/facets`);
+  $("tagList").innerHTML = state.facets.tags.map((t) => `<option value="${esc(t.tag)}">${t.docs} docs</option>`).join("");
+  $("typeList").innerHTML = state.facets.text_types.map((t) => `<option value="${esc(t.text_type)}">`).join("");
+  const keep = $("fType").value;
+  $("fType").innerHTML = `<option value="">any</option>` + state.facets.text_types.map((t) => `<option value="${esc(t.text_type)}">${esc(t.text_type)} (${t.docs})</option>`).join("");
+  $("fType").value = state.facets.text_types.some((t) => t.text_type === keep) ? keep : "";
+  await refreshScope();
+}
+async function refreshScope() {
+  if (!state.id) return;
+  try {
+    const r = await api(`${base()}/scope?${qs(scopeParams())}`);
+    $("scopeInfo").textContent = r.filtered ? `${r.docs} of ${r.total_docs} documents · ${r.words.toLocaleString()} of ${r.total_words.toLocaleString()} words` : "all documents";
+    $("scopeInfo").className = r.filtered ? "scope-on" : "muted";
+  } catch (e) { $("scopeInfo").textContent = e.message; $("scopeInfo").className = "err"; }
+}
+["fTags", "fFrom", "fTo"].forEach((id) => $(id).addEventListener("input", () => { clearTimeout(state.scopeTimer); state.scopeTimer = setTimeout(refreshScope, 350); }));
+$("fType").addEventListener("change", refreshScope);
+$("fClear").onclick = () => { clearFilters(); refreshScope(); };
+
 // ------------------------------------------------------------------ sources
 const LANG_BADGE = { mismatch: "wrong language?", uncertain: "language unclear" };
 async function loadDocs() {
   const docs = await api(`${base()}/documents`);
+  state.docs = docs;
   const stale = docs.filter((d) => d.stale).length;
   $("reannBox").hidden = !stale;
   $("reannInfo").textContent = `${stale} document${stale === 1 ? "" : "s"} annotated with an older NLP model.`;
   $("docsTable").innerHTML = docs.length
-    ? `<thead><tr><th>Title</th><th>Source</th><th class="num">Words</th><th>Checks</th><th>Added</th><th></th></tr></thead><tbody>` +
-      docs.map((d) => `<tr><td>${esc(d.title)}</td><td class="muted">${d.kind === "url" ? `<a href="${esc(d.source)}" target="_blank" rel="noopener noreferrer">${esc(d.source)}</a>` : esc(d.source || d.kind)}</td>
+    ? `<thead><tr><th>Title</th><th>Type</th><th>Date</th><th>Tags</th><th class="num">Words</th><th>Checks</th><th></th></tr></thead><tbody>` +
+      docs.map((d) => `<tr><td title="${esc(d.source)}">${esc(d.title)}${d.author ? `<br><span class="muted">${esc(d.author)}</span>` : ""}</td>
+        <td>${esc(d.text_type)}</td><td class="muted">${esc(d.doc_date)}</td>
+        <td>${d.tags.map((t) => `<span class="badge">${esc(t)}</span>`).join(" ")}</td>
         <td class="num">${d.n_tokens.toLocaleString()}</td>
         <td>${LANG_BADGE[d.lang_check] ? `<span class="badge warn" title="Language check: ${esc(d.lang_check)}">${LANG_BADGE[d.lang_check]}</span> ` : ""}${d.stale ? `<span class="badge" title="${esc(d.pipeline)}">older model</span>` : ""}</td>
-        <td class="muted">${esc(d.added)}</td>
-        <td><button data-del="${d.id}" class="danger">Remove</button></td></tr>`).join("") + "</tbody>"
+        <td class="nowrap"><button data-edit="${d.id}">Edit</button> <button data-del="${d.id}" class="danger">Remove</button></td></tr>`).join("") + "</tbody>"
     : `<tbody><tr><td class="muted">No documents yet.</td></tr></tbody>`;
 }
+let editingDoc = null;
 $("docsTable").addEventListener("click", async (e) => {
+  if (e.target.dataset.edit) {
+    const d = state.docs.find((x) => x.id === +e.target.dataset.edit); editingDoc = d.id;
+    $("edTitle").value = d.title; $("edTags").value = d.tags.join(", "); $("edType").value = d.text_type; $("edDate").value = d.doc_date; $("edAuthor").value = d.author;
+    $("docDlg").showModal(); return;
+  }
   const id = e.target.dataset.del; if (!id || !confirm("Remove this document from the corpus?")) return;
   await api(`/api/documents/${id}`, { method: "DELETE" }); await loadCorpora(state.id); say("Document removed.", "ok");
 });
+
+$("docForm").addEventListener("submit", async (e) => {
+  if (e.submitter?.value !== "ok") return;
+  try {
+    await api(`/api/documents/${editingDoc}`, { method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: $("edTitle").value, tags: $("edTags").value, text_type: $("edType").value, doc_date: $("edDate").value, author: $("edAuthor").value }) });
+    await loadCorpora(state.id); say("Document updated.", "ok");
+  } catch (err) { say(err.message, "err"); }
+});
+
+// ---- metadata applied to the documents being added
+const newMeta = () => ({ tags: $("mTags").value, text_type: $("mType").value, doc_date: $("mDate").value, author: $("mAuthor").value });
 
 // ---- background jobs (imports and re-annotation run on the server; we poll for progress)
 let jobTimer = null;
@@ -135,20 +235,20 @@ const updatePv = () => { $("pvStats").textContent = `${$("pvText").value.split(/
 $("pvText").addEventListener("input", updatePv);
 $("pvCancel").onclick = () => { $("preview").hidden = true; };
 $("pvAdd").onclick = busy($("pvAdd"), async () => {
-  await post(`${base()}/documents?${qs({ background: true, force_language: forceLang() })}`, { title: $("pvTitle").value, text: $("pvText").value, source: pvSource, kind: "url" });
+  await post(`${base()}/documents?${qs({ background: true, force_language: forceLang() })}`, { title: $("pvTitle").value, text: $("pvText").value, source: pvSource, kind: "url", ...newMeta() });
   $("preview").hidden = true; $("urlIn").value = ""; say("Queued — see progress below.", "ok"); await pollJobs();
 });
 $("uploadBtn").onclick = busy($("uploadBtn"), async () => {
   const files = $("fileIn").files; if (!files.length) return say("Choose files first.", "err");
   const fd = new FormData(); for (const f of files) fd.append("files", f);
-  const res = await api(`${base()}/upload?${qs({ force_language: forceLang() })}`, { method: "POST", body: fd });
+  const res = await api(`${base()}/upload?${qs({ force_language: forceLang(), ...newMeta() })}`, { method: "POST", body: fd });
   $("fileIn").value = "";
   const bad = res.filter((r) => !r.ok);
   say(`${res.length - bad.length} queued` + (bad.length ? `; rejected: ` + bad.map((b) => `${b.file} (${b.error})`).join("; ") : "."), bad.length ? "err" : "ok");
   await pollJobs();
 });
 $("pasteBtn").onclick = busy($("pasteBtn"), async () => {
-  await post(`${base()}/documents?${qs({ background: true, force_language: forceLang() })}`, { title: $("pasteTitle").value || "Pasted text", text: $("pasteText").value, kind: "paste" });
+  await post(`${base()}/documents?${qs({ background: true, force_language: forceLang() })}`, { title: $("pasteTitle").value || "Pasted text", text: $("pasteText").value, kind: "paste", ...newMeta() });
   $("pasteText").value = ""; $("pasteTitle").value = ""; say("Queued — see progress below.", "ok"); await pollJobs();
 });
 $("reannBtn").onclick = busy($("reannBtn"), async () => {
@@ -160,7 +260,7 @@ function setCsv(id, path, params) { $(id).href = `${base()}/${path}?${qs({ ...pa
 const posParam = (id) => $(id).value.trim();
 
 $("fqGo").onclick = busy($("fqGo"), async () => {
-  const p = { unit: $("fqUnit").value, pos: posParam("fqPos"), min_freq: $("fqMin").value, exclude_stop: $("fqStop").checked, with_reference: $("fqRef").checked, limit: 1000 };
+  const p = { unit: $("fqUnit").value, pos: posParam("fqPos"), min_freq: $("fqMin").value, exclude_stop: $("fqStop").checked, with_reference: $("fqRef").checked, limit: 1000, ...scopeParams() };
   state.lastUnit = p.unit;
   const rows = await api(`${base()}/frequency?${qs(p)}`); setCsv("fqCsv", "frequency", p);
   table([{ key: "item", label: p.unit }, { key: "pos", label: "POS" }, { key: "freq", label: "Freq", num: 1 }, { key: "per_million", label: "Per million", num: 1 },
@@ -170,7 +270,7 @@ $("fqGo").onclick = busy($("fqGo"), async () => {
 });
 
 $("ccGo").onclick = busy($("ccGo"), async () => {
-  const p = { q: $("ccQ").value, unit: $("ccUnit").value, width: $("ccW").value, sort: $("ccSort").value, limit: 500 };
+  const p = { q: $("ccQ").value, unit: $("ccUnit").value, width: $("ccW").value, sort: $("ccSort").value, limit: 500, ...scopeParams() };
   if (!p.q.trim()) return say("Type a word or phrase.", "err");
   const r = await api(`${base()}/concordance?${qs(p)}`); setCsv("ccCsv", "concordance", p);
   $("ccInfo").textContent = `${r.total} hits` + (r.total > r.lines.length ? ` (showing ${r.lines.length})` : "");
@@ -182,7 +282,7 @@ $("ccGo").onclick = busy($("ccGo"), async () => {
 $("ccQ").addEventListener("keydown", (e) => { if (e.key === "Enter") $("ccGo").click(); });
 
 $("coGo").onclick = busy($("coGo"), async () => {
-  const p = { q: $("coQ").value, left: $("coL").value, right: $("coR").value, min_freq: $("coMin").value, pos: posParam("coPos"), exclude_stop: $("coStop").checked, with_reference: $("coRef").checked };
+  const p = { q: $("coQ").value, left: $("coL").value, right: $("coR").value, min_freq: $("coMin").value, pos: posParam("coPos"), exclude_stop: $("coStop").checked, with_reference: $("coRef").checked, ...scopeParams() };
   if (!p.q.trim()) return say("Type a node word.", "err");
   state.lastUnit = "lemma";
   const r = await api(`${base()}/collocations?${qs(p)}`); setCsv("coCsv", "collocations", p);
@@ -196,7 +296,7 @@ $("coGo").onclick = busy($("coGo"), async () => {
 $("coQ").addEventListener("keydown", (e) => { if (e.key === "Enter") $("coGo").click(); });
 
 $("ngGo").onclick = busy($("ngGo"), async () => {
-  const p = { n: $("ngN").value, unit: $("ngUnit").value, min_freq: $("ngMin").value, min_docs: $("ngDocs").value, edge_stop: $("ngEdge").checked };
+  const p = { n: $("ngN").value, unit: $("ngUnit").value, min_freq: $("ngMin").value, min_docs: $("ngDocs").value, edge_stop: $("ngEdge").checked, ...scopeParams() };
   state.lastUnit = p.unit;
   const rows = await api(`${base()}/ngrams?${qs(p)}`); setCsv("ngCsv", "ngrams", p);
   table([{ key: "item", label: `${p.n}-gram` }, { key: "freq", label: "Freq", num: 1 }, { key: "docs", label: "Docs", num: 1 }], rows, $("ngOut"), ["item"]);
@@ -205,7 +305,7 @@ $("ngGo").onclick = busy($("ngGo"), async () => {
 
 $("kyGo").onclick = busy($("kyGo"), async () => {
   if ($("kyRef").value === "none") return say("Create a base corpus (Base corpora tab) or a second corpus of the same language to use as reference.", "err");
-  const p = { ref: $("kyRef").value, min_freq: $("kyMin").value, pos: posParam("kyPos") };
+  const p = { ref: $("kyRef").value, min_freq: $("kyMin").value, pos: posParam("kyPos"), ...scopeParams() };
   state.lastUnit = "lemma";
   const rows = await api(`${base()}/keyness?${qs(p)}`); setCsv("kyCsv", "keyness", p);
   state.lastKeyness = p;
@@ -278,10 +378,10 @@ $("wcGo").onclick = busy($("wcGo"), async () => {
   let items;
   if ($("wcSrc").value === "keyness") {
     if (!state.lastKeyness) return say("Run a comparison in the Keyness tab first.", "err");
-    const rows = await api(`${base()}/keyness?${qs({ ...state.lastKeyness, pos, limit: n })}`);
+    const rows = await api(`${base()}/keyness?${qs({ ...state.lastKeyness, pos, limit: n, ...scopeParams() })}`);
     items = rows.filter((r) => r.ll > 0).map((r) => ({ w: r.item, v: r.ll }));
   } else {
-    const rows = await api(`${base()}/frequency?${qs({ pos, exclude_stop: true, limit: n, min_freq: 1 })}`);
+    const rows = await api(`${base()}/frequency?${qs({ pos, exclude_stop: true, limit: n, min_freq: 1, ...scopeParams() })}`);
     items = rows.map((r) => ({ w: r.item, v: r.freq }));
   }
   drawCloud(items); say(items.length ? "" : "Nothing to draw.");
