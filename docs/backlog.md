@@ -228,7 +228,7 @@ diverge.
 
 **Status: done** (UI redesign, 2026-11). Every table is the shared `DataTable` component (`frontend/src/lib/ui/`):
 click a header to sort (numbers numerically, text accent- and case-insensitively), a *Filter in results* box above it,
-keyboard row navigation, no re-query; CSV links still export the full result. The text below is kept for reference.
+keyboard row navigation, no re-query; CSV links export the same rows as the query (Concordance capped at 500). The text below is kept for reference.
 
 **Why it matters.** Every table (frequency, keyness, collocations, n-grams, equivalents, job report, termbase) is sorted by the
 server; changing the order means a new query, and there is no way to find a row in a long table. Translators expect to click a

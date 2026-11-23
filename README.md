@@ -184,15 +184,18 @@ mise run ui:e2e               # builds the UI and runs the Playwright end-to-end
   need neither Node nor a build. A wheel (`uv build`) includes the UI only if it was built first.
 - **Layout**: a left rail with the corpus switcher (project filter, *…* to manage projects, corpus selector with
   its language, documents and words, *New corpus*, *Delete*), the screens grouped as **Corpus** (Sources, Base
-  corpora), **Explore** (Concordance, Collocations, N-grams, Frequency, Keyness, Word cloud, Equivalents),
+  corpora), **Explore** (Concordance, Collocations, N-grams, Frequency list, Keyness, Word cloud, Equivalents),
   **Terms** (Termbase) and **Job**, and the theme switch (Auto, Light, Dark). The work area shows a toolbar with
   the options, the document filter, a result strip (counts and *Filter in results*), the sortable table and, for
   the selected row, a detail strip with its actions. Messages appear in the status line at the top. The screen
-  and its options are kept in the address (`#/concordance?q=...`), so reload, back and bookmarks work.
+  and its options are kept in the address (`#/concordance?q=...`), so a reload or a bookmark restores a screen's
+  search, and the rail brings each screen back with its last search; back/forward between two searches on the
+  same screen changes the address but does not re-run the search. The Job report stays while you visit other
+  screens (an analysis keeps running too) until you change the corpus.
 - **Keyboard**: **Ctrl/Cmd+K** goes to the Concordance and focuses the query; **↑/↓** (and PageUp/PageDown,
   Home/End) move through the rows of a focused table, **Enter** opens the selected row (edit a document or a term);
   **Ctrl/Cmd+E** adds the selected concordance hit (or the selected text) as a term; **Esc** closes a dialog;
-  **?** lists the shortcuts.
+  **?** lists the shortcuts (Ctrl/Cmd+K does nothing while a dialog is open).
 - Code: screens in `frontend/src/screens/`, reusable components in `frontend/src/lib/ui/`, API client, stores,
   routing and the interface strings (`i18n.ts`, English only for now) in `frontend/src/lib/`, colour and spacing
   tokens in `frontend/src/lib/styles/`. Tests in `frontend/tests/` (Vitest) and `frontend/e2e/` (Playwright).
