@@ -41,6 +41,28 @@ Use faster/smaller models with `SPACY_SIZE=sm` (edit `docker-compose.yml`). Data
   match a date filter. The API takes the same filter as query parameters on every analysis endpoint:
   `tags=a,b&text_type=contract&date_from=2022&date_to=2024-06&docs=1,2`.
 
+## Aligned texts (translation memories)
+
+Previous translations are the best evidence of how a client wants things said. Import them as **aligned texts**
+and search them side by side:
+
+- **Import** (*Sources* → *Import aligned texts*): a **TMX** file, or two columns (source | target) as `.tsv`,
+  `.csv` (comma, semicolon or tab) or a table in a `.docx`. The corpus you are in receives the first language, the
+  other-language texts go to a corpus you pick (or create). TMX is matched by its language codes (`es`, `es-ES`,
+  `it_IT`…), inline markup is dropped, units missing one language are skipped. Two-column files use column order;
+  tick *this corpus is the second column* if yours is the other way round. Files over 5000 units are stored in parts.
+- **Each side is a normal corpus** in its own language (so frequency, keyness, collocations, the termbase… all work
+  on it, and the target-language side is a ready corpus of the client's Italian). They are linked segment by
+  segment: segment N of one is the translation of segment N of the other. Re-annotating keeps the alignment.
+  Removing one side's document unlinks the other.
+- **Concordance → “show translation”** (appears when the corpus has aligned texts) adds the aligned target segment
+  under every hit; run it on the target-language corpus to search by the translation instead.
+- **Equivalents** tab: candidate translations of a word or phrase, i.e. the target lemmas that keep appearing in
+  the aligned segments of its occurrences, scored by Dice against their overall frequency in the target text (so
+  everyday words score low). Single words only on the target side, and a statistical hint, not a verdict: confirm
+  with the translated concordance, then **+ term** adds the pair to the termbase with the example sentence.
+- TMX is parsed with `defusedxml`, so a hostile file (entity bombs, external entities) is refused.
+
 ## Termbase
 
 Turn what you find into terminology you can reuse and hand over:

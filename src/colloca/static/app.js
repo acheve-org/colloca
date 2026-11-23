@@ -24,13 +24,14 @@ function busy(btn, fn) {
     try { await fn(); } catch (e) { say(e.message, "err"); } finally { btn.disabled = false; }
   };
 }
-function table(cols, rows, mount, wordCols = [], origin = "") {
+function table(cols, rows, mount, wordCols = [], originArg = "") {
+  const o = typeof originArg === "string" ? { origin: originArg } : originArg, origin = o.origin || "";
   const head = cols.map((c) => `<th class="${c.num ? "num" : ""}">${esc(c.label)}</th>`).join("") + (origin ? "<th></th>" : "");
   const body = rows.map((r) => "<tr>" + cols.map((c) => {
     const v = r[c.key];
     const cell = wordCols.includes(c.key) ? `<a class="word" data-w="${esc(v)}">${esc(v)}</a>` : esc(v);
     return `<td class="${c.num ? "num" : ""}">${cell}</td>`;
-  }).join("") + (origin ? `<td><a class="addterm" title="Add to termbase" data-t="${esc(r.item)}" data-pos="${esc(r.pos || "")}" data-origin="${origin}">+ term</a></td>` : "") + "</tr>").join("");
+  }).join("") + (origin ? `<td><a class="addterm" title="Add to termbase" data-t="${esc(o.src ?? r.item)}" data-tgt="${esc(o.src ? r.item : "")}" data-pos="${esc(o.src ? "" : r.pos || "")}" data-origin="${origin}">+ term</a></td>` : "") + "</tr>").join("");
   mount.innerHTML = rows.length ? `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>` : `<p class="muted" style="padding:.6rem">No results.</p>`;
 }
 // click a word anywhere -> concordance
@@ -50,6 +51,17 @@ function showTab(name) {
 }
 $("tabs").addEventListener("click", (e) => { if (e.target.dataset.tab) showTab(e.target.dataset.tab); });
 
+async function loadParallel() {
+  state.parallel = await api(`${base()}/parallel`);
+  const aligned = state.parallel.documents > 0;
+  $("tabEquiv").hidden = !aligned; $("ccAlignedBox").hidden = !aligned;
+  if (!aligned) { $("ccAligned").checked = false; if ($("tab-equivalents").classList.contains("active")) showTab("sources"); }
+  const cur = curCorpus(), other = state.corpora.filter((c) => cur && c.id !== cur.id && c.lang !== cur.lang);
+  $("pairPartner").innerHTML = other.map((c) => `<option value="${c.id}">${esc(c.name)} [${c.lang}]</option>`).join("") + `<option value="new">+ new corpus…</option>`;
+  $("pairName").hidden = $("pairPartner").value !== "new";
+}
+$("pairPartner").addEventListener("change", () => { $("pairName").hidden = $("pairPartner").value !== "new"; });
+const curCorpus = () => state.corpora.find((c) => c.id === state.id);
 const inProject = (c) => state.projFilter === "" || (state.projFilter === "none" ? c.project_id == null : c.project_id === +state.projFilter);
 function renderCorpusSelect(visible) {
   const opt = (c) => `<option value="${c.id}" ${c.id === state.id ? "selected" : ""}>${esc(c.name)} [${c.lang}]</option>`;
@@ -75,7 +87,7 @@ async function loadCorpora(select) {
     + refs.map((c) => `<option value="${c.id}">${esc(c.name)} (${c.tokens.toLocaleString()} words)</option>`).join("")
     || "<option value='none'>— no base or other corpus —</option>";
   if (state.facetFor !== state.id) { clearFilters(); state.facetFor = state.id; }
-  if (cur) { await loadDocs(); await refreshFacets(); await pollJobs(); }
+  if (cur) { await loadDocs(); await refreshFacets(); await loadParallel(); await pollJobs(); }
   else { $("docsTable").innerHTML = ""; $("jobs").innerHTML = ""; $("filterBar").hidden = true; }
   $("filterBar").hidden = !cur || ["tab-sources", "tab-base", "tab-terms"].some((id) => $(id).classList.contains("active"));
   if ($("tab-terms").classList.contains("active")) { syncTbScope(); await loadTerms(); }
@@ -180,7 +192,7 @@ async function loadDocs() {
         <td>${esc(d.text_type)}</td><td class="muted">${esc(d.doc_date)}</td>
         <td>${d.tags.map((t) => `<span class="badge">${esc(t)}</span>`).join(" ")}</td>
         <td class="num">${d.n_tokens.toLocaleString()}</td>
-        <td>${LANG_BADGE[d.lang_check] ? `<span class="badge warn" title="Language check: ${esc(d.lang_check)}">${LANG_BADGE[d.lang_check]}</span> ` : ""}${d.stale ? `<span class="badge" title="${esc(d.pipeline)}">older model</span>` : ""}</td>
+        <td>${LANG_BADGE[d.lang_check] ? `<span class="badge warn" title="Language check: ${esc(d.lang_check)}">${LANG_BADGE[d.lang_check]}</span> ` : ""}${d.stale ? `<span class="badge" title="${esc(d.pipeline)}">older model</span> ` : ""}${d.segmented && d.pair_doc_id ? `<span class="badge okb" title="Segment-aligned with a translation">aligned</span>` : ""}</td>
         <td class="nowrap"><button data-edit="${d.id}">Edit</button> <button data-del="${d.id}" class="danger">Remove</button></td></tr>`).join("") + "</tbody>"
     : `<tbody><tr><td class="muted">No documents yet.</td></tr></tbody>`;
 }
@@ -215,7 +227,7 @@ function renderJobs(jobs) {
   $("jobs").innerHTML = recent.map((j) => {
     const pct = Math.round(j.progress * 100);
     const state = j.status === "error" ? `<span class="err">${esc(j.error)}</span>`
-      : j.status === "done" ? `<span class="ok">done${(j.result.warnings || []).length ? " — " + esc(j.result.warnings.join(" ")) : ""}</span>`
+      : j.status === "done" ? `<span class="ok">done${j.result.segments ? ` — ${j.result.segments} aligned segments` : ""}${(j.result.warnings || []).length ? " — " + esc(j.result.warnings.join(" ")) : ""}</span>`
       : j.status === "running" ? `<progress max="100" value="${pct}"></progress> ${pct}%` : "queued";
     return `<div class="job"><b>${esc(j.label)}</b> ${state}</div>`;
   }).join("");
@@ -274,10 +286,12 @@ $("fqGo").onclick = busy($("fqGo"), async () => {
 $("ccGo").onclick = busy($("ccGo"), async () => {
   const p = { q: $("ccQ").value, unit: $("ccUnit").value, width: $("ccW").value, sort: $("ccSort").value, limit: 500, ...scopeParams() };
   if (!p.q.trim()) return say("Type a word or phrase.", "err");
-  const r = await api(`${base()}/concordance?${qs(p)}`); setCsv("ccCsv", "concordance", p);
-  $("ccInfo").textContent = `${r.total} hits` + (r.total > r.lines.length ? ` (showing ${r.lines.length})` : "");
+  const aligned = $("ccAligned").checked, path = aligned ? "bilingual" : "concordance";
+  const r = await api(`${base()}/${path}?${qs(p)}`); setCsv("ccCsv", path, p);
+  $("ccInfo").textContent = `${r.total} hits` + (r.total > r.lines.length ? ` (showing ${r.lines.length})` : "") + (aligned ? " in aligned documents" : "");
   $("ccOut").innerHTML = r.lines.length ? `<table class="kwic"><tbody>` + r.lines.map((l) =>
-    `<tr><td class="l">${esc(l.left)}</td><td class="n">${esc(l.node)}</td><td>${esc(l.right)}</td><td class="src" title="${esc(l.doc)}">${esc(l.doc)}</td></tr>`).join("") + "</tbody></table>"
+    `<tr><td class="l">${esc(l.left)}</td><td class="n">${esc(l.node)}</td><td>${esc(l.right)}</td><td class="src" title="${esc(l.doc)}">${esc(l.doc)}</td></tr>` +
+    (aligned ? `<tr class="aligned"><td></td><td colspan="3"><b>→</b> ${esc(l.target)}</td></tr>` : "")).join("") + "</tbody></table>"
     : `<p class="muted" style="padding:.6rem">No hits.</p>`;
   say("");
 });
@@ -318,7 +332,6 @@ $("kyGo").onclick = busy($("kyGo"), async () => {
 });
 
 // ------------------------------------------------------------------ termbase
-const curCorpus = () => state.corpora.find((c) => c.id === state.id);
 const otherLang = (lang) => Object.keys(state.langs).find((l) => l !== lang);
 let editingTerm = null, termCtx = null;
 function termFields(t = {}) {
@@ -328,14 +341,14 @@ function termFields(t = {}) {
   $("tmExamples").innerHTML = "";
 }
 const POS_MAP = { NOUN: "noun", VERB: "verb", AUX: "verb", ADJ: "adjective", ADV: "adverb", PROPN: "properNoun" };
-function openTerm(src, pos, origin) {
+function openTerm(src, pos, origin, tgt = "") {
   const c = curCorpus(); if (!c) return say("Create or select a corpus first.", "err");
   editingTerm = null; termCtx = { origin, project_id: c.project_id, src_lang: c.lang };
   $("termTitle").textContent = "Add term";
   $("termLangs").textContent = `${state.langs[c.lang]} → ${state.langs[otherLang(c.lang)]}` + (c.project_id ? "" : " · general termbase (corpus has no project)");
-  termFields({ src_term: src, pos: POS_MAP[pos] ?? "" }); $("termDlg").showModal(); findExamples(true);
+  termFields({ src_term: src, tgt_term: tgt, pos: POS_MAP[pos] ?? "" }); $("termDlg").showModal(); findExamples(true);
 }
-document.addEventListener("click", (e) => { const a = e.target.closest("a.addterm"); if (a) openTerm(a.dataset.t, a.dataset.pos, a.dataset.origin); });
+document.addEventListener("click", (e) => { const a = e.target.closest("a.addterm"); if (a) openTerm(a.dataset.t, a.dataset.pos, a.dataset.origin, a.dataset.tgt); });
 $("ccTerm").onclick = () => { const q = $("ccQ").value.trim(); if (!q) return say("Type a word or phrase first.", "err"); openTerm(q, "", "concordance"); };
 async function findExamples(quiet) {
   const q = $("tmSrc").value.trim(); if (!q || !state.id) return;
@@ -458,6 +471,32 @@ $("baseCards").addEventListener("click", async (e) => {
     }
   } catch (err) { say(err.message, "err"); }
 });
+
+// ------------------------------------------------------------------ aligned texts
+$("pairBtn").onclick = busy($("pairBtn"), async () => {
+  const f = $("pairFile").files[0]; if (!f) return say("Choose a TMX or two-column file first.", "err");
+  const partner = $("pairPartner").value;
+  if (partner === "new" && !$("pairName").value.trim()) return say("Name the new corpus for the translations.", "err");
+  const fd = new FormData(); fd.append("files", f);
+  const params = { ...(partner === "new" ? { partner_name: $("pairName").value } : { partner_corpus_id: partner }), swap: $("pairSwap").checked, force_language: forceLang(), ...newMeta() };
+  const res = await api(`${base()}/upload-pairs?${qs(params)}`, { method: "POST", body: fd });
+  $("pairFile").value = ""; $("pairName").value = "";
+  const bad = res.filter((r) => !r.ok);
+  say(bad.length ? `Rejected: ${bad[0].error}` : "Queued — see progress below.", bad.length ? "err" : "ok");
+  await pollJobs();
+});
+
+$("eqGo").onclick = busy($("eqGo"), async () => {
+  const p = { q: $("eqQ").value, unit: $("eqUnit").value, min_freq: $("eqMin").value, pos: posParam("eqPos"), ...scopeParams() };
+  if (!p.q.trim()) return say("Type a source word or phrase.", "err");
+  const r = await api(`${base()}/equivalents?${qs(p)}`); setCsv("eqCsv", "equivalents", p);
+  $("eqInfo").textContent = `“${p.q}” occurs in ${r.node_segments} aligned segment${r.node_segments === 1 ? "" : "s"}. Sorted by Dice.`;
+  table([{ key: "item", label: "Equivalent (lemma)" }, { key: "pos", label: "POS" }, { key: "cooc", label: "Together", num: 1 },
+         { key: "node_segments", label: "Source segs", num: 1 }, { key: "target_segments", label: "Target segs", num: 1 },
+         { key: "dice", label: "Dice", num: 1 }, { key: "logdice", label: "logDice", num: 1 }], r.rows, $("eqOut"), ["item"], { origin: "equivalent", src: p.q.trim() });
+  say("");
+});
+$("eqQ").addEventListener("keydown", (e) => { if (e.key === "Enter") $("eqGo").click(); });
 
 // ------------------------------------------------------------------ word cloud (self-contained spiral layout)
 $("wcGo").onclick = busy($("wcGo"), async () => {

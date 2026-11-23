@@ -5,7 +5,7 @@ from . import nlp
 
 STATUSES = ("candidate", "approved", "forbidden")
 POS_VALUES = ("noun", "verb", "adjective", "adverb", "properNoun", "other")   # TBX-Basic partOfSpeech values
-ORIGINS = ("manual", "frequency", "keyness", "collocation", "ngram", "concordance")
+ORIGINS = ("manual", "frequency", "keyness", "collocation", "ngram", "concordance", "equivalent")
 UPOS_TO_TBX = {"NOUN": "noun", "VERB": "verb", "AUX": "verb", "ADJ": "adjective", "ADV": "adverb",
                "PROPN": "properNoun"}
 LIMITS = {"src_term": 200, "tgt_term": 200, "domain": 80, "definition": 2000, "notes": 2000,

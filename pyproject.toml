@@ -18,6 +18,7 @@ dependencies = [
     "es-core-news-sm",
     "it-core-news-sm",
     "openpyxl>=3.1.5",
+    "defusedxml>=0.7.1",
 ]
 
 [project.scripts]

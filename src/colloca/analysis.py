@@ -29,10 +29,12 @@ class Scope:
     date_from: str = ""
     date_to: str = ""
     doc_ids: tuple[int, ...] = ()
+    paired_only: bool = False       # only documents aligned with a translation (parallel texts)
 
     @property
     def filtered(self) -> bool:
-        return bool(self.tags or self.text_type or self.date_from or self.date_to or self.doc_ids)
+        return bool(self.tags or self.text_type or self.date_from or self.date_to or self.doc_ids
+                    or self.paired_only)
 
     def where(self, alias: str = "d") -> tuple[str, list]:
         """SQL condition (on documents aliased `alias`) and its parameters."""
@@ -56,6 +58,8 @@ class Scope:
         if self.doc_ids:
             conds.append(f"{alias}.id IN ({','.join('?' * len(self.doc_ids))})")
             params += self.doc_ids
+        if self.paired_only:
+            conds.append(f"{alias}.segmented=1 AND {alias}.pair_doc_id IS NOT NULL")
         return " AND ".join(conds), params
 
 
