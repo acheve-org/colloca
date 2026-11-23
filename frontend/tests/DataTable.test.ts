@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
+import { tick } from 'svelte';
 import { fireEvent, render, screen } from '@testing-library/svelte';
+import Host from './DataTableHost.svelte';
 import DataTable from '../src/lib/ui/DataTable.svelte';
 import type { Column } from '../src/lib/ui/DataTable.types';
 
@@ -91,5 +93,152 @@ describe('DataTable', () => {
     expect([...w].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))).toEqual(w);
     await fireEvent.click(header('Count'));
     expect(texts(1)[0]).toBe('1');
+  });
+
+  it('PageDown/PageUp jump by a page and clamp', async () => {
+    const rows = mk(Array.from({ length: 30 }, (_, i) => `w${i}`));
+    const onselect = vi.fn();
+    render(DataTable<R>, { columns, rows, rowKey, onselect });
+    const g = grid();
+    await fireEvent.keyDown(g, { key: 'PageDown' });
+    expect(onselect).toHaveBeenLastCalledWith(rows[9]);
+    await fireEvent.keyDown(g, { key: 'PageDown' });
+    expect(onselect).toHaveBeenLastCalledWith(rows[19]);
+    await fireEvent.keyDown(g, { key: 'PageDown' });
+    expect(onselect).toHaveBeenLastCalledWith(rows[29]);
+    await fireEvent.keyDown(g, { key: 'PageUp' });
+    expect(onselect).toHaveBeenLastCalledWith(rows[19]);
+  });
+
+  it('ArrowUp / End with no selection pick the last row, Home the first', async () => {
+    const rows = mk(['a', 'b', 'c']);
+    const onselect = vi.fn();
+    const { unmount } = render(DataTable<R>, { columns, rows, rowKey, onselect });
+    await fireEvent.keyDown(grid(), { key: 'ArrowUp' });
+    expect(onselect).toHaveBeenLastCalledWith(rows[2]);
+    unmount();
+    onselect.mockClear();
+    const r2 = render(DataTable<R>, { columns, rows, rowKey, onselect });
+    await fireEvent.keyDown(grid(), { key: 'Home' });
+    expect(onselect).toHaveBeenLastCalledWith(rows[0]);
+    r2.unmount();
+    render(DataTable<R>, { columns, rows, rowKey, onselect });
+    await fireEvent.keyDown(grid(), { key: 'End' });
+    expect(onselect).toHaveBeenLastCalledWith(rows[2]);
+  });
+
+  it('click selects, rowClass applies, loading shows state', async () => {
+    const rows = mk(['a', 'b']);
+    const onselect = vi.fn();
+    const { unmount } = render(DataTable<R>, { columns, rows, rowKey, onselect, rowClass: (r: R) => `x-${r.id}` });
+    await fireEvent.click(bodyRows()[1]);
+    expect(onselect).toHaveBeenLastCalledWith(rows[1]);
+    expect(bodyRows()[1]).toHaveAttribute('aria-selected', 'true');
+    expect(bodyRows()[0]).toHaveClass('x-0');
+    unmount();
+    render(DataTable<R>, { columns, rows: [], rowKey, loading: true });
+    expect(screen.getByText('Loading…')).toBeInTheDocument();
+    expect(grid()).toHaveAttribute('aria-busy', 'true');
+  });
+
+  describe('selection identity and reconciliation', () => {
+    const hostRows = (): R[] => [
+      { id: 1, word: 'alpha', n: 1 },
+      { id: 2, word: 'beta', n: 2 },
+      { id: 3, word: 'gamma', n: 3 },
+    ];
+    type Probe = { selected: R | null; set: (r: R | null) => void; setFilter: (f: string) => void; setRows: (r: R[]) => void };
+    const hostProps = (rows: ReturnType<typeof hostRows>, extra = {}) => ({
+      rows,
+      columns,
+      probe: { selected: null, set() {}, setFilter() {}, setRows() {} } as Probe,
+      ...extra,
+    });
+
+    it('bind, onselect and onactivate hand back the original row object', async () => {
+      const rows = hostRows();
+      const onselect = vi.fn();
+      const onactivate = vi.fn();
+      const props = hostProps(rows, { onselect, onactivate });
+      render(Host, props);
+      await fireEvent.keyDown(grid(), { key: 'ArrowDown' });
+      await fireEvent.keyDown(grid(), { key: 'ArrowDown' });
+      expect(onselect.mock.lastCall![0]).toBe(rows[1]);
+      expect(props.probe.selected).toBe(rows[1]);
+      await fireEvent.keyDown(grid(), { key: 'Enter' });
+      expect(onactivate.mock.lastCall![0]).toBe(rows[1]);
+    });
+
+    it('a programmatically set selection is highlighted', async () => {
+      const rows = hostRows();
+      const props = hostProps(rows);
+      render(Host, props);
+      props.probe.set({ ...rows[2] }); // different object, same key
+      await tick();
+      expect(bodyRows()[2]).toHaveAttribute('aria-selected', 'true');
+      props.probe.set(rows[0]);
+      await tick();
+      expect(bodyRows()[0]).toHaveAttribute('aria-selected', 'true');
+      expect(bodyRows()[2]).toHaveAttribute('aria-selected', 'false');
+    });
+
+    it('filtering out the selected row clears the selection', async () => {
+      const rows = hostRows();
+      const onselect = vi.fn();
+      const props = hostProps(rows, { onselect });
+      render(Host, props);
+      await fireEvent.click(bodyRows()[0]);
+      props.probe.setFilter('gam');
+      await tick();
+      await tick();
+      expect(props.probe.selected).toBeNull();
+      expect(onselect).toHaveBeenLastCalledWith(null);
+    });
+
+    it('replacing rows with the same keys re-points selected at the new object', async () => {
+      const rows = hostRows();
+      const onselect = vi.fn();
+      const props = hostProps(rows, { onselect });
+      render(Host, props);
+      await fireEvent.click(bodyRows()[1]);
+      const fresh = hostRows();
+      onselect.mockClear();
+      props.probe.setRows(fresh);
+      await tick();
+      await tick();
+      expect(props.probe.selected).toBe(fresh[1]);
+      expect(onselect).not.toHaveBeenCalled();
+      expect(bodyRows()[1]).toHaveAttribute('aria-selected', 'true');
+    });
+
+    it('replacing rows without the selected key clears the selection', async () => {
+      const props = hostProps(hostRows());
+      render(Host, props);
+      await fireEvent.click(bodyRows()[1]);
+      props.probe.setRows([{ id: 9, word: 'zeta', n: 9 }]);
+      await tick();
+      await tick();
+      expect(props.probe.selected).toBeNull();
+    });
+  });
+
+  it('duplicate rowKeys do not throw', () => {
+    const rows = mk(['a', 'b', 'c']);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(() => render(DataTable<R>, { columns, rows, rowKey: () => 1 })).not.toThrow();
+    expect(bodyRows()).toHaveLength(3);
+    warn.mockRestore();
+  });
+
+  it('ignores keys typed in cell inputs and modified keys', async () => {
+    const rows = [{ id: 1, word: 'a', n: 1 }, { id: 2, word: 'b', n: 2 }];
+    const onselect = vi.fn();
+    render(Host, { rows, columns, onselect, withInput: true, probe: { selected: null, set() {}, setFilter() {}, setRows() {} } });
+    const input = screen.getAllByLabelText('edit')[0];
+    const notPrevented = await fireEvent.keyDown(input, { key: 'ArrowDown' });
+    expect(notPrevented).toBe(true);
+    expect(onselect).not.toHaveBeenCalled();
+    await fireEvent.keyDown(grid(), { key: 'ArrowDown', ctrlKey: true });
+    expect(onselect).not.toHaveBeenCalled();
   });
 });

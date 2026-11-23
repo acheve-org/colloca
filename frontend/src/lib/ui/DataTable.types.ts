@@ -24,3 +24,9 @@ export function cellValue<Row>(row: Row, col: Column<Row>): string | number {
   const v = (row as Record<string, unknown>)[col.key];
   return v === undefined || v === null ? '' : (v as string | number);
 }
+
+/**
+ * `rowKey` must return a unique key per row. Duplicates do not throw, but only the first
+ * occurrence can be selected/highlighted, and a warning is logged once in development.
+ */
+export type RowKey<Row> = (r: Row, i: number) => string | number;

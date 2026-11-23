@@ -1,14 +1,16 @@
 <script module lang="ts">
   const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
 
+  let warnedDuplicates = false;
+
   function fold(s: string): string {
     return s.normalize('NFD').replace(/\p{M}+/gu, '').toLowerCase();
   }
 </script>
 
 <script lang="ts" generics="Row">
-  import { tick, type Snippet } from 'svelte';
-  import { t } from '../i18n';
+  import { tick, untrack, type Snippet } from 'svelte';
+    import { t } from '../i18n';
   import { cellValue, type Column, type SortState } from './DataTable.types';
 
   interface Props {
@@ -68,12 +70,27 @@
         });
       }
     }
-    return idx.map((i) => ({ row: rows[i], key: rowKey(rows[i], i) }));
+    // Duplicate keys would make the keyed {#each} throw; suffix later occurrences
+    // (`ek` is for rendering only, `key` is the caller's rowKey).
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local scratch map, not state
+    const seen = new Map<string | number, number>();
+    return idx.map((i) => {
+      const key = rowKey(rows[i], i);
+      const n = seen.get(key) ?? 0;
+      seen.set(key, n + 1);
+      if (n > 0 && import.meta.env.DEV && !warnedDuplicates) {
+        warnedDuplicates = true;
+        console.warn(`DataTable: duplicate rowKey "${key}"; keys must be unique.`);
+      }
+      return { row: rows[i], key, ek: n === 0 ? key : `${key}\u0000dup${n}` };
+    });
   });
 
-  // Selection is tracked by key: a bindable prop assigned locally is wrapped in a
-  // reactive proxy, so object identity against `rows` cannot be relied on.
+  // Selection is tracked by key. A bindable prop assigned locally may be wrapped in a
+  // reactive proxy, so object identity against `rows` is never relied on; callbacks
+  // always receive the original row object.
   let selectedKey: string | number | undefined = $state.raw(undefined);
+  let ownRow: Row | null = null; // last raw row this component assigned to `selected`
 
   $effect(() => {
     const s = selected;
@@ -81,8 +98,29 @@
       selectedKey = undefined;
       return;
     }
+    // Resolve the key of a (possibly programmatically set) selection.
+    let k: string | number | undefined;
     const i = rows.indexOf(s);
-    if (i >= 0) selectedKey = rowKey(rows[i], i);
+    if (i >= 0) k = rowKey(rows[i], i);
+    else {
+      const j = rows.findIndex((r, n) => rowKey(r, n) === rowKey(s, n));
+      if (j >= 0) k = rowKey(rows[j], j);
+    }
+    const current = view; // dependency: re-reconcile when the visible rows change
+    untrack(() => {
+      k ??= selectedKey;
+      selectedKey = k;
+      if (k === undefined) return;
+      const entry = current.find((v) => v.key === k);
+      if (!entry) {
+        select(null);
+      } else if (entry.row !== ownRow && entry.row !== s) {
+        // rows refetched (or selection set programmatically): point at the current
+        // object for that key, without firing onselect
+        ownRow = entry.row;
+        selected = entry.row;
+      }
+    });
   });
 
   function ariaSort(col: Column<Row>): 'ascending' | 'descending' | 'none' | undefined {
@@ -100,6 +138,7 @@
 
   function select(row: Row | null, key?: string | number) {
     selectedKey = key;
+    ownRow = row;
     selected = row;
     onselect?.(row);
   }
@@ -118,6 +157,7 @@
   }
 
   function onkeydown(e: KeyboardEvent) {
+    if (e.target !== e.currentTarget || e.ctrlKey || e.altKey || e.metaKey) return;
     const cur = selectedKey === undefined ? -1 : view.findIndex((v) => v.key === selectedKey);
     switch (e.key) {
       case 'ArrowDown':
@@ -180,15 +220,15 @@
         </div>
       {/each}
     </div>
-    {#each view as v, i (v.key)}
+    {#each view as v, i (v.ek)}
       <!-- Keyboard handling lives on the grid (roving selection), not on each row. -->
       <!-- svelte-ignore a11y_click_events_have_key_events, a11y_interactive_supports_focus -->
       <div
         class="row body {rowClass?.(v.row) ?? ''}"
-        class:selected={v.key === selectedKey}
+        class:selected={v.ek === selectedKey}
         role="row"
         data-index={i}
-        aria-selected={v.key === selectedKey}
+        aria-selected={v.ek === selectedKey}
         style:grid-template-columns={columns.map((c) => c.width ?? '1fr').join(' ')}
         onclick={() => select(v.row, v.key)}
         ondblclick={() => onactivate?.(v.row)}
@@ -259,6 +299,8 @@
     font-variant-numeric: tabular-nums;
   }
   .body {
+    /* keeps scrollIntoView({block:'nearest'}) from hiding the row under the sticky header */
+    scroll-margin-top: var(--row-h);
     border-bottom: 1px solid var(--line);
     cursor: default;
   }
