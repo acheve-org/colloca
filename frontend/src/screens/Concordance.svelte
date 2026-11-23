@@ -4,7 +4,8 @@
 
   const UNITS: Unit[] = ['lemma', 'form'];
   const SORTS: Sort[] = ['doc', 'left', 'right'];
-  const LIMIT = 300;
+  /** Hits requested and exported (CSV link), as the old UI. The API allows up to 2000. */
+  const LIMIT = 500;
 
   function toWidth(v: string | undefined): number {
     const n = Number.parseInt(v ?? '', 10);

@@ -129,10 +129,29 @@ describe('Concordance', () => {
     expect(c.params.get('unit')).toBe('lemma');
     expect(c.params.get('width')).toBe('8');
     expect(c.params.get('sort')).toBe('doc');
-    expect(c.params.get('limit')).toBe('300');
+    expect(c.params.get('limit')).toBe('500');
     expect(c.params.get('tags')).toBe('law');
     expect(c.params.get('text_type')).toBe('contract');
     expect(c.params.get('date_from')).toBe('2020');
+  });
+
+  it('requests 500 hits (as the old UI) and the CSV link carries the same limit, KWIC and bilingual', async () => {
+    const csvLimit = () => {
+      const href = screen.getAllByRole('link', { name: 'CSV' })[0].getAttribute('href')!;
+      const u = new URL(href, 'http://x');
+      return [u.pathname, u.searchParams.get('limit'), u.searchParams.get('format')];
+    };
+    corpusStore.aligned = true;
+    bi.body = { total: 1, lines: [line(1, { source: 'La casa', target: 'La casa' })] };
+    render(Concordance);
+    await search('casa');
+    expect(searches()[0].params.get('limit')).toBe('500');
+    expect(csvLimit()).toEqual(['/api/corpora/1/concordance', '500', 'csv']);
+    await fireEvent.click(screen.getByRole('switch', { name: 'Source + target' }));
+    await search('casa');
+    expect(searches()[1].path).toBe('/api/corpora/1/bilingual');
+    expect(searches()[1].params.get('limit')).toBe('500');
+    expect(csvLimit()).toEqual(['/api/corpora/1/bilingual', '500', 'csv']);
   });
 
   it('renders results in order with the node highlighted and counts', async () => {

@@ -61,6 +61,11 @@ jobs:
       - name: End-to-end tests (builds the UI first)
         working-directory: frontend
         run: npm run e2e
+      - name: Package includes the built UI (sdist and the wheel built from it)
+        run: |
+          uv build --out-dir /tmp/dist
+          tar tzf /tmp/dist/*.tar.gz | grep -q 'src/colloca/static/index.html'
+          unzip -l /tmp/dist/*.whl | grep -q 'colloca/static/index.html'
       - name: Upload Playwright report
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2

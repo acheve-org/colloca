@@ -116,9 +116,10 @@ whole pass.
 
 ## Deviations for the user to rule on
 
-- **Concordance hit limit 300 (old UI: 500).** The new screen requests `limit=300` (`LIMIT` in
-  `screens/Concordance.svelte`; the brief fixed 300). Hits beyond it are counted ("N hits (showing 300)") but not
-  listed or exported in the CSV link, which carries the same limit. Restoring 500 is a one-line change.
+- **Concordance hit limit: resolved.** The new screen first requested 300 hits (old UI: 500). Ruled by the user:
+  500, as before, for the KWIC and the Source + target requests and for their CSV links (`LIMIT` in
+  `screens/Concordance.svelte`); "(showing n)" still marks a total above it. Test: Concordance "requests 500 hits (as
+  the old UI) and the CSV link carries the same limit, KWIC and bilingual".
 - **Concordance settings after a word link.** Clicking a word in a table opens the Concordance with the query and
   unit only; context width, sort and "Source + target" go back to their defaults (old UI kept the last values of
   the Concordance tab). Minor.

@@ -40,6 +40,10 @@ packages = ["src/colloca"]
 # Build the frontend before `uv build`; without it the package serves a "UI not built" page.
 artifacts = ["src/colloca/static/**"]
 
+[tool.hatch.build.targets.sdist]
+# uv build makes the wheel from the sdist, so the sdist must carry the built UI too.
+artifacts = ["src/colloca/static/**"]
+
 [tool.uv.sources]
 es-core-news-sm = { url = "https://github.com/explosion/spacy-models/releases/download/es_core_news_sm-3.8.0/es_core_news_sm-3.8.0-py3-none-any.whl" }
 it-core-news-sm = { url = "https://github.com/explosion/spacy-models/releases/download/it_core_news_sm-3.8.0/it_core_news_sm-3.8.0-py3-none-any.whl" }
