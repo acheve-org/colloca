@@ -60,7 +60,52 @@ describe('findRanges', () => {
   });
 });
 
+describe('findRanges extras', () => {
+  it('matches NFD needles against NFC text in both modes', () => {
+    const needle = 'n\u0303';
+    expect(findRanges('un ñu', [needle], 'query')).toEqual([{ start: 3, end: 4, kind: 'query' }]);
+    expect(findRanges('un ñu', [needle], 'query', { accentInsensitive: true })).toEqual([
+      { start: 1, end: 2, kind: 'query' },
+      { start: 3, end: 4, kind: 'query' },
+    ]);
+  });
+
+  it('finds overlapping occurrences', () => {
+    expect(mergeRanges(findRanges('aaa', ['aa'], 'query'))).toEqual([{ start: 0, end: 3, kind: 'query' }]);
+  });
+});
+
 describe('mergeRanges', () => {
+  it('is fast on many ranges', () => {
+    const text = 'a'.repeat(5000);
+    const rs = findRanges(text, ['a'], 'query');
+    const t0 = performance.now();
+    mergeRanges(rs);
+    expect(performance.now() - t0).toBeLessThan(200);
+  });
+
+  it('matches a brute-force reference on random overlapping ranges', () => {
+    const kinds = ['equiv', 'term', 'query', 'forbidden'] as const;
+    const prio = { equiv: 0, term: 1, query: 2, forbidden: 3 };
+    let seed = 7;
+    const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+    for (let round = 0; round < 20; round++) {
+      const rs = Array.from({ length: 60 }, () => {
+        const start = Math.floor(rnd() * 100);
+        return { start, end: start + Math.floor(rnd() * 15), kind: kinds[Math.floor(rnd() * 4)] };
+      });
+      const ref: { start: number; end: number; kind: (typeof kinds)[number] }[] = [];
+      for (let i = 0; i < 120; i++) {
+        let best: (typeof kinds)[number] | null = null;
+        for (const r of rs) if (r.start <= i && i < r.end && (!best || prio[r.kind] > prio[best])) best = r.kind;
+        if (!best) continue;
+        const l = ref[ref.length - 1];
+        if (l && l.end === i && l.kind === best) l.end = i + 1;
+        else ref.push({ start: i, end: i + 1, kind: best });
+      }
+      expect(mergeRanges(rs)).toEqual(ref);
+    }
+  });
   it('sorts and keeps disjoint ranges', () => {
     expect(
       mergeRanges([

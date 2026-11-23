@@ -36,7 +36,7 @@ function fold(text: string, o: Opts) {
 
 function foldNeedle(needle: string, o: Opts): string {
   let out = '';
-  for (const ch of needle) out += foldChar(ch, o);
+  for (const ch of needle.normalize('NFC')) out += foldChar(ch, o);
   return out;
 }
 
@@ -69,30 +69,37 @@ export function findRanges(
         }
       }
       out.push({ start, end, kind });
-      from = at + n.length;
+      from = at + 1;
     }
   }
   return out;
 }
 
-/** Sorted, non-overlapping ranges; overlaps are split and resolved by kind priority. */
+/** Sorted, non-overlapping ranges; overlaps are split and resolved by kind priority. O(n log n). */
 export function mergeRanges(ranges: Range[]): Range[] {
-  const valid = ranges.filter((r) => r.end > r.start);
-  const points = [...new Set(valid.flatMap((r) => [r.start, r.end]))].sort((a, b) => a - b);
+  const kinds = Object.keys(PRIORITY) as HitKind[];
+  const events: { pos: number; kind: HitKind; delta: 1 | -1 }[] = [];
+  for (const r of ranges) {
+    if (r.end <= r.start) continue;
+    events.push({ pos: r.start, kind: r.kind, delta: 1 }, { pos: r.end, kind: r.kind, delta: -1 });
+  }
+  events.sort((a, b) => a.pos - b.pos);
+  const active: Record<HitKind, number> = { equiv: 0, term: 0, query: 0, forbidden: 0 };
   const out: Range[] = [];
-  for (let i = 0; i + 1 < points.length; i++) {
-    const a = points[i];
-    const b = points[i + 1];
-    let best: HitKind | null = null;
-    for (const r of valid) {
-      if (r.start <= a && r.end >= b && (best === null || PRIORITY[r.kind] > PRIORITY[best])) {
-        best = r.kind;
-      }
+  for (let i = 0; i < events.length; ) {
+    const pos = events[i].pos;
+    while (i < events.length && events[i].pos === pos) {
+      active[events[i].kind] += events[i].delta;
+      i++;
     }
+    if (i >= events.length) break;
+    const next = events[i].pos;
+    let best: HitKind | null = null;
+    for (const k of kinds) if (active[k] > 0 && (best === null || PRIORITY[k] > PRIORITY[best])) best = k;
     if (best === null) continue;
     const last = out[out.length - 1];
-    if (last && last.end === a && last.kind === best) last.end = b;
-    else out.push({ start: a, end: b, kind: best });
+    if (last && last.end === pos && last.kind === best) last.end = next;
+    else out.push({ start: pos, end: next, kind: best });
   }
   return out;
 }
