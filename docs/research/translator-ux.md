@@ -301,6 +301,20 @@ Keyness, Word cloud, Termbase, Base corpora), `static/app.js`, `static/style.css
 | 13 | Table sorting and filtering on analysis tables is absent client-side; every re-sort needs a re-query | #11 | Translators expect to click a header to sort. | Make result tables client-sortable and add a quick filter box (memoQ "Filter" box). |
 | 14 | Concordance "plot" / dispersion view (AntConc) | AntConc [S] | Useful but secondary for translators. | Optional later. |
 
+**Status (2026-11), after the UI redesign** (new Svelte frontend in `frontend/`; see `docs/backlog.md`):
+
+- **#13 done**: every result table is one shared component that sorts on a header click and has a *Filter in results*
+  box, client-side (backlog T05).
+- **#12 partly done**: semantic colour tokens exist for query hit, likely equivalent, termbase hit, forbidden term and
+  the term statuses, each with a non-colour cue (bold, dotted or solid underline, strikethrough, label text), in both
+  themes; graded confidence for the equivalent is not there yet.
+- **#2 partly done**: Ctrl/Cmd+K (concordance query), Ctrl/Cmd+E (add the selected hit or text as a term), arrows
+  through table rows, Esc and a `?` shortcut list exist; candidate accept/drop keys come with #3.
+- **#3, #7, #8 enabled, not implemented**: the components they need are in place (candidate status badges, the
+  in-results filter for #7, a detail strip under the selected concordance hit showing the document and the full
+  segment pair for #8), but the candidate review, the remaining concordance options and the per-hit metadata are
+  still open as backlog T01 to T06.
+
 ### 5.3 Top recommendations
 
 1. Highlight the likely target equivalent inside the aligned segment, flagged as a guess, and highlight the query in whichever

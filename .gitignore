@@ -3,3 +3,9 @@ data/
 __pycache__/
 .pytest_cache/
 .idea
+.superpowers/
+frontend/node_modules/
+# Frontend build output (Vite writes it here; `mise run ui:build`)
+src/colloca/static/
+frontend/test-results/
+frontend/playwright-report/

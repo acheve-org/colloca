@@ -1,3 +1,12 @@
+# Frontend build (Svelte/Vite). Package files first so `npm ci` is cached.
+# Vite writes to ../src/colloca/static (relative to frontend/), i.e. /ui/src/colloca/static.
+FROM node:lts-slim AS ui
+WORKDIR /ui/frontend
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+COPY frontend/ ./
+RUN npm run build
+
 FROM python:3.14-slim
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
@@ -21,6 +30,8 @@ RUN if [ "$SPACY_SIZE" != "sm" ]; then \
     fi
 
 COPY src ./src
+# The UI is git-ignored and never in the build context: it comes from the ui stage.
+COPY --from=ui /ui/src/colloca/static/ ./src/colloca/static/
 RUN uv sync --frozen --no-dev
 
 RUN useradd -m colloca && mkdir -p /data && chown colloca /data
