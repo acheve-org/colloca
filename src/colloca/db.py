@@ -119,7 +119,23 @@ CREATE UNIQUE INDEX idx_terms_unique ON terms (
 CREATE INDEX idx_terms_project ON terms (project_id, src_lang, tgt_lang);
 """
 
-MIGRATIONS: list[tuple[int, str]] = [(1, _V1), (2, _V2), (3, _V3), (4, _V4), (5, _V5)]
+# --- v6: parallel (aligned) texts. A segmented document is stored one segment per line; `segments` keeps the
+# token span of each segment, and `pair_doc_id` points to the document holding the translations: segment N of
+# one is the translation of segment N of the other. Both documents live in ordinary corpora of their own language.
+_V6 = """
+ALTER TABLE documents ADD COLUMN segmented INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE documents ADD COLUMN pair_doc_id INTEGER REFERENCES documents(id) ON DELETE SET NULL;
+CREATE INDEX idx_docs_pair ON documents(pair_doc_id);
+CREATE TABLE segments (
+    doc_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    seg INTEGER NOT NULL,
+    start_pos INTEGER NOT NULL,        -- first token of the segment
+    end_pos INTEGER NOT NULL,          -- one past the last token
+    PRIMARY KEY (doc_id, seg)
+) WITHOUT ROWID;
+"""
+
+MIGRATIONS: list[tuple[int, str]] = [(1, _V1), (2, _V2), (3, _V3), (4, _V4), (5, _V5), (6, _V6)]
 SCHEMA_VERSION = MIGRATIONS[-1][0]
 
 

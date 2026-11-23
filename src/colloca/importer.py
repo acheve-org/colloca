@@ -35,7 +35,10 @@ class ImportRejected(Exception):
 
 # --------------------------------------------------------------------------- documents
 def add_document(conn, corpus, title: str, text: str, source: str, kind: str, meta: dict | None = None,
-                 force_language: bool = False, progress: Callable[[float], None] | None = None) -> dict:
+                 force_language: bool = False, progress: Callable[[float], None] | None = None,
+                 segmented: bool = False) -> dict:
+    """Annotate and store a text. `segmented`: every line is a segment of a parallel text (its token span
+    is recorded so the segment can be paired with its translation)."""
     meta = meta or {}   # validated by metadata.clean_meta/normalize_tags: tags, text_type, doc_date, author
     text = ingest.normalize_text(text)
     if len(text) < MIN_CHARS:
@@ -53,22 +56,28 @@ def add_document(conn, corpus, title: str, text: str, source: str, kind: str, me
             422, f"This text looks {nlp.SUPPORTED[check['detected']]}, but the corpus is "
                  f"{nlp.SUPPORTED[corpus['lang']]}. Tick “import even if the language looks wrong” "
                  "to add it anyway (its lemmas will be unreliable).", "language_mismatch")
+    spans: list[tuple[int, int]] = []
     try:
         pipeline = nlp.pipeline_name(corpus["lang"])
-        tokens = list(nlp.annotate(text, corpus["lang"], progress))
+        tokens = list(nlp.annotate(text, corpus["lang"], progress, spans if segmented else None))
     except (RuntimeError, ValueError) as exc:
         raise ImportRejected(500, str(exc), "nlp_error") from exc
+    if segmented and (len(spans) != len(text.split("\n")) or any(a == b for a, b in spans)):
+        raise ImportRejected(500, "A segment produced no tokens, so the alignment would be off", "alignment")
     n_alpha = sum(t[6] for t in tokens)
     cur = conn.execute(
         """INSERT INTO documents (corpus_id,title,source,kind,text,text_hash,n_tokens,pipeline,lang_check,
-                                  text_type,doc_date,author)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+                                  text_type,doc_date,author,segmented)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (corpus["id"], title.strip() or "Untitled", source, kind, text, digest, n_alpha,
          pipeline, check["verdict"], meta.get("text_type", ""), meta.get("doc_date", ""),
-         meta.get("author", "")))
+         meta.get("author", ""), int(segmented)))
     doc_id = cur.lastrowid
     metadata.set_tags(conn, doc_id, meta.get("tags", []))
     conn.executemany("INSERT INTO tokens VALUES (?,?,?,?,?,?,?,?,?,?)", ((doc_id,) + t for t in tokens))
+    if segmented:
+        conn.executemany("INSERT INTO segments VALUES (?,?,?,?)",
+                         ((doc_id, i, a, b) for i, (a, b) in enumerate(spans)))
     warnings = [LANG_WARNINGS[check["verdict"]]] if check["verdict"] in LANG_WARNINGS else []
     if check["verdict"] == "mismatch":
         warnings = [f"Imported although it looks {nlp.SUPPORTED[check['detected']]}."]
@@ -78,14 +87,22 @@ def add_document(conn, corpus, title: str, text: str, source: str, kind: str, me
 
 def reannotate_document(conn, doc_id: int, progress: Callable[[float], None] | None = None) -> bool:
     """Re-run the current NLP pipeline on a stored document. False if it no longer exists."""
-    row = conn.execute("""SELECT d.id, d.text, c.lang FROM documents d
+    row = conn.execute("""SELECT d.id, d.text, d.segmented, c.lang FROM documents d
                           JOIN corpora c ON c.id=d.corpus_id WHERE d.id=?""", (doc_id,)).fetchone()
     if not row:
         return False
     pipeline = nlp.pipeline_name(row["lang"])
-    tokens = list(nlp.annotate(row["text"], row["lang"], progress))  # annotate first: failure keeps old tokens
+    spans: list[tuple[int, int]] = []
+    # annotate first: if it fails the old tokens are kept
+    tokens = list(nlp.annotate(row["text"], row["lang"], progress, spans if row["segmented"] else None))
+    if row["segmented"] and (len(spans) != len(row["text"].split("\n")) or any(a == b for a, b in spans)):
+        raise ImportRejected(500, "A segment produced no tokens, so the alignment would be off", "alignment")
     conn.execute("DELETE FROM tokens WHERE doc_id=?", (doc_id,))
     conn.executemany("INSERT INTO tokens VALUES (?,?,?,?,?,?,?,?,?,?)", ((doc_id,) + t for t in tokens))
+    if row["segmented"]:
+        conn.execute("DELETE FROM segments WHERE doc_id=?", (doc_id,))
+        conn.executemany("INSERT INTO segments VALUES (?,?,?,?)",
+                         ((doc_id, i, a, b) for i, (a, b) in enumerate(spans)))
     conn.execute("UPDATE documents SET n_tokens=?, pipeline=?, lang_check=? WHERE id=?",
                  (sum(t[6] for t in tokens), pipeline, langcheck.check(row["text"], row["lang"])["verdict"],
                   doc_id))

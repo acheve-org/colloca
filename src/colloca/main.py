@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import analysis, db, importer, ingest, metadata, nlp, termbase, termexport
+from . import analysis, db, importer, ingest, metadata, nlp, parallel, termbase, termexport
 
 
 @asynccontextmanager
@@ -312,7 +312,7 @@ def list_documents(corpus_id: int):
         corpus = _corpus(conn, corpus_id)
         rows = conn.execute(
             """SELECT id,title,source,kind,text_type,doc_date,author,n_tokens,pipeline,lang_check,added,
-                      LENGTH(text) AS chars
+                      segmented,pair_doc_id,LENGTH(text) AS chars
                FROM documents WHERE corpus_id=? ORDER BY id""", (corpus_id,)).fetchall()
         tags = _tags_by_doc(conn, corpus_id)
     try:
@@ -367,6 +367,87 @@ async def upload(corpus_id: int, files: list[UploadFile] = File(...), tags: str 
                               importer.import_file(corpus_id, name, data, meta, force_language, sentences))
         results.append({"file": name, "ok": True, "job_id": job.id})
     return results
+
+
+@app.post("/api/corpora/{corpus_id}/upload-pairs", status_code=202)
+async def upload_pairs(corpus_id: int, files: list[UploadFile] = File(...), partner_corpus_id: int | None = None,
+                       partner_name: str = "", swap: bool = False, tags: str = "", text_type: str = "",
+                       doc_date: str = "", author: str = "", force_language: bool = False):
+    """Import aligned texts (TMX, or two-column .tsv/.csv/.docx table) into this corpus and a partner corpus of
+    the other language: pass `partner_corpus_id`, or `partner_name` to create the partner corpus (same project).
+    This corpus receives the first language / column, the partner the second (`swap` flips two-column files)."""
+    meta = _meta(tags, text_type, doc_date, author)
+    with db.session() as conn:
+        corpus = _corpus(conn, corpus_id)
+        if corpus["is_reference"]:
+            raise HTTPException(400, "A base corpus cannot hold aligned texts")
+        if partner_corpus_id is not None:
+            partner = _corpus(conn, partner_corpus_id)
+            if partner["id"] == corpus_id or partner["lang"] == corpus["lang"] or partner["is_reference"]:
+                raise HTTPException(400, "The partner must be another, non-base corpus in the other language")
+            partner_id = partner["id"]
+        elif partner_name.strip():
+            partner_id = conn.execute(
+                "INSERT INTO corpora (name,lang,description,project_id) VALUES (?,?,?,?)",
+                (partner_name.strip()[:120], termbase.other_lang(corpus["lang"]),
+                 f"Translations of “{corpus['name']}”", corpus["project_id"])).lastrowid
+        else:
+            raise HTTPException(400, "Choose the partner corpus (partner_corpus_id) or name a new one (partner_name)")
+    if len(files) > ingest.MAX_UPLOAD_FILES:
+        raise HTTPException(413, f"Too many files in one upload (limit {ingest.MAX_UPLOAD_FILES})")
+    results = []
+    for f in files:
+        name = f.filename or "file"
+        data = await f.read(ingest.MAX_UPLOAD_BYTES + 1)
+        if len(data) > ingest.MAX_UPLOAD_BYTES:
+            results.append({"file": name, "ok": False, "error": "File is larger than "
+                            f"{ingest.MAX_UPLOAD_BYTES // 1024 // 1024} MB (set MAX_UPLOAD_MB to change)"})
+            continue
+        job = importer.submit(corpus_id, "import", name, parallel.import_pairs(
+            corpus_id, partner_id, name, data, swap, meta, force_language))
+        results.append({"file": name, "ok": True, "job_id": job.id, "partner_corpus_id": partner_id})
+    return results
+
+
+@app.get("/api/corpora/{corpus_id}/parallel")
+def parallel_info(corpus_id: int):
+    """Aligned documents of this corpus and the corpora holding their translations."""
+    with db.session() as conn:
+        _corpus(conn, corpus_id)
+        row = conn.execute("""SELECT COUNT(*) AS docs, COALESCE(SUM(s.n),0) AS segments FROM documents d
+                              LEFT JOIN (SELECT doc_id, COUNT(*) AS n FROM segments GROUP BY doc_id) s ON s.doc_id=d.id
+                              WHERE d.corpus_id=? AND d.segmented=1 AND d.pair_doc_id IS NOT NULL""",
+                           (corpus_id,)).fetchone()
+        partners = conn.execute("""SELECT DISTINCT c.id, c.name, c.lang FROM documents d
+                                   JOIN documents p ON p.id=d.pair_doc_id JOIN corpora c ON c.id=p.corpus_id
+                                   WHERE d.corpus_id=? ORDER BY c.name""", (corpus_id,)).fetchall()
+        return {"documents": row["docs"], "segments": row["segments"], "partners": [dict(r) for r in partners]}
+
+
+@app.get("/api/corpora/{corpus_id}/bilingual")
+def bilingual(corpus_id: int, q: str, unit: str = "lemma", width: int = Query(8, le=40),
+              limit: int = Query(300, le=2000), sort: str = "doc", format: str = "json",
+              sq: ScopeQuery = Depends()):
+    """Concordance over aligned documents, each hit with its segment and the aligned translation."""
+    with db.session() as conn:
+        _corpus(conn, corpus_id)
+        res = _run(parallel.bilingual_concordance, conn, sq.scope(corpus_id), q, unit, width, limit, sort)
+    if format == "csv":
+        return _reply([{k: v for k, v in ln.items() if k not in ("pos", "doc_id")} for ln in res["lines"]],
+                      format, "bilingual")
+    return res
+
+
+@app.get("/api/corpora/{corpus_id}/equivalents")
+def equivalents(corpus_id: int, q: str, unit: str = "lemma", min_freq: int = 2, exclude_stop: bool = True,
+                pos: str | None = None, limit: int = Query(100, le=1000), format: str = "json",
+                sq: ScopeQuery = Depends()):
+    """Candidate translations of a word or phrase, from the aligned segments of its occurrences."""
+    with db.session() as conn:
+        _corpus(conn, corpus_id)
+        res = _run(parallel.equivalents, conn, sq.scope(corpus_id), q, unit, min_freq, exclude_stop,
+                   _pos_list(pos), limit)
+    return _reply(res["rows"], format, "equivalents") if format == "csv" else res
 
 
 @app.get("/api/corpora/{corpus_id}/jobs")

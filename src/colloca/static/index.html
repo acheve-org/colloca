@@ -81,6 +81,7 @@
   <button data-tab="frequency">Frequency</button>
   <button data-tab="concordance">Concordance</button>
   <button data-tab="collocations">Collocations</button>
+  <button data-tab="equivalents" id="tabEquiv" hidden>Equivalents</button>
   <button data-tab="ngrams">N-grams</button>
   <button data-tab="keyness">Keyness</button>
   <button data-tab="cloud">Word cloud</button>
@@ -131,6 +132,17 @@
       </div>
     </div>
     <div class="card">
+      <h3>Import aligned texts (translation memory)</h3>
+      <input type="file" id="pairFile" accept=".tmx,.tsv,.csv,.docx">
+      <label>Translations go to <select id="pairPartner"></select></label>
+      <input id="pairName" placeholder="name of the new corpus" hidden>
+      <label><input type="checkbox" id="pairSwap"> two-column files: this corpus is the <b>second</b> column</label>
+      <button id="pairBtn" class="primary">Import</button>
+      <p class="muted">TMX, or two columns (source | target) as .tsv/.csv or a .docx table. This corpus receives the
+      first language; the other-language texts go to the corpus you choose. Each side stays a normal corpus,
+      aligned segment by segment.</p>
+    </div>
+    <div class="card">
       <h3>Upload documents</h3>
       <input type="file" id="fileIn" multiple accept=".docx,.pdf,.txt,.md,.html,.htm">
       <button id="uploadBtn" class="primary">Upload</button>
@@ -162,6 +174,7 @@
 <section id="tab-concordance" class="tab">
   <div class="controls">
     <input id="ccQ" placeholder="word or phrase" size="24">
+    <label id="ccAlignedBox" hidden title="Only aligned documents; adds the aligned translation"><input type="checkbox" id="ccAligned"> show translation</label>
     <label>Match <select id="ccUnit"><option value="lemma">lemma</option><option value="form">exact form</option></select></label>
     <label>Context <input id="ccW" type="number" value="8" min="2" max="40" style="width:4em"></label>
     <label>Sort <select id="ccSort"><option value="doc">document</option><option value="left">left context</option><option value="right">right context</option></select></label>
@@ -169,6 +182,21 @@
   </div>
   <div id="ccInfo" class="muted"></div>
   <div class="result" id="ccOut"></div>
+</section>
+
+<section id="tab-equivalents" class="tab">
+  <div class="controls">
+    <input id="eqQ" placeholder="source word or phrase" size="24">
+    <label>Match <select id="eqUnit"><option value="lemma">lemma</option><option value="form">exact form</option></select></label>
+    <label>Min segments <input id="eqMin" type="number" value="2" min="1" style="width:3.5em"></label>
+    <label>POS <input id="eqPos" placeholder="e.g. NOUN" size="8"></label>
+    <button id="eqGo" class="primary">Find</button><a id="eqCsv" class="csv">CSV</a>
+  </div>
+  <div id="eqInfo" class="muted"></div>
+  <p class="muted">Candidate translations: target-language lemmas that keep turning up in the aligned segments of the term.
+  Dice (0–1) compares that with how often each lemma occurs in the target text overall, so everyday words score low.
+  Check the concordance with “show translation” before adopting one, and use <b>+ term</b> to add it to the termbase.</p>
+  <div class="result" id="eqOut"></div>
 </section>
 
 <section id="tab-collocations" class="tab">

@@ -3,7 +3,7 @@ services:
     build:
       context: .
       args:
-        SPACY_SIZE: md          # sm | md | lg
+        SPACY_SIZE: lg          # sm | md | lg
     ports:
       - "127.0.0.1:8000:8000"   # local only; change deliberately to expose on a network
     volumes:
