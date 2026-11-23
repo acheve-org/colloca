@@ -13,10 +13,6 @@ dependencies = [
     "python-docx>=1.1",
     "pypdf>=4.2",
     "spacy>=3.7,<3.9",
-    # spaCy models are not on PyPI; installed from the spaCy releases.
-    # Swap "sm" for "md"/"lg" (and set SPACY_SIZE) for better lemmas.
-    "es-core-news-sm",
-    "it-core-news-sm",
     "openpyxl>=3.1.5",
     "defusedxml>=0.7.1",
 ]
@@ -25,8 +21,12 @@ dependencies = [
 colloca-import-reference = "colloca.cli:main"
 
 [dependency-groups]
+# spaCy models are not on PyPI (spaCy releases). The Docker image does not bundle them: they are
+# mounted from the models volume. Locally, the small ones are installed for dev and tests.
 dev = [
     "pytest>=8",
+    "es-core-news-sm",
+    "it-core-news-sm",
     "ruff>=0.17.6",
 ]
 

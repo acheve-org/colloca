@@ -10,11 +10,15 @@ Everything stays on your machine: one SQLite file in a Docker volume, no externa
 ## Run
 
 ```bash
-docker compose up --build        # first build downloads the spaCy models and builds the UI
+docker compose build            # builds the UI too
+docker compose run --rm models   # one-off: download spaCy models into `~/.spacy` on the host
+docker compose up
 # open http://localhost:8000
 ```
 
-Use faster/smaller models with `SPACY_SIZE=sm` (edit `docker-compose.yml`). Data lives in the
+The image does not bundle the spaCy models; they live in `~/.spacy` on the host (mounted at `/models`), which keeps the
+image small and lets you swap sizes without rebuilding: `SPACY_SIZE=sm|md|lg docker compose run --rm models`
+(and set `SPACY_SIZE` for the `colloca` service in `docker-compose.yml` to prefer it). Data lives in the
 `colloca-data` volume; back it up with `docker run --rm -v colloca-data:/d -v $PWD:/b alpine tar czf /b/colloca-backup.tgz -C /d .`.
 
 ## Workflow
@@ -152,7 +156,7 @@ Tooling: [mise](https://mise.jdx.dev) (Python 3.14 + uv) and [uv](https://docs.a
 
 ```bash
 mise install                  # Python 3.14 and uv
-mise run sync                 # uv sync: dependencies + spaCy models (sm)
+mise run sync                 # uv sync: dependencies + small spaCy models (dev group)
 mise run test                 # uv run pytest
 mise run lint                 # uv run ruff check . (CI runs lint + tests on every push and PR)
 mise run dev                  # uvicorn with auto-reload on http://localhost:8000

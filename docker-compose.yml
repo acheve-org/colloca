@@ -1,16 +1,36 @@
+x-colloca: &colloca
+  build: .
+  image: colloca:local
+  volumes:
+    - colloca-data:/data        # SQLite database lives here
+    - ${HOME}/.spacy:/models    # spaCy models from the host's ~/.spacy (not baked into the image)
+
 services:
   colloca:
-    build:
-      context: .
-      args:
-        SPACY_SIZE: lg          # sm | md | lg
+    <<: *colloca
     ports:
       - "127.0.0.1:8000:8000"   # local only; change deliberately to expose on a network
-    volumes:
-      - colloca-data:/data      # SQLite database lives here
     environment:
+      SPACY_SIZE: lg            # preferred model size: sm | md | lg
       # ALLOW_PRIVATE_URLS: "1" # allow fetching intranet URLs (off by default)
       MAX_DOWNLOAD_MB: "15"
     restart: unless-stopped
+
+  # One-off: download the spaCy models into ~/.spacy.
+  #   docker compose run --rm models                  # lg (default)
+  #   SPACY_SIZE=lg docker compose run --rm models    # or sm | md
+  models:
+    <<: *colloca
+    profiles: ["setup"]
+    environment:
+      SPACY_SIZE: ${SPACY_SIZE:-lg}
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        base=https://github.com/explosion/spacy-models/releases/download
+        uv pip install --no-cache --no-deps --target /models \
+          "$$base/es_core_news_$$SPACY_SIZE-3.8.0/es_core_news_$$SPACY_SIZE-3.8.0-py3-none-any.whl" \
+          "$$base/it_core_news_$$SPACY_SIZE-3.8.0/it_core_news_$$SPACY_SIZE-3.8.0-py3-none-any.whl"
+
 volumes:
   colloca-data:
