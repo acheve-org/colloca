@@ -85,19 +85,25 @@ def reference_corpus(conn, lang: str):
     return conn.execute("SELECT * FROM corpora WHERE lang=? AND is_reference=1", (lang,)).fetchone()
 
 
-def reference_counts(conn, ref_id: int, unit: str, items) -> dict[str, int]:
-    """Frequency of each of `items` (lemmas or forms) in the reference corpus; absent items map to 0."""
+def counts_for(conn, scope, unit: str, items) -> dict[str, int]:
+    """Frequency of each of `items` (lemmas or forms) in the selected documents; absent items map to 0."""
     col = _unit(unit)
+    w, scope_params = as_scope(scope).where()
     items = list(dict.fromkeys(items))
     out = dict.fromkeys(items, 0)
     for i in range(0, len(items), 500):                 # stay well below SQLite's parameter limit
         chunk = items[i:i + 500]
         rows = conn.execute(
             f"""SELECT t.{col} AS item, COUNT(*) AS c FROM tokens t JOIN documents d ON d.id=t.doc_id
-                WHERE d.corpus_id=? AND t.alpha=1 AND t.{col} IN ({",".join("?" * len(chunk))})
-                GROUP BY t.{col}""", [ref_id, *chunk]).fetchall()
+                WHERE {w} AND t.alpha=1 AND t.{col} IN ({",".join("?" * len(chunk))})
+                GROUP BY t.{col}""", [*scope_params, *chunk]).fetchall()
         out.update({r["item"]: r["c"] for r in rows})
     return out
+
+
+def reference_counts(conn, ref_id: int, unit: str, items) -> dict[str, int]:
+    """Frequency of each of `items` in the reference corpus; absent items map to 0."""
+    return counts_for(conn, Scope(ref_id), unit, items)
 
 
 def add_reference_columns(conn, rows: list[dict], ref_id: int, unit: str) -> None:

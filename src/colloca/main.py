@@ -6,12 +6,12 @@ import sqlite3
 from contextlib import asynccontextmanager
 from dataclasses import asdict
 
-from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import analysis, db, importer, ingest, metadata, nlp, parallel, termbase, termexport
+from . import analysis, db, importer, ingest, jobanalysis, metadata, nlp, parallel, termbase, termexport
 
 
 @asynccontextmanager
@@ -463,6 +463,61 @@ def get_job(job_id: int):
     return asdict(job)
 
 
+@app.post("/api/corpora/{corpus_id}/analyse-job", status_code=202)
+async def analyse_job(corpus_id: int, file: UploadFile | None = File(None), text: str = Form(""),
+                      min_freq: int = Query(2, ge=1), min_corpus_freq: int = Query(3, ge=1),
+                      force_language: bool = False, sq: ScopeQuery = Depends()):
+    """Analyse a text you are about to translate (an uploaded file, or `text`) against this corpus and its
+    project's termbase. Runs as a job; fetch the report from GET /api/jobs/{id}/result. Nothing is stored."""
+    with db.session() as conn:
+        corpus = dict(_corpus(conn, corpus_id))
+    if corpus["is_reference"]:
+        raise HTTPException(400, "Pick one of your own corpora, not a base corpus")
+    scope = sq.scope(corpus_id)
+    if file is not None and file.filename:
+        data = await file.read(ingest.MAX_UPLOAD_BYTES + 1)
+        if len(data) > ingest.MAX_UPLOAD_BYTES:
+            raise HTTPException(413, f"File is larger than {ingest.MAX_UPLOAD_BYTES // 1024 // 1024} MB")
+        name = file.filename
+    elif text.strip():
+        data, name = None, "pasted text"
+    else:
+        raise HTTPException(400, "Upload a file or paste the text to analyse")
+
+    def work(job):
+        body = ingest.read_file(name, data)["text"] if data is not None else text
+        with db.session() as conn:
+            job.payload = jobanalysis.analyse(conn, scope, corpus, body, min_freq=min_freq,
+                                              min_corpus_freq=min_corpus_freq, force_language=force_language,
+                                              progress=job.set_progress)
+        return {"summary": job.payload["summary"]}
+    job = importer.submit(corpus_id, "analysis", name, work)
+    return {"job_id": job.id}
+
+
+_JOB_SECTIONS = ("key_terms", "gaps", "known_terms", "phrases")
+
+
+@app.get("/api/jobs/{job_id}/result")
+def job_result(job_id: int, section: str = "", format: str = "json"):
+    """The report of an analysis job; `section` + `format=csv` downloads one table."""
+    job = importer.get_job(job_id)
+    if not job:
+        raise HTTPException(404, "Job not found")
+    if job.status != "done" or job.payload is None:
+        raise HTTPException(409, "The job has no result (yet)")
+    if not section:
+        return job.payload
+    if section not in _JOB_SECTIONS:
+        raise HTTPException(400, f"section must be one of {', '.join(_JOB_SECTIONS)}")
+    rows = job.payload[section]
+    if section == "known_terms":
+        rows = [{"term": r["item"], "occurrences": r["occurrences"], "example": r["example"],
+                 "translations": "; ".join(f"{t['term'] or '—'} [{t['status']}]" for t in r["translations"])}
+                for r in rows]
+    return _reply(rows, format, section)
+
+
 @app.post("/api/corpora/{corpus_id}/reannotate", status_code=202)
 def reannotate(corpus_id: int, only_stale: bool = True):
     """Re-run the current NLP model over the stored texts (all documents, or just outdated ones)."""
@@ -728,14 +783,20 @@ _EXPORTS = {"csv": ("text/csv; charset=utf-8", "csv"), "xlsx": (
 
 @app.get("/api/terms/export")
 def export_terms(format: str = "tbx", project: str = "", src_lang: str = "", tgt_lang: str = "",
-                 status: str = "approved"):
+                 status: str = "approved", ids: str = ""):
     """Download the termbase as `tbx` (ISO 30042:2019), `tbx2` (ISO 30042:2008, most CAT tools),
-    `xlsx` or `csv`. By default only approved entries; pass status=approved,candidate to include candidates."""
+    `xlsx` or `csv`. By default only approved entries; pass status=approved,candidate to include candidates.
+    `ids=1,2,3` exports exactly those entries (any status), e.g. the glossary of an analysed job."""
     if format not in _EXPORTS:
         raise HTTPException(400, f"format must be one of {', '.join(_EXPORTS)}")
     try:
         with db.session() as conn:
-            rows = termbase.list_terms(conn, project, src_lang, tgt_lang, tuple(x for x in status.split(",") if x))
+            if ids:
+                wanted = {int(x) for x in ids.split(",") if x.strip().isdigit()}
+                rows = [r for r in termbase.list_terms(conn, project, src_lang, tgt_lang) if r["id"] in wanted]
+            else:
+                rows = termbase.list_terms(conn, project, src_lang, tgt_lang,
+                                           tuple(x for x in status.split(",") if x))
     except termbase.TermError as exc:
         raise _term_error(exc) from exc
     if format == "csv":

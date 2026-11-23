@@ -13,6 +13,7 @@ import threading
 from collections.abc import Callable, Iterable, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field
+from typing import ClassVar
 
 from . import db, ingest, langcheck, metadata, nlp
 
@@ -183,6 +184,9 @@ class Job:
     error: str = ""
     code: str = ""
     result: dict = field(default_factory=dict)
+    # A big result a job wants to hand back (e.g. an analysis report). Not a dataclass field, so it never
+    # travels in the job lists the UI polls; fetch it with GET /api/jobs/{id}/result.
+    payload: ClassVar[dict | None] = None
 
     def set_progress(self, fraction: float) -> None:
         self.progress = round(min(max(fraction, 0.0), 1.0), 3)

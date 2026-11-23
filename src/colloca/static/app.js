@@ -498,6 +498,64 @@ $("eqGo").onclick = busy($("eqGo"), async () => {
 });
 $("eqQ").addEventListener("keydown", (e) => { if (e.key === "Enter") $("eqGo").click(); });
 
+// ------------------------------------------------------------------ job analysis (text to translate)
+const STATUS_CLS = { approved: "okb", forbidden: "warn forbid", candidate: "" };
+function pct(v) { return `${v}%`; }
+function renderJobReport(rep, jobId) {
+  const s = rep.summary, sec = (name) => `/api/jobs/${jobId}/result?${qs({ section: name, format: "csv" })}`;
+  const stat = (label, value, hint = "") => `<div class="stat" title="${esc(hint)}"><b>${value}</b><span>${esc(label)}</span></div>`;
+  const ids = rep.known_terms.flatMap((k) => k.ids);
+  const glossary = (fmt) => `/api/terms/export?${qs({ format: fmt, ids: ids.join(",") })}`;
+  const tbBadge = (t) => t ? `<span class="badge ${t === "(candidate)" ? "" : "okb"}">${esc(t)}</span>` : "";
+  $("jobReport").innerHTML = `
+    <div class="stats">
+      ${stat("words", s.words.toLocaleString())}${stat("different words", s.distinct_lemmas, "distinct lemmas (content words)")}
+      ${stat(`covered (≥${s.min_corpus_freq}×)`, pct(s.coverage_tokens_pct), "share of the text's content words whose lemma occurs at least this often in the corpus")}
+      ${stat("seen at all", pct(s.coverage_seen_pct), "share of content words the corpus has at least once")}
+      ${stat("gaps", s.uncovered_types, "different words below the coverage threshold")}
+      ${stat("termbase terms found", `${s.termbase_terms_found} / ${s.termbase_size}`)}
+    </div>
+    ${s.corpus_words ? "" : `<p class="err">This corpus has no text yet, so nothing is covered.</p>`}
+    ${s.language_check === "uncertain" ? `<p class="muted">The text does not clearly look like Spanish or Italian; results may be unreliable.</p>` : ""}
+    <h3>Termbase terms in this text <a class="csv" href="${sec("known_terms")}">CSV</a>
+      ${ids.length ? ` · glossary for this job: <a class="csv" href="${glossary("tbx2")}">TBX</a> <a class="csv" href="${glossary("xlsx")}">Excel</a> <a class="csv" href="${glossary("csv")}">CSV</a>` : ""}</h3>
+    <div class="result">${rep.known_terms.length ? `<table><thead><tr><th>Term</th><th class="num">Times</th><th>Translations</th><th>First occurrence</th></tr></thead><tbody>` +
+      rep.known_terms.map((k) => `<tr><td><b>${esc(k.item)}</b></td><td class="num">${k.occurrences}</td>
+        <td>${k.translations.map((t) => `<span class="badge ${STATUS_CLS[t.status]}" title="${t.status}${t.status === "forbidden" ? " — do not use" : ""}">${esc(t.term || "—")}${t.status === "forbidden" ? " ✗" : ""}</span>`).join(" ")}</td>
+        <td class="muted ctx" title="${esc(k.example)}">${esc(k.example)}</td></tr>`).join("") + "</tbody></table>"
+      : `<p class="muted" style="padding:.6rem">No termbase entry occurs in the text${s.termbase_size ? "" : " (the termbase for this project is empty)"}.</p>`}</div>
+    <h3>Gaps: words the corpus has little or no evidence for <a class="csv" href="${sec("gaps")}">CSV</a></h3>
+    <div id="jobGaps" class="result"></div>
+    <h3>Key terms of the text ${s.reference ? "(compared with the base corpus)" : "(most frequent; add a base corpus to rank by distinctiveness)"} <a class="csv" href="${sec("key_terms")}">CSV</a></h3>
+    <div id="jobKeys" class="result"></div>
+    <h3>Repeated phrases <a class="csv" href="${sec("phrases")}">CSV</a></h3>
+    <div id="jobPhrases" class="result"></div>`;
+  table([{ key: "item", label: "Lemma" }, { key: "pos", label: "POS" }, { key: "job_freq", label: "In text", num: 1 }, { key: "corpus_freq", label: "In corpus", num: 1 }, { key: "termbase", label: "Termbase" }],
+        rep.gaps.map((g) => ({ ...g, termbase: g.termbase })), $("jobGaps"), ["item"], "job");
+  table([{ key: "item", label: "Lemma" }, { key: "pos", label: "POS" }, { key: "job_freq", label: "In text", num: 1 }, { key: "corpus_freq", label: "In corpus", num: 1 },
+         ...(s.reference ? [{ key: "base_per_million", label: "Base per M", num: 1 }, { key: "ll", label: "LL", num: 1 }] : []), { key: "termbase", label: "Termbase" }],
+        rep.key_terms, $("jobKeys"), ["item"], "job");
+  table([{ key: "item", label: "Phrase" }, { key: "job_freq", label: "In text", num: 1 }, { key: "corpus_freq", label: "In corpus", num: 1 }], rep.phrases, $("jobPhrases"), ["item"], "job");
+}
+$("jobGo").onclick = busy($("jobGo"), async () => {
+  const f = $("jobFile").files[0], text = $("jobText").value;
+  if (!f && !text.trim()) return say("Choose a file or paste the text to analyse.", "err");
+  const fd = new FormData(); if (f) fd.append("file", f); else fd.append("text", text);
+  const params = { min_freq: $("jobMinFreq").value, min_corpus_freq: $("jobMinCorpus").value, force_language: $("jobForce").checked, ...scopeParams() };
+  const { job_id } = await api(`${base()}/analyse-job?${qs(params)}`, { method: "POST", body: fd });
+  $("jobReport").innerHTML = "";
+  for (;;) {
+    const j = await api(`/api/jobs/${job_id}`);
+    if (j.status === "error") { $("jobProgress").textContent = ""; throw new Error(j.error); }
+    if (j.status === "done") break;
+    $("jobProgress").innerHTML = j.status === "queued" ? "queued…" : `<progress max="100" value="${Math.round(j.progress * 100)}"></progress> analysing…`;
+    await new Promise((r) => setTimeout(r, 700));
+  }
+  $("jobProgress").textContent = "";
+  renderJobReport(await api(`/api/jobs/${job_id}/result`), job_id);
+  say("");
+});
+
 // ------------------------------------------------------------------ word cloud (self-contained spiral layout)
 $("wcGo").onclick = busy($("wcGo"), async () => {
   const pos = posParam("wcPos"), n = +$("wcN").value;

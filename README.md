@@ -63,6 +63,25 @@ and search them side by side:
   with the translated concordance, then **+ term** adds the pair to the termbase with the example sentence.
 - TMX is parsed with `defusedxml`, so a hostile file (entity bombs, external entities) is refused.
 
+## Analyse a job before translating
+
+The **Job** tab takes the text you are about to translate (a DOCX, PDF, TXT or HTML file, or pasted text) and reports,
+against the current corpus (narrowed by the filter bar, if set) and the termbase of its project:
+
+- **Coverage**: the share of the text's content words whose lemma occurs at least *N* times in the corpus (default 3),
+  the share seen at all, and the number of different words below the threshold.
+- **Gaps**: the words the corpus has little or no evidence for, least evidence first, each with a **+ term** link.
+- **Key terms**: the words characteristic of the text compared with the language's base corpus (log-likelihood; words
+  that occur at least twice). Without a base corpus the most frequent words are listed instead.
+- **Termbase terms in the text**: every entry whose source term occurs (by word form or lemma, so inflected entries
+  match), how often, its first sentence, and all translations with their status; forbidden ones are struck through.
+  *Glossary for this job* exports exactly those entries as TBX, Excel or CSV (`/api/terms/export?ids=...`).
+- **Repeated phrases** (2–4 words, no stopword at the edges) with how often the corpus already uses them.
+
+The text is analysed and then forgotten: nothing is added to any corpus. The analysis runs as a background job
+(`POST /api/corpora/{id}/analyse-job`, report at `GET /api/jobs/{id}/result`; each table also as CSV with
+`?section=gaps|key_terms|known_terms|phrases&format=csv`). The report is kept in memory only, like job statuses.
+
 ## Termbase
 
 Turn what you find into terminology you can reuse and hand over:
