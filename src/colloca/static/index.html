@@ -85,6 +85,7 @@
   <button data-tab="ngrams">N-grams</button>
   <button data-tab="keyness">Keyness</button>
   <button data-tab="cloud">Word cloud</button>
+  <button data-tab="job">Job</button>
   <button data-tab="terms">Termbase</button>
   <button data-tab="base">Base corpora</button>
 </nav>
@@ -245,6 +246,26 @@
     <button id="wcGo" class="primary">Draw</button><button id="wcPng">Save PNG</button>
   </div>
   <canvas id="wcCanvas" width="1000" height="560"></canvas>
+</section>
+
+<section id="tab-job" class="tab">
+  <p class="muted">Analyse a text <b>before you translate it</b> against this corpus and its project's termbase: how much of its
+  vocabulary the corpus covers, where it has no evidence, which terms are characteristic of the text, which termbase entries occur
+  (and which translations to avoid), and which phrases it repeats. The text is analysed and forgotten; nothing is added to the corpus.
+  The filter bar above narrows the corpus used as evidence.</p>
+  <div class="cards">
+    <div class="card">
+      <input type="file" id="jobFile" accept=".docx,.pdf,.txt,.md,.html,.htm">
+      <textarea id="jobText" rows="5" placeholder="…or paste the text here"></textarea>
+      <div class="row">
+        <label title="Words that occur at least this many times in the text count as key terms"><input id="jobMinFreq" type="number" value="2" min="1" style="width:3.5em"> min. times in text</label>
+        <label title="A word is covered when the corpus has at least this many occurrences"><input id="jobMinCorpus" type="number" value="3" min="1" style="width:3.5em"> well covered from</label>
+      </div>
+      <label class="force"><input type="checkbox" id="jobForce"> analyse even if the language looks wrong</label>
+      <button id="jobGo" class="primary">Analyse</button> <span id="jobProgress" class="muted"></span>
+    </div>
+  </div>
+  <div id="jobReport"></div>
 </section>
 
 <section id="tab-terms" class="tab">
