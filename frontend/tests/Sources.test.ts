@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/sve
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Sources from '../src/screens/Sources.svelte';
 import { CORPUS_CHANGED, corpusStore } from '../src/lib/corpus.svelte';
-import { jobs } from '../src/lib/jobs.svelte';
+import { jobs, stopAllJobs } from '../src/lib/jobs.svelte';
 import { messages } from '../src/lib/messages.svelte';
 import type { Doc, Job } from '../src/lib/types';
 
@@ -68,6 +68,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  stopAllJobs();
   vi.useRealTimers();
   vi.unstubAllGlobals();
   corpusStore.list = [];
@@ -144,6 +145,26 @@ describe('Sources', () => {
     await vi.advanceTimersByTimeAsync(1000);
     await waitFor(() => expect(docCalls().length).toBe(docsBefore + 1));
     expect(jobs.running).toBe(0);
+  });
+
+  it('a job keeps being followed after the screen unmounts; the store reloads once when it ends', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const r = await ready();
+    jobList = [[job(7, 'running')], [job(7, 'running')], [job(7, 'done')]];
+    await fireEvent.change(screen.getByLabelText('Documents to upload'), { target: { files: [new File(['x'], 'a.txt')] } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Upload' }));
+    await waitFor(() => expect(jobs.running).toBe(1));
+    r.unmount();
+    const before = jobCalls().length;
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(jobCalls().length).toBe(before + 1);
+    expect(jobs.running).toBe(1);
+    await vi.advanceTimersByTimeAsync(1000);
+    await waitFor(() => expect(calls.filter((c) => c.path === '/api/corpora').length).toBe(1));
+    expect(jobs.running).toBe(0);
+    await waitFor(() => expect(calls.some((c) => c.path === '/api/corpora/1/parallel')).toBe(true));
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(calls.filter((c) => c.path === '/api/corpora').length).toBe(1);
   });
 
   it('a failing upload shows the server detail message', async () => {
@@ -258,6 +279,8 @@ describe('Sources', () => {
     docs.body = [doc(1, { stale: true }), doc(2)];
     await ready();
     expect(screen.getByText('1 document annotated with an older NLP model.')).toBeInTheDocument();
+    await fireEvent.click(bodyRows()[0]);
+    expect(screen.getByRole('button', { name: 'Re-annotate all outdated' })).toBeInTheDocument();
     await fireEvent.click(screen.getByRole('button', { name: 'Re-annotate with current model' }));
     await waitFor(() => expect(calls.some((c) => c.path === '/api/corpora/1/reannotate')).toBe(true));
     expect(calls.find((c) => c.path === '/api/corpora/1/reannotate')!.params.get('only_stale')).toBe('true');

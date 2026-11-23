@@ -342,7 +342,7 @@ const en: Record<string, string> = {
   'src.reann.info': '{n} documents annotated with an older NLP model.',
   'src.reann.info1': '1 document annotated with an older NLP model.',
   'src.reann.go': 'Re-annotate with current model',
-  'src.reann.short': 'Re-annotate outdated',
+  'src.reann.short': 'Re-annotate all outdated',
   'src.reann.hint': 'Re-annotates every document of this corpus annotated with an older model',
   'src.reann.started': 'Re-annotation started.',
   'src.col.title': 'Title',

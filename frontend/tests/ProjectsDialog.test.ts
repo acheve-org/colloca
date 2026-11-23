@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/sve
 import { tick } from 'svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import CorpusSwitcher from '../src/lib/ui/CorpusSwitcher.svelte';
-import ProjectsDialog from '../src/screens/ProjectsDialog.svelte';
+import ProjectsDialog from '../src/lib/ui/ProjectsDialog.svelte';
 import { corpusStore } from '../src/lib/corpus.svelte';
 import { messages } from '../src/lib/messages.svelte';
 import { projectStore } from '../src/lib/projects.svelte';

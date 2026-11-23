@@ -1,12 +1,12 @@
 <script lang="ts">
-  import { del, patch, post } from '../lib/api';
-  import { corpusStore } from '../lib/corpus.svelte';
-  import { t } from '../lib/i18n';
-  import { messages } from '../lib/messages.svelte';
-  import { projectStore, reloadProjects } from '../lib/projects.svelte';
-  import type { Project } from '../lib/types';
-  import Button from '../lib/ui/Button.svelte';
-  import Dialog from '../lib/ui/Dialog.svelte';
+  import { del, patch, post } from '../api';
+  import { corpusStore } from '../corpus.svelte';
+  import { t } from '../i18n';
+  import { messages } from '../messages.svelte';
+  import { projectStore, reloadProjects } from '../projects.svelte';
+  import type { Project } from '../types';
+  import Button from './Button.svelte';
+  import Dialog from './Dialog.svelte';
 
   let { open = $bindable(false) }: { open: boolean } = $props();
 

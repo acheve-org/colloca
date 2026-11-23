@@ -6,7 +6,7 @@
   import { messages } from '../messages.svelte';
   import { inProject, projectStore, reloadProjects } from '../projects.svelte';
   import type { Corpus, Languages } from '../types';
-  import ProjectsDialog from '../../screens/ProjectsDialog.svelte';
+  import ProjectsDialog from './ProjectsDialog.svelte';
   import Button from './Button.svelte';
   import Dialog from './Dialog.svelte';
   import Field from './Field.svelte';

@@ -1,7 +1,8 @@
 import { render, screen } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import StatusLine from '../src/lib/ui/StatusLine.svelte';
-import { jobs, watchJobs } from '../src/lib/jobs.svelte';
+import { JOBS_DONE, jobLogs, jobs, startJobTracking, stopAllJobs, trackJobs, watchJobs } from '../src/lib/jobs.svelte';
+import { corpusStore } from '../src/lib/corpus.svelte';
 import { messages } from '../src/lib/messages.svelte';
 import type { Job } from '../src/lib/types';
 
@@ -28,6 +29,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  stopAllJobs();
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
@@ -118,14 +120,34 @@ describe('watchJobs', () => {
     expect(jobs.running).toBe(0);
   });
 
-  it('a failing poll reports the server detail and stops', async () => {
+  it('retries a failed poll once, then reports the server detail and stops', async () => {
     fail = 'gone';
     const onDone = vi.fn();
-    watchJobs(4, onDone);
-    await vi.advanceTimersByTimeAsync(3000);
+    const onStop = vi.fn();
+    watchJobs(4, onDone, { onStop });
+    await vi.advanceTimersByTimeAsync(0);
     expect(fetches.length).toBe(1);
+    expect(messages.current).toBeNull();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(fetches.length).toBe(2);
     expect(messages.current).toEqual({ text: 'gone', kind: 'err' });
     expect(onDone).not.toHaveBeenCalled();
+    expect(onStop).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('a poll that fails once and then works keeps polling without an error', async () => {
+    responses = [[job(1, 'running')], [job(1, 'done', 1)]];
+    fail = 'blip';
+    const onDone = vi.fn();
+    watchJobs(4, onDone, { started: true });
+    await vi.advanceTimersByTimeAsync(0);
+    fail = null;
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(jobs.running).toBe(1);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(onDone).toHaveBeenCalledTimes(1);
+    expect(messages.current).toBeNull();
   });
 
   it('StatusLine shows a progress strip while jobs run', async () => {
@@ -138,5 +160,94 @@ describe('watchJobs', () => {
     expect(screen.getByRole('progressbar')).toHaveAttribute('value', '25');
     await vi.advanceTimersByTimeAsync(1000);
     expect(screen.queryByText(/job running/)).not.toBeInTheDocument();
+  });
+});
+
+describe('app-level job tracking', () => {
+  let state: Record<number, Job[][]>;
+  let paths: string[];
+
+  beforeEach(() => {
+    paths = [];
+    state = { 1: [[]], 2: [[]] };
+    corpusStore.list = [
+      { id: 1, name: 'A', lang: 'es', project_id: null, is_reference: 0, docs: 1, tokens: 1 },
+      { id: 2, name: 'B', lang: 'it', project_id: null, is_reference: 0, docs: 1, tokens: 1 },
+    ];
+    corpusStore.currentId = null;
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      paths.push(url);
+      const m = /^\/api\/corpora\/(\d+)\/jobs$/.exec(url);
+      let body: unknown = [];
+      if (m) {
+        const q = state[Number(m[1])] ?? [[]];
+        body = q.length > 1 ? q.shift()! : q[0];
+      } else if (url === '/api/corpora') body = corpusStore.list;
+      else if (url.endsWith('/parallel')) body = { documents: 1, segments: 2, partners: [] };
+      return { ok: true, status: 200, statusText: '', json: async () => body };
+    }));
+  });
+
+  afterEach(() => {
+    corpusStore.list = [];
+    corpusStore.currentId = null;
+  });
+
+  const polls = (id: number) => paths.filter((p) => p === `/api/corpora/${id}/jobs`).length;
+
+  it('follows the current corpus, and switching back and forth does not double-poll', async () => {
+    state[1] = [[job(1, 'running')]];
+    const stop = startJobTracking();
+    corpusStore.currentId = 1;
+    await vi.advanceTimersByTimeAsync(0);
+    expect(polls(1)).toBe(1);
+    corpusStore.currentId = 2;
+    await vi.advanceTimersByTimeAsync(0);
+    corpusStore.currentId = 1;
+    await vi.advanceTimersByTimeAsync(0);
+    expect(polls(2)).toBe(1);
+    expect(polls(1)).toBe(1);
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(polls(1)).toBe(4);
+    expect(jobs.running).toBe(1);
+    stop();
+  });
+
+  it('when tracked jobs finish: reloads the corpus store once, refreshes aligned and fires JOBS_DONE', async () => {
+    corpusStore.currentId = 1;
+    state[1] = [[job(1, 'running')], [job(1, 'done', 1)]];
+    const done = vi.fn();
+    window.addEventListener(JOBS_DONE, done);
+    trackJobs(1, true);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(jobLogs.by[1]).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1000);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(paths.filter((p) => p === '/api/corpora').length).toBe(1);
+    expect(paths).toContain('/api/corpora/1/parallel');
+    expect(corpusStore.aligned).toBe(true);
+    expect(done).toHaveBeenCalledTimes(1);
+    expect((done.mock.calls[0][0] as CustomEvent).detail).toEqual({ id: 1 });
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(paths.filter((p) => p === '/api/corpora').length).toBe(1);
+    window.removeEventListener(JOBS_DONE, done);
+  });
+
+  it('the teardown stops every watcher and leaks no timer', async () => {
+    state[1] = [[job(1, 'running')]];
+    state[2] = [[job(2, 'queued')]];
+    const stop = startJobTracking();
+    corpusStore.currentId = 1;
+    await vi.advanceTimersByTimeAsync(0);
+    trackJobs(2, true);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(jobs.running).toBe(2);
+    stop();
+    expect(jobs.running).toBe(0);
+    expect(vi.getTimerCount()).toBe(0);
+    const n = paths.length;
+    corpusStore.currentId = 2;
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(paths.length).toBe(n);
   });
 });

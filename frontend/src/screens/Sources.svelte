@@ -31,7 +31,7 @@
   import { del, get, patch, post, upload } from '../lib/api';
   import { CORPUS_CHANGED, corpusStore } from '../lib/corpus.svelte';
   import { t } from '../lib/i18n';
-  import { watchJobs } from '../lib/jobs.svelte';
+  import { JOBS_DONE, jobLogs, trackJobs } from '../lib/jobs.svelte';
   import { messages } from '../lib/messages.svelte';
   import { projectStore, reloadProjects } from '../lib/projects.svelte';
   import type { Doc, Facets, Job } from '../lib/types';
@@ -59,10 +59,13 @@
   let loading = $state(false);
   let loadedOnce = $state(false);
   let facets = $state.raw<Facets>(emptyFacets());
-  let jobLog = $state.raw<Job[]>([]);
+  // Jobs are followed app-wide (lib/jobs): leaving this screen does not stop them.
+  const jobLog = $derived.by(() => {
+    const id = corpusStore.currentId;
+    return id === null ? [] : (jobLogs.by[id] ?? []).slice(-8).reverse();
+  });
   let tableEl: HTMLElement | undefined = $state();
   let seq = 0;
-  let stopJobs: (() => void) | null = null;
 
   // What is being sent; the matching buttons are disabled meanwhile.
   let busy = $state<string | null>(null);
@@ -201,26 +204,14 @@
     loadFacets();
   }
 
-  /** Follows the jobs of the current corpus; `started` after submitting one. */
+  /** Follows the jobs of the current corpus app-wide; `started` after submitting one. */
   function watch(started: boolean): void {
-    stopJobs?.();
-    stopJobs = null;
     const id = corpusStore.currentId;
-    if (id === null) return;
-    stopJobs = watchJobs(
-      id,
-      () => {
-        if (corpusStore.currentId !== id) return;
-        refresh();
-        corpusStore.reload().catch((err) => messages.say(errMsg(err), 'err'));
-      },
-      {
-        started,
-        onUpdate: (list) => {
-          if (corpusStore.currentId === id) jobLog = list.slice(-8).reverse();
-        },
-      },
-    );
+    if (id !== null) trackJobs(id, started);
+  }
+
+  function onJobsDone(e: Event): void {
+    if ((e as CustomEvent<{ id: number }>).detail?.id === corpusStore.currentId) refresh();
   }
 
   function start(): void {
@@ -237,12 +228,9 @@
     filter = '';
     loadedOnce = false;
     facets = emptyFacets();
-    jobLog = [];
     preview = null;
     busy = null;
     partnerPicked = false;
-    stopJobs?.();
-    stopJobs = null;
     if (corpusStore.currentId !== null) start();
   }
 
@@ -255,11 +243,11 @@
 
   onMount(() => {
     window.addEventListener(CORPUS_CHANGED, onCorpusChanged);
+    window.addEventListener(JOBS_DONE, onJobsDone);
     reloadProjects().catch((err) => messages.say(errMsg(err), 'err'));
     return () => {
       window.removeEventListener(CORPUS_CHANGED, onCorpusChanged);
-      stopJobs?.();
-      stopJobs = null;
+      window.removeEventListener(JOBS_DONE, onJobsDone);
       seq++;
     };
   });
@@ -577,7 +565,7 @@
               fetchPreview();
             }}
           >
-            <input class="grow" type="url" bind:value={url} placeholder="https://…" aria-label={t('src.url.address')} />
+            <input class="grow" type="text" inputmode="url" bind:value={url} placeholder="https://…" aria-label={t('src.url.address')} />
             <Button type="submit" disabled={busy !== null}>{t('src.url.fetch')}</Button>
           </form>
           {#if preview}

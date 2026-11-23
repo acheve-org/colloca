@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/sve
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import BaseCorpora from '../src/screens/BaseCorpora.svelte';
 import { corpusStore } from '../src/lib/corpus.svelte';
-import { jobs } from '../src/lib/jobs.svelte';
+import { jobs, stopAllJobs } from '../src/lib/jobs.svelte';
 import { messages } from '../src/lib/messages.svelte';
 import type { Job } from '../src/lib/types';
 
@@ -55,6 +55,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  stopAllJobs();
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
@@ -121,17 +122,19 @@ describe('BaseCorpora', () => {
     await waitFor(() => expect(within(card('Spanish')).getByText('No base corpus yet.')).toBeInTheDocument());
   });
 
-  it('stops polling on unmount', async () => {
+  it('keeps following an upload after unmount; stopping all tracking leaks no timer', async () => {
     vi.useFakeTimers();
     jobList = [[job(3, 'running')]];
     const r = render(BaseCorpora);
     for (let i = 0; i < 5; i++) await vi.advanceTimersByTimeAsync(0);
     expect(jobs.running).toBe(1);
     r.unmount();
-    expect(jobs.running).toBe(0);
     const n = calls.filter((c) => c.path === '/api/corpora/10/jobs').length;
-    await vi.advanceTimersByTimeAsync(5000);
-    expect(calls.filter((c) => c.path === '/api/corpora/10/jobs').length).toBe(n);
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(calls.filter((c) => c.path === '/api/corpora/10/jobs').length).toBe(n + 2);
+    expect(jobs.running).toBe(1);
+    stopAllJobs();
+    expect(jobs.running).toBe(0);
     expect(vi.getTimerCount()).toBe(0);
   });
 });

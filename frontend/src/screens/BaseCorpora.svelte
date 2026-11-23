@@ -13,7 +13,7 @@
   import { del, get, post, upload } from '../lib/api';
   import { corpusStore } from '../lib/corpus.svelte';
   import { t } from '../lib/i18n';
-  import { watchJobs } from '../lib/jobs.svelte';
+  import { JOBS_DONE, jobLogs, trackJobs, untrackJobs } from '../lib/jobs.svelte';
   import { messages } from '../lib/messages.svelte';
   import type { Corpus, Job, Languages } from '../lib/types';
   import Button from '../lib/ui/Button.svelte';
@@ -28,15 +28,15 @@
   let loadedOnce = $state(false);
   let force = $state(false);
   let files = $state.raw<Record<number, File[]>>({});
-  let logs = $state.raw<Record<number, Job[]>>({});
+  // Jobs are followed app-wide (lib/jobs): they keep running and counting off this screen.
+  const logs = $derived(
+    Object.fromEntries(Object.entries(jobLogs.by).map(([id, list]) => [id, list.slice(-4).reverse()])) as Record<number, Job[]>,
+  );
   let busy = $state<string | null>(null);
   let delOpen = $state(false);
   let toDelete = $state.raw<Corpus | null>(null);
   const inputs: Record<number, HTMLInputElement | undefined> = $state({});
 
-  // One jobs watcher per base corpus, alive while this screen is mounted.
-  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- stop functions, not state
-  const watchers = new Map<number, () => void>();
   let seq = 0;
   let mounted = true;
 
@@ -55,37 +55,16 @@
       langs = l;
       refs = r;
       loadedOnce = true;
-      syncWatchers();
+      for (const x of r) trackJobs(x.id);
     } catch (err) {
       if (n !== seq) return;
       messages.say(errMsg(err), 'err');
     }
   }
 
-  function syncWatchers(): void {
-    for (const [id, stop] of watchers) {
-      if (!refs.some((r) => r.id === id)) {
-        stop();
-        watchers.delete(id);
-      }
-    }
-    for (const r of refs) if (!watchers.has(r.id)) watch(r.id, false);
-  }
-
-  function watch(id: number, started: boolean): void {
-    if (!mounted) return;
-    watchers.get(id)?.();
-    watchers.set(
-      id,
-      watchJobs(
-        id,
-        () => {
-          load();
-          corpusStore.reload().catch((err) => messages.say(errMsg(err), 'err'));
-        },
-        { started, onUpdate: (list) => (logs = { ...logs, [id]: list.slice(-4).reverse() }) },
-      ),
-    );
+  function onJobsDone(e: Event): void {
+    const id = (e as CustomEvent<{ id: number }>).detail?.id;
+    if (refs.some((r) => r.id === id)) load();
   }
 
   async function act(name: string, fn: () => Promise<void>): Promise<void> {
@@ -129,7 +108,7 @@
       } else {
         messages.say(t('src.queued', { n }), 'ok');
       }
-      watch(r.id, true);
+      trackJobs(r.id, true);
     });
 
   function askDelete(r: Corpus): void {
@@ -143,9 +122,7 @@
     if (!r) return;
     await act(`delete-${r.id}`, async () => {
       await del(`/api/corpora/${r.id}`);
-      watchers.get(r.id)?.();
-      watchers.delete(r.id);
-      logs = { ...logs, [r.id]: [] };
+      untrackJobs(r.id);
       messages.say(t('base.deleted'), 'ok');
       await load();
       corpusStore.reload().catch((err) => messages.say(errMsg(err), 'err'));
@@ -171,12 +148,12 @@
   }
 
   onMount(() => {
+    window.addEventListener(JOBS_DONE, onJobsDone);
     load();
     return () => {
+      window.removeEventListener(JOBS_DONE, onJobsDone);
       mounted = false;
       seq++;
-      for (const stop of watchers.values()) stop();
-      watchers.clear();
     };
   });
 </script>

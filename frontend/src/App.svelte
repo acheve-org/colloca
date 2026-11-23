@@ -2,6 +2,7 @@
   import { onMount, tick } from 'svelte';
   import { corpusStore } from './lib/corpus.svelte';
   import { t } from './lib/i18n';
+  import { startJobTracking } from './lib/jobs.svelte';
   import { messages } from './lib/messages.svelte';
   import { go, route } from './lib/router.svelte';
   import { registerShortcut } from './lib/shortcuts.svelte';
@@ -40,6 +41,8 @@
   let helpOpen = $state(false);
 
   onMount(() => {
+    // Background jobs of the current corpus are followed here, whatever screen is open.
+    const stopJobs = startJobTracking();
     corpusStore.reload().catch((err) => {
       messages.say(err instanceof Error ? err.message : String(err), 'err');
     });
@@ -62,7 +65,10 @@
         run: () => (helpOpen = true),
       }),
     ];
-    return () => offs.forEach((f) => f());
+    return () => {
+      offs.forEach((f) => f());
+      stopJobs();
+    };
   });
 </script>
 
