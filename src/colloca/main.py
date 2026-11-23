@@ -21,7 +21,8 @@ async def lifespan(_app):
 
 
 app = FastAPI(title="Colloca", version="0.1.0", lifespan=lifespan)
-STATIC = os.path.join(os.path.dirname(__file__), "static")
+# COLLOCA_STATIC_DIR serves a UI build from elsewhere (end-to-end tests); the default is the packaged one.
+STATIC = os.environ.get("COLLOCA_STATIC_DIR") or os.path.join(os.path.dirname(__file__), "static")
 
 
 # --------------------------------------------------------------------------- helpers

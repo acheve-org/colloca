@@ -1,3 +1,11 @@
+# Frontend build (Svelte/Vite). Package files first so `npm ci` is cached.
+FROM node:lts-slim AS ui
+WORKDIR /ui
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+COPY frontend/ ./
+RUN npm run build
+
 FROM python:3.14-slim
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
@@ -21,6 +29,8 @@ RUN if [ "$SPACY_SIZE" != "sm" ]; then \
     fi
 
 COPY src ./src
+# Task 13 (cutover) changes this single line: Vite then builds straight into src/colloca/static.
+COPY --from=ui /ui/dist/ ./src/colloca/static/
 RUN uv sync --frozen --no-dev
 
 RUN useradd -m colloca && mkdir -p /data && chown colloca /data

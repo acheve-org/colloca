@@ -8,13 +8,16 @@
     "build": "vite build",
     "test": "vitest run",
     "lint": "eslint .",
-    "check": "svelte-check --tsconfig ./tsconfig.json"
+    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "e2e": "npm run build && playwright test"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.65.1",
     "@sveltejs/vite-plugin-svelte": "^7.3.1",
     "@testing-library/jest-dom": "^8.0.0",
     "@testing-library/svelte": "^5.4.2",
+    "@types/node": "^24.19.2",
     "eslint": "^10.15.0",
     "eslint-plugin-svelte": "^3.24.1",
     "globals": "^17.14.0",

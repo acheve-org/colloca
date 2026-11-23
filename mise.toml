@@ -38,3 +38,8 @@ run = "npm test"
 description = "Lint and type-check the frontend"
 dir = "frontend"
 run = "npm run lint && npm run check"
+
+[tasks."ui:e2e"]
+description = "Build the frontend and run the Playwright end-to-end tests"
+dir = "frontend"
+run = "npm ci && npx playwright install chromium && npm run e2e"
