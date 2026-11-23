@@ -31,7 +31,8 @@
 
   const runner = useRunner({
     reset: () => (items = null),
-    autoRun: Object.keys(initial).length > 0,
+    // A keyness cloud needs this session's Keyness comparison: after a reload, wait quietly.
+    autoRun: Object.keys(initial).length > 0 && !(initial.src === 'keyness' && !keynessMemo.last),
     run: () => run(),
   });
 

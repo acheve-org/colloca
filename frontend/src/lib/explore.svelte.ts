@@ -24,6 +24,8 @@ interface RunnerOptions {
   reset: () => void;
   /** Runs the screen once the corpus has loaded (an initial route restored the form). */
   autoRun?: boolean;
+  /** The auto-run also waits for this (e.g. choices the restored form needs are loaded). */
+  ready?: () => boolean;
   run: () => void;
 }
 
@@ -71,9 +73,10 @@ export function useRunner(o: RunnerOptions) {
 
   let autoRan = false;
   $effect(() => {
-    if (autoRan || !corpusStore.loaded || corpusStore.currentId === null) return;
+    if (autoRan || !o.autoRun || !corpusStore.loaded || corpusStore.currentId === null) return;
+    if (o.ready && !o.ready()) return;
     autoRan = true;
-    if (o.autoRun) untrack(o.run);
+    untrack(o.run);
   });
 
   onMount(() => {

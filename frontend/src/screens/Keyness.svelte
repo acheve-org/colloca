@@ -40,6 +40,9 @@
       result = null;
       ref = '';
     },
+    // A restored route runs once the reference choices are known and `ref` is one of them.
+    autoRun: Object.keys(initial).length > 0,
+    ready: () => refsLoaded && refOptions.some((o) => o.value === ref),
     run: () => run(),
   });
 
@@ -61,14 +64,6 @@
   $effect(() => {
     if (!refsLoaded || !corpusStore.loaded || !current) return;
     if (!refOptions.some((o) => o.value === ref)) ref = refOptions[0].value;
-  });
-
-  // A restored route runs once the reference choices are known.
-  let autoRan = !Object.keys(initial).length;
-  $effect(() => {
-    if (autoRan || !refsLoaded || !corpusStore.loaded || !current) return;
-    autoRan = true;
-    run();
   });
 
   const csvHref = $derived(result ? csvUrl(result.path, result.params) : '');

@@ -373,6 +373,32 @@ describe('Keyness', () => {
     expect(window.location.hash).toBe('#/concordance?q=contrato&unit=lemma');
   });
 
+  it('a restored route runs once, after the reference choices are known', async () => {
+    go('keyness', { ref: '2', min: '5' });
+    render(Keyness);
+    await waitFor(() => expect(hits('keyness')).toHaveLength(1));
+    const p = hits('keyness')[0].params;
+    expect(p.get('ref')).toBe('2');
+    expect(p.get('min_freq')).toBe('5');
+    await new Promise((r) => setTimeout(r, 20));
+    expect(hits('keyness')).toHaveLength(1);
+  });
+
+  it('a restored route with a reference that is gone runs against the first valid one', async () => {
+    go('keyness', { ref: '99' });
+    render(Keyness);
+    await waitFor(() => expect(hits('keyness')).toHaveLength(1));
+    expect(hits('keyness')[0].params.get('ref')).toBeNull();
+  });
+
+  it('does not run on load without route params', async () => {
+    go('keyness');
+    render(Keyness);
+    await screen.findByRole('combobox', { name: 'Reference corpus' });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(hits('keyness')).toHaveLength(0);
+  });
+
   it('explains when there is no reference and sends nothing', async () => {
     corpusStore.list = [corpus(1)];
     vi.stubGlobal('fetch', vi.fn(async (url: string) => {
@@ -464,6 +490,22 @@ describe('WordCloud', () => {
     expect(p.get('exclude_stop')).toBe('true');
     expect(p.get('min_freq')).toBe('1');
     expect(screen.getByRole('button', { name: 'Save PNG' })).toBeInTheDocument();
+  });
+
+  it('a restored keyness cloud without a Keyness comparison waits quietly (no error after a reload)', async () => {
+    go('cloud', { src: 'keyness', pos: 'NOUN', n: '50' });
+    render(WordCloud);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(messages.current).toBeNull();
+    expect(hits('keyness')).toHaveLength(0);
+    expect(screen.getByRole('combobox', { name: 'Source' })).toHaveValue('keyness');
+  });
+
+  it('a restored frequency cloud draws on load', async () => {
+    go('cloud', { src: 'frequency', n: '50' });
+    render(WordCloud);
+    await waitFor(() => expect(hits('frequency')).toHaveLength(1));
+    expect(hits('frequency')[0].params.get('limit')).toBe('50');
   });
 
   it('needs a Keyness comparison before drawing keyness', async () => {
