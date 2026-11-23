@@ -17,8 +17,8 @@ services:
     restart: unless-stopped
 
   # One-off: download the spaCy models into ~/.spacy.
-  #   docker compose run --rm models                  # md (default lg)
-  #   SPACY_SIZE=lg docker compose run --rm models    # or sm | lg
+  #   docker compose run --rm models                  # lg (default)
+  #   SPACY_SIZE=lg docker compose run --rm models    # or sm | md
   models:
     <<: *colloca
     profiles: ["setup"]
