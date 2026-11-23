@@ -10,6 +10,7 @@ export default defineConfig({
   build: { outDir: 'dist', emptyOutDir: true },
   test: {
     environment: 'jsdom',
+    css: true,
     include: ['tests/**/*.test.ts'],
     setupFiles: ['tests/setup.ts'],
   },
