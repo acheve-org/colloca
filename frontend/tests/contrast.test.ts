@@ -35,6 +35,14 @@ const pairs: [string, string, string][] = [
   ['--accent-fg', '--accent', 'button text on accent'],
   ['--accent', '--bg', 'accent on bg'],
   ['--danger', '--bg', 'danger on bg'],
+  ['--status-candidate', '--bg', 'status-candidate on bg'],
+  ['--status-approved', '--bg', 'status-approved on bg'],
+  ['--status-forbidden', '--bg', 'status-forbidden on bg'],
+  ['--status-candidate', '--surface', 'status-candidate on surface'],
+  ['--status-approved', '--surface', 'status-approved on surface'],
+  ['--status-forbidden', '--surface', 'status-forbidden on surface'],
+  ['--danger', '--surface', 'danger on surface'],
+  ['--accent', '--surface', 'accent on surface'],
   ...hits.map((h): [string, string, string] => [`--hit-${h}-fg`, `--hit-${h}-bg`, `hit-${h}`]),
 ];
 
@@ -53,5 +61,29 @@ describe('prefers-color-scheme block mirrors the dark theme', () => {
   it('has identical values', () => {
     const explicit = vars(css.match(/:root\[data-theme="dark"\]\s*\{([^}]*)\}/)![1]);
     expect(mediaDark).toEqual(explicit);
+  });
+});
+
+describe.each([
+  ['light', light],
+  ['dark', dark],
+])('%s hit hue mapping', (_name, t) => {
+  const rgb = (hex: string) => {
+    const n = parseInt(hex.slice(1), 16);
+    return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+  };
+  it('equiv is green', () => {
+    for (const k of ['--hit-equiv-bg', '--hit-equiv-fg']) {
+      const { r, g, b } = rgb(t[k]);
+      expect(g, k).toBeGreaterThan(r);
+      expect(g, k).toBeGreaterThan(b);
+    }
+  });
+  it('term is blue', () => {
+    for (const k of ['--hit-term-bg', '--hit-term-fg']) {
+      const { r, g, b } = rgb(t[k]);
+      expect(b, k).toBeGreaterThan(r);
+      expect(b, k).toBeGreaterThan(g);
+    }
   });
 });
