@@ -39,6 +39,8 @@
 
 <main>
 <section id="tab-sources" class="tab active">
+  <label class="force"><input type="checkbox" id="forceLang"> import even if the language looks wrong</label>
+  <div id="jobs" aria-live="polite"></div>
   <div class="cards">
     <div class="card">
       <h3>Add from URL</h3>
@@ -63,6 +65,8 @@
     </div>
   </div>
   <h3>Documents</h3>
+  <div id="reannBox" class="row" hidden><span id="reannInfo" class="muted"></span>
+    <button id="reannBtn">Re-annotate with current model</button></div>
   <table id="docsTable"></table>
 </section>
 

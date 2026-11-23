@@ -10,6 +10,10 @@ run = "uv sync"
 description = "Run the test suite"
 run = "uv run pytest"
 
+[tasks.lint]
+description = "Static checks (ruff)"
+run = "uv run ruff check ."
+
 [tasks.dev]
 description = "Run the dev server with auto-reload"
 run = "uv run uvicorn colloca.main:app --reload"

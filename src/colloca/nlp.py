@@ -1,13 +1,13 @@
 """NLP annotation with spaCy (tokenisation, sentences, lemmas, POS)."""
 import os
 import threading
-from typing import Iterator
+from collections.abc import Callable, Iterator
 
 import spacy
 
 SUPPORTED = {"es": "Spanish", "it": "Italian"}
 _SIZES = [os.environ.get("SPACY_SIZE", "md"), "md", "sm", "lg"]
-_models: dict[str, "spacy.language.Language"] = {}
+_models: dict[str, spacy.language.Language] = {}
 _lock = threading.Lock()
 
 
@@ -34,16 +34,19 @@ def pipeline_name(lang: str) -> str:
     return f"{nlp.meta['lang']}_{nlp.meta['name']} {nlp.meta['version']} (spaCy {spacy.__version__})"
 
 
-def annotate(text: str, lang: str) -> Iterator[tuple]:
+def annotate(text: str, lang: str, progress: Callable[[float], None] | None = None) -> Iterator[tuple]:
     """Yield (pos, sent, form, norm, lemma, upos, alpha, stop, sp) for each token.
 
     Every non-empty line is processed as its own paragraph, so sentences never span lines.
+    `progress`, if given, is called with the fraction of paragraphs done (0..1).
     """
     nlp = load_model(lang)
     paragraphs = [p.strip() for p in text.splitlines() if p.strip()]
     pos = 0
     sent = 0
-    for doc in nlp.pipe(paragraphs, batch_size=32):
+    for i, doc in enumerate(nlp.pipe(paragraphs, batch_size=32), 1):
+        if progress:
+            progress(i / len(paragraphs))
         rows = []
         for s in doc.sents:
             emitted = False

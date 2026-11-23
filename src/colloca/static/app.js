@@ -58,8 +58,8 @@ async function loadCorpora(select) {
   $("corpusInfo").textContent = cur ? `${cur.docs} docs · ${cur.tokens.toLocaleString()} words` : "No corpus yet — click “+ New”.";
   const refs = state.corpora.filter((c) => cur && c.id !== cur.id && c.lang === cur.lang);
   $("kyRef").innerHTML = refs.map((c) => `<option value="${c.id}">${esc(c.name)} (${c.tokens.toLocaleString()} words)</option>`).join("") || "<option value=''>— no other corpus —</option>";
-  if (cur) await loadDocs();
-  else $("docsTable").innerHTML = "";
+  if (cur) { await loadDocs(); await pollJobs(); }
+  else { $("docsTable").innerHTML = ""; $("jobs").innerHTML = ""; }
 }
 $("corpusSel").addEventListener("change", (e) => loadCorpora(+e.target.value));
 
@@ -81,12 +81,18 @@ $("delCorpusBtn").onclick = async () => {
 };
 
 // ------------------------------------------------------------------ sources
+const LANG_BADGE = { mismatch: "wrong language?", uncertain: "language unclear" };
 async function loadDocs() {
   const docs = await api(`${base()}/documents`);
+  const stale = docs.filter((d) => d.stale).length;
+  $("reannBox").hidden = !stale;
+  $("reannInfo").textContent = `${stale} document${stale === 1 ? "" : "s"} annotated with an older NLP model.`;
   $("docsTable").innerHTML = docs.length
-    ? `<thead><tr><th>Title</th><th>Source</th><th class="num">Words</th><th>Added</th><th></th></tr></thead><tbody>` +
+    ? `<thead><tr><th>Title</th><th>Source</th><th class="num">Words</th><th>Checks</th><th>Added</th><th></th></tr></thead><tbody>` +
       docs.map((d) => `<tr><td>${esc(d.title)}</td><td class="muted">${d.kind === "url" ? `<a href="${esc(d.source)}" target="_blank" rel="noopener noreferrer">${esc(d.source)}</a>` : esc(d.source || d.kind)}</td>
-        <td class="num">${d.n_tokens.toLocaleString()}</td><td class="muted">${esc(d.added)}</td>
+        <td class="num">${d.n_tokens.toLocaleString()}</td>
+        <td>${LANG_BADGE[d.lang_check] ? `<span class="badge warn" title="Language check: ${esc(d.lang_check)}">${LANG_BADGE[d.lang_check]}</span> ` : ""}${d.stale ? `<span class="badge" title="${esc(d.pipeline)}">older model</span>` : ""}</td>
+        <td class="muted">${esc(d.added)}</td>
         <td><button data-del="${d.id}" class="danger">Remove</button></td></tr>`).join("") + "</tbody>"
     : `<tbody><tr><td class="muted">No documents yet.</td></tr></tbody>`;
 }
@@ -94,6 +100,28 @@ $("docsTable").addEventListener("click", async (e) => {
   const id = e.target.dataset.del; if (!id || !confirm("Remove this document from the corpus?")) return;
   await api(`/api/documents/${id}`, { method: "DELETE" }); await loadCorpora(state.id); say("Document removed.", "ok");
 });
+
+// ---- background jobs (imports and re-annotation run on the server; we poll for progress)
+let jobTimer = null;
+const forceLang = () => $("forceLang").checked;
+function renderJobs(jobs) {
+  const recent = jobs.slice(-8).reverse();
+  $("jobs").innerHTML = recent.map((j) => {
+    const pct = Math.round(j.progress * 100);
+    const state = j.status === "error" ? `<span class="err">${esc(j.error)}</span>`
+      : j.status === "done" ? `<span class="ok">done${(j.result.warnings || []).length ? " — " + esc(j.result.warnings.join(" ")) : ""}</span>`
+      : j.status === "running" ? `<progress max="100" value="${pct}"></progress> ${pct}%` : "queued";
+    return `<div class="job"><b>${esc(j.label)}</b> ${state}</div>`;
+  }).join("");
+}
+async function pollJobs() {
+  clearTimeout(jobTimer);
+  if (!state.id) return;
+  const id = state.id, jobs = await api(`/api/corpora/${id}/jobs`);
+  renderJobs(jobs);
+  if (jobs.some((j) => j.status === "queued" || j.status === "running")) { state.jobsActive = true; jobTimer = setTimeout(() => pollJobs().catch(() => {}), 1000); }
+  else if (state.jobsActive) { state.jobsActive = false; await loadCorpora(id); }
+}
 let pvSource = "";
 $("previewBtn").onclick = busy($("previewBtn"), async () => {
   const r = await post("/api/preview-url", { url: $("urlIn").value });
@@ -103,20 +131,24 @@ const updatePv = () => { $("pvStats").textContent = `${$("pvText").value.split(/
 $("pvText").addEventListener("input", updatePv);
 $("pvCancel").onclick = () => { $("preview").hidden = true; };
 $("pvAdd").onclick = busy($("pvAdd"), async () => {
-  await post(`${base()}/documents`, { title: $("pvTitle").value, text: $("pvText").value, source: pvSource, kind: "url" });
-  $("preview").hidden = true; $("urlIn").value = ""; await loadCorpora(state.id); say("Document added.", "ok");
+  await post(`${base()}/documents?${qs({ background: true, force_language: forceLang() })}`, { title: $("pvTitle").value, text: $("pvText").value, source: pvSource, kind: "url" });
+  $("preview").hidden = true; $("urlIn").value = ""; say("Queued — see progress below.", "ok"); await pollJobs();
 });
 $("uploadBtn").onclick = busy($("uploadBtn"), async () => {
   const files = $("fileIn").files; if (!files.length) return say("Choose files first.", "err");
   const fd = new FormData(); for (const f of files) fd.append("files", f);
-  const res = await api(`${base()}/upload`, { method: "POST", body: fd });
-  $("fileIn").value = ""; await loadCorpora(state.id);
+  const res = await api(`${base()}/upload?${qs({ force_language: forceLang() })}`, { method: "POST", body: fd });
+  $("fileIn").value = "";
   const bad = res.filter((r) => !r.ok);
-  say(`${res.length - bad.length} added` + (bad.length ? `; failed: ` + bad.map((b) => `${b.file} (${b.error})`).join("; ") : "."), bad.length ? "err" : "ok");
+  say(`${res.length - bad.length} queued` + (bad.length ? `; rejected: ` + bad.map((b) => `${b.file} (${b.error})`).join("; ") : "."), bad.length ? "err" : "ok");
+  await pollJobs();
 });
 $("pasteBtn").onclick = busy($("pasteBtn"), async () => {
-  await post(`${base()}/documents`, { title: $("pasteTitle").value || "Pasted text", text: $("pasteText").value, kind: "paste" });
-  $("pasteText").value = ""; $("pasteTitle").value = ""; await loadCorpora(state.id); say("Text added.", "ok");
+  await post(`${base()}/documents?${qs({ background: true, force_language: forceLang() })}`, { title: $("pasteTitle").value || "Pasted text", text: $("pasteText").value, kind: "paste" });
+  $("pasteText").value = ""; $("pasteTitle").value = ""; say("Queued — see progress below.", "ok"); await pollJobs();
+});
+$("reannBtn").onclick = busy($("reannBtn"), async () => {
+  await api(`${base()}/reannotate?only_stale=true`, { method: "POST" }); say("Re-annotation started.", "ok"); await pollJobs();
 });
 
 // ------------------------------------------------------------------ analyses

@@ -119,6 +119,25 @@ def concordance(conn, corpus_id, q, unit="lemma", width=8, limit=300, sort="doc"
 
 
 # --------------------------------------------------------------------------- collocations
+def logdice(o: float, f_node: float, f_coll: float) -> float:
+    """logDice (Rychlý 2008): 14 + log2(2·o / (f_node + f_coll)); max 14, independent of corpus size."""
+    return 14 + math.log2(2 * o / (f_node + f_coll))
+
+
+def expected_cooc(f_node: float, f_coll: float, span: int, n: float) -> float:
+    """Co-occurrences expected by chance for a window of `span` positions around each node."""
+    return f_node * f_coll * span / n
+
+
+def mutual_information(o: float, expected: float) -> float:
+    """Pointwise MI: log2(observed / expected)."""
+    return math.log2(o / expected) if expected > 0 and o > 0 else 0.0
+
+
+def t_score(o: float, expected: float) -> float:
+    return (o - expected) / math.sqrt(o)
+
+
 def _g2(a, b, c, d) -> float:
     n = a + b + c + d
     ll = 0.0
@@ -164,15 +183,15 @@ def collocations(conn, corpus_id, q, left=4, right=4, min_freq=2, exclude_stop=T
         if o < min_freq:
             continue
         f_c = counts.get(lemma, o)
-        expected = f_n * f_c * span / N
+        expected = expected_cooc(f_n, f_c, span, N)
         a, b = o, f_n * span - o
         c, d = f_c - o, N - f_n * span - f_c + o
         out.append({
             "item": lemma, "pos": pos_of[lemma].most_common(1)[0][0],
             "cooc": o, "freq": f_c, "docs": len(docs[lemma]),
-            "logdice": round(14 + math.log2(2 * o / (f_n + f_c)), 2),
-            "mi": round(math.log2(o / expected), 2) if expected > 0 else 0.0,
-            "tscore": round((o - expected) / math.sqrt(o), 2),
+            "logdice": round(logdice(o, f_n, f_c), 2),
+            "mi": round(mutual_information(o, expected), 2),
+            "tscore": round(t_score(o, expected), 2),
             "ll": round(_g2(a, max(b, 0), max(c, 0), max(d, 0)), 1),
         })
     out.sort(key=lambda r: (-r["logdice"], -r["cooc"]))
@@ -221,6 +240,12 @@ def ngrams(conn, corpus_id, n=3, unit="form", min_freq=2, min_docs=1, edge_stop=
 
 
 # --------------------------------------------------------------------------- keyness
+def keyness_ll(a: float, b: float, c1: float, c2: float) -> float:
+    """Dunning log-likelihood (G2) of a word seen `a` times in a corpus of c1 words and `b` times in c2."""
+    e1, e2 = c1 * (a + b) / (c1 + c2), c2 * (a + b) / (c1 + c2)
+    return 2 * ((a * math.log(a / e1) if a else 0) + (b * math.log(b / e2) if b else 0))
+
+
 def keyness(conn, corpus_id, ref_id, unit="lemma", min_freq=3, exclude_stop=True,
             pos=None, limit=300):
     """Log-likelihood keyness of this corpus against a reference corpus."""
@@ -233,8 +258,7 @@ def keyness(conn, corpus_id, ref_id, unit="lemma", min_freq=3, exclude_stop=True
         a, b = x["freq"], ref.get(x["item"], 0)
         if a < min_freq:
             continue
-        e1, e2 = c1 * (a + b) / (c1 + c2), c2 * (a + b) / (c1 + c2)
-        ll = 2 * (a * math.log(a / e1) + (b * math.log(b / e2) if b else 0))
+        ll = keyness_ll(a, b, c1, c2)
         over = a / c1 > b / c2
         out.append({
             "item": x["item"], "pos": x["pos"], "freq": a, "ref_freq": b,

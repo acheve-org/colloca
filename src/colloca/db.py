@@ -1,12 +1,21 @@
-"""SQLite storage. One database file holds every corpus (self-hosted, single user)."""
+"""SQLite storage. One database file holds every corpus (self-hosted, single user).
+
+The schema is versioned with SQLite's `PRAGMA user_version` and evolved by the ordered
+MIGRATIONS list below. Rules: never edit a released migration, only append a new one.
+Before an existing database is migrated, a consistent copy is saved next to it.
+"""
+import logging
 import os
 import sqlite3
 from contextlib import contextmanager
 
+log = logging.getLogger("colloca.db")
+
 DATA_DIR = os.environ.get("COLLOCA_DATA_DIR", "./data")
 DB_PATH = os.path.join(DATA_DIR, "corpus.db")
 
-SCHEMA = """
+# --- v1: the original MVP schema (idempotent, so databases created before versioning adopt it)
+_V1 = """
 CREATE TABLE IF NOT EXISTS corpora (
     id INTEGER PRIMARY KEY,
     name TEXT NOT NULL,
@@ -46,19 +55,73 @@ CREATE INDEX IF NOT EXISTS idx_tokens_norm ON tokens(norm);
 CREATE INDEX IF NOT EXISTS idx_docs_corpus ON documents(corpus_id);
 """
 
+# --- v2: result of the language check made at import time ('' = not checked, e.g. older documents)
+_V2 = """
+ALTER TABLE documents ADD COLUMN lang_check TEXT NOT NULL DEFAULT '';  -- ok|mismatch|uncertain|short
+"""
 
-def connect() -> sqlite3.Connection:
-    os.makedirs(DATA_DIR, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH, timeout=30)
+MIGRATIONS: list[tuple[int, str]] = [(1, _V1), (2, _V2)]
+SCHEMA_VERSION = MIGRATIONS[-1][0]
+
+
+def connect(path: str | None = None) -> sqlite3.Connection:
+    path = path or DB_PATH
+    if path != ":memory:":
+        os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+    conn = sqlite3.connect(path, timeout=30)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA journal_mode = WAL")
     return conn
 
 
+def schema_version(conn: sqlite3.Connection) -> int:
+    return conn.execute("PRAGMA user_version").fetchone()[0]
+
+
+def _has_data(conn: sqlite3.Connection) -> bool:
+    return conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='corpora'").fetchone() is not None
+
+
+def migrate(conn: sqlite3.Connection, backup_path: str | None = None) -> int:
+    """Apply pending migrations, each in its own transaction. Returns the final version.
+
+    An existing database (one that already has tables) is copied to `backup_path` first.
+    """
+    current = schema_version(conn)
+    if current > SCHEMA_VERSION:
+        raise RuntimeError(f"Database schema v{current} is newer than this Colloca (v{SCHEMA_VERSION}); "
+                           "upgrade Colloca instead of opening it with an older version.")
+    pending = [(v, sql) for v, sql in MIGRATIONS if v > current]
+    if not pending:
+        return current
+    if backup_path and _has_data(conn):
+        dest = sqlite3.connect(backup_path)
+        try:
+            conn.backup(dest)
+        finally:
+            dest.close()
+        log.info("Backed up database to %s before migrating v%d -> v%d", backup_path, current, SCHEMA_VERSION)
+    for version, sql in pending:
+        try:
+            # executescript runs the whole script verbatim, so BEGIN..COMMIT makes the schema change
+            # and the version bump (user_version is transactional) atomic.
+            conn.executescript(f"BEGIN;\n{sql}\nPRAGMA user_version = {version};\nCOMMIT;")
+        except Exception:
+            if conn.in_transaction:
+                conn.rollback()
+            log.exception("Migration to v%d failed; database left at v%d", version, schema_version(conn))
+            raise
+        log.info("Migrated database to v%d", version)
+    return SCHEMA_VERSION
+
+
 def init_db() -> None:
-    with connect() as conn:
-        conn.executescript(SCHEMA)
+    conn = connect()
+    try:
+        migrate(conn, backup_path=f"{DB_PATH}.bak-v{schema_version(conn)}")
+    finally:
+        conn.close()
 
 
 @contextmanager

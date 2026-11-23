@@ -1,17 +1,17 @@
 """FastAPI application: JSON API + static single-page UI."""
 import csv
-import hashlib
 import io
 import os
 from contextlib import asynccontextmanager
-from typing import Optional
+from dataclasses import asdict
 
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import analysis, db, ingest, nlp
+from . import analysis, db, importer, ingest, nlp
+
 
 @asynccontextmanager
 async def lifespan(_app):
@@ -31,6 +31,16 @@ def _corpus(conn, corpus_id: int):
     return row
 
 
+_FORMULA_START = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _csv_safe(value):
+    """Neutralise spreadsheet formulas: text scraped from the web must not run when opened in Excel."""
+    if isinstance(value, str) and value.startswith(_FORMULA_START):
+        return "'" + value
+    return value
+
+
 def _reply(rows: list[dict], fmt: str, name: str):
     """JSON by default; CSV download with ?format=csv."""
     if fmt == "csv":
@@ -38,13 +48,13 @@ def _reply(rows: list[dict], fmt: str, name: str):
         if rows:
             w = csv.DictWriter(buf, fieldnames=list(rows[0].keys()))
             w.writeheader()
-            w.writerows(rows)
+            w.writerows({k: _csv_safe(v) for k, v in row.items()} for row in rows)
         return Response("﻿" + buf.getvalue(), media_type="text/csv; charset=utf-8",
                         headers={"Content-Disposition": f'attachment; filename="{name}.csv"'})
     return rows
 
 
-def _pos_list(pos: Optional[str]) -> Optional[list[str]]:
+def _pos_list(pos: str | None) -> list[str] | None:
     return [p.strip().upper() for p in pos.split(",") if p.strip()] if pos else None
 
 
@@ -53,30 +63,6 @@ def _run(fn, *args, **kwargs):
         return fn(*args, **kwargs)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
-
-
-def _add_document(conn, corpus, title: str, text: str, source: str, kind: str, tags: str) -> dict:
-    text = ingest.normalize_text(text)
-    if len(text) < 20:
-        raise HTTPException(400, "Text is too short")
-    digest = hashlib.sha256(" ".join(text.split()).lower().encode()).hexdigest()
-    if conn.execute("SELECT 1 FROM documents WHERE corpus_id=? AND text_hash=?",
-                    (corpus["id"], digest)).fetchone():
-        raise HTTPException(409, "An identical document is already in this corpus")
-    try:
-        pipeline = nlp.pipeline_name(corpus["lang"])
-        tokens = list(nlp.annotate(text, corpus["lang"]))
-    except (RuntimeError, ValueError) as exc:
-        raise HTTPException(500, str(exc)) from exc
-    n_alpha = sum(t[6] for t in tokens)
-    cur = conn.execute(
-        """INSERT INTO documents (corpus_id,title,source,kind,tags,text,text_hash,n_tokens,pipeline)
-           VALUES (?,?,?,?,?,?,?,?,?)""",
-        (corpus["id"], title.strip() or "Untitled", source, kind, tags, text, digest, n_alpha, pipeline))
-    doc_id = cur.lastrowid
-    conn.executemany("INSERT INTO tokens VALUES (?,?,?,?,?,?,?,?,?,?)",
-                     ((doc_id,) + t for t in tokens))
-    return {"id": doc_id, "title": title, "tokens": n_alpha}
 
 
 # --------------------------------------------------------------------------- corpora
@@ -124,10 +110,14 @@ class UrlIn(BaseModel):
 
 class DocIn(BaseModel):
     title: str = ""
-    text: str
+    text: str = Field(max_length=ingest.MAX_TEXT_CHARS)
     source: str = ""
     kind: str = "paste"
     tags: str = ""
+
+
+def _rejected(exc: importer.ImportRejected) -> HTTPException:
+    return HTTPException(exc.status, exc.message)
 
 
 @app.post("/api/preview-url")
@@ -144,36 +134,79 @@ def preview_url(body: UrlIn):
 @app.get("/api/corpora/{corpus_id}/documents")
 def list_documents(corpus_id: int):
     with db.session() as conn:
-        _corpus(conn, corpus_id)
+        corpus = _corpus(conn, corpus_id)
         rows = conn.execute(
-            """SELECT id,title,source,kind,tags,n_tokens,pipeline,added,LENGTH(text) AS chars
+            """SELECT id,title,source,kind,tags,n_tokens,pipeline,lang_check,added,LENGTH(text) AS chars
                FROM documents WHERE corpus_id=? ORDER BY id""", (corpus_id,)).fetchall()
-        return [dict(r) for r in rows]
+    try:
+        current = nlp.pipeline_name(corpus["lang"])
+    except (RuntimeError, ValueError):
+        current = None   # no model installed: nothing can be re-annotated, so nothing is "stale"
+    return [{**dict(r), "stale": current is not None and importer.is_stale(r["pipeline"], current)}
+            for r in rows]
 
 
 @app.post("/api/corpora/{corpus_id}/documents", status_code=201)
-def add_document(corpus_id: int, body: DocIn):
+def add_document(corpus_id: int, body: DocIn, background: bool = False, force_language: bool = False):
+    """Add a text. With ?background=true it is queued and answered at once with 202 + a job."""
     with db.session() as conn:
         corpus = _corpus(conn, corpus_id)
-        return _add_document(conn, corpus, body.title, body.text, body.source, body.kind, body.tags)
+        if not background:
+            try:
+                return importer.add_document(conn, corpus, body.title, body.text, body.source,
+                                             body.kind, body.tags, force_language)
+            except importer.ImportRejected as exc:
+                raise _rejected(exc) from exc
+    job = importer.submit(corpus_id, "import", body.title or "Pasted text",
+                          importer.import_text(corpus_id, body.title, body.text, body.source,
+                                               body.kind, body.tags, force_language))
+    return JSONResponse({"job_id": job.id}, status_code=202)
 
 
-@app.post("/api/corpora/{corpus_id}/upload")
-async def upload(corpus_id: int, files: list[UploadFile] = File(...), tags: str = ""):
+@app.post("/api/corpora/{corpus_id}/upload", status_code=202)
+async def upload(corpus_id: int, files: list[UploadFile] = File(...), tags: str = "",
+                 force_language: bool = False):
+    """Queue each file as a background job. Per-file answers: {file, ok, job_id} or {file, ok:false, error}."""
+    with db.session() as conn:
+        _corpus(conn, corpus_id)
+    if len(files) > ingest.MAX_UPLOAD_FILES:
+        raise HTTPException(413, f"Too many files in one upload (limit {ingest.MAX_UPLOAD_FILES})")
+    limit_mb = ingest.MAX_UPLOAD_BYTES // 1024 // 1024
     results = []
     for f in files:
-        data = await f.read()
-        try:
-            parsed = ingest.read_file(f.filename or "file", data)
-            with db.session() as conn:
-                corpus = _corpus(conn, corpus_id)
-                doc = _add_document(conn, corpus, parsed["title"], parsed["text"],
-                                    f.filename or "", "file", tags)
-            results.append({"file": f.filename, "ok": True, **doc})
-        except (ingest.IngestError, HTTPException) as exc:
-            msg = exc.detail if isinstance(exc, HTTPException) else str(exc)
-            results.append({"file": f.filename, "ok": False, "error": msg})
+        name = f.filename or "file"
+        data = await f.read(ingest.MAX_UPLOAD_BYTES + 1)   # never buffer more than the limit
+        if len(data) > ingest.MAX_UPLOAD_BYTES:
+            results.append({"file": name, "ok": False,
+                            "error": f"File is larger than {limit_mb} MB (set MAX_UPLOAD_MB to change)"})
+            continue
+        job = importer.submit(corpus_id, "import", name,
+                              importer.import_file(corpus_id, name, data, tags, force_language))
+        results.append({"file": name, "ok": True, "job_id": job.id})
     return results
+
+
+@app.get("/api/corpora/{corpus_id}/jobs")
+def list_jobs(corpus_id: int):
+    return importer.jobs_for(corpus_id)
+
+
+@app.get("/api/jobs/{job_id}")
+def get_job(job_id: int):
+    job = importer.get_job(job_id)
+    if not job:
+        raise HTTPException(404, "Job not found")
+    return asdict(job)
+
+
+@app.post("/api/corpora/{corpus_id}/reannotate", status_code=202)
+def reannotate(corpus_id: int, only_stale: bool = True):
+    """Re-run the current NLP model over the stored texts (all documents, or just outdated ones)."""
+    with db.session() as conn:
+        _corpus(conn, corpus_id)
+    job = importer.submit(corpus_id, "reannotate", "Re-annotate documents",
+                          importer.reannotate_corpus(corpus_id, only_stale))
+    return {"job_id": job.id}
 
 
 @app.get("/api/documents/{doc_id}")
@@ -193,7 +226,7 @@ def delete_document(doc_id: int):
 
 # --------------------------------------------------------------------------- analyses
 @app.get("/api/corpora/{corpus_id}/frequency")
-def frequency(corpus_id: int, unit: str = "lemma", pos: Optional[str] = None, min_freq: int = 1,
+def frequency(corpus_id: int, unit: str = "lemma", pos: str | None = None, min_freq: int = 1,
               exclude_stop: bool = True, limit: int = Query(500, le=5000), format: str = "json"):
     with db.session() as conn:
         _corpus(conn, corpus_id)
@@ -217,7 +250,7 @@ def concordance(corpus_id: int, q: str, unit: str = "lemma", width: int = Query(
 @app.get("/api/corpora/{corpus_id}/collocations")
 def collocations(corpus_id: int, q: str, left: int = Query(4, ge=0, le=15),
                  right: int = Query(4, ge=0, le=15), min_freq: int = 2, exclude_stop: bool = True,
-                 pos: Optional[str] = None, limit: int = Query(200, le=2000), format: str = "json"):
+                 pos: str | None = None, limit: int = Query(200, le=2000), format: str = "json"):
     with db.session() as conn:
         _corpus(conn, corpus_id)
         res = _run(analysis.collocations, conn, corpus_id, q, left, right, min_freq,
@@ -236,7 +269,7 @@ def ngrams(corpus_id: int, n: int = 3, unit: str = "form", min_freq: int = 2, mi
 
 @app.get("/api/corpora/{corpus_id}/keyness")
 def keyness(corpus_id: int, ref: int, unit: str = "lemma", min_freq: int = 3,
-            exclude_stop: bool = True, pos: Optional[str] = None,
+            exclude_stop: bool = True, pos: str | None = None,
             limit: int = Query(300, le=3000), format: str = "json"):
     with db.session() as conn:
         c = _corpus(conn, corpus_id)
