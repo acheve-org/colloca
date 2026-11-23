@@ -16,6 +16,7 @@
   import Concordance from './screens/Concordance.svelte';
   import Equivalents from './screens/Equivalents.svelte';
   import Frequency from './screens/Frequency.svelte';
+  import Job from './screens/Job.svelte';
   import Keyness from './screens/Keyness.svelte';
   import Ngrams from './screens/Ngrams.svelte';
   import Sources from './screens/Sources.svelte';
@@ -23,7 +24,7 @@
   import TermDialog from './screens/TermDialog.svelte';
   import WordCloud from './screens/WordCloud.svelte';
 
-  // Screen outlet: screens not built yet render the placeholder.
+  // Screen outlet: a screen without a component renders the placeholder.
   const SCREEN_COMPONENTS: Partial<Record<ScreenId, Component>> = {
     sources: Sources,
     base: BaseCorpora,
@@ -35,6 +36,7 @@
     equivalents: Equivalents,
     cloud: WordCloud,
     termbase: Termbase,
+    job: Job,
   };
   const Screen = $derived(SCREEN_COMPONENTS[route.screen]);
 

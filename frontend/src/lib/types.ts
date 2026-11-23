@@ -190,3 +190,62 @@ export interface Term {
   /** Last change (SQLite CURRENT_TIMESTAMP, UTC). */
   updated?: string;
 }
+
+/** Job analysis report (GET /api/jobs/{id}/result; see src/colloca/jobanalysis.py). */
+export interface JobSummary {
+  words: number;
+  content_words: number;
+  distinct_lemmas: number;
+  sentences: number;
+  language_check: 'ok' | 'uncertain' | 'mismatch' | string;
+  corpus_words: number;
+  corpus_filtered: boolean;
+  min_corpus_freq: number;
+  min_job_freq: number;
+  coverage_tokens_pct: number;
+  coverage_seen_pct: number;
+  coverage_types_pct: number;
+  uncovered_types: number;
+  termbase_terms_found: number;
+  termbase_size: number;
+  /** "base" when the key terms are ranked against a base corpus. */
+  reference: 'base' | null;
+}
+export interface JobTranslation {
+  id: number;
+  term: string;
+  status: 'candidate' | 'approved' | 'forbidden' | string;
+}
+export interface JobKnownTerm {
+  item: string;
+  occurrences: number;
+  example: string;
+  translations: JobTranslation[];
+  ids: number[];
+}
+export interface JobGap {
+  item: string;
+  pos: string;
+  job_freq: number;
+  corpus_freq: number;
+  /** Approved translation, "(candidate)" or "". */
+  termbase: string;
+}
+export interface JobKeyTerm extends JobGap {
+  base_per_million: number | null;
+  log_ratio: number | null;
+  ll: number | null;
+}
+export interface JobPhrase {
+  item: string;
+  job_freq: number;
+  corpus_freq: number;
+  words: number;
+}
+export interface JobReport {
+  summary: JobSummary;
+  key_terms: JobKeyTerm[];
+  gaps: JobGap[];
+  known_terms: JobKnownTerm[];
+  phrases: JobPhrase[];
+}
