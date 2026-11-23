@@ -69,7 +69,7 @@ describe('Rail', () => {
     it('redirects after switching to a non-aligned corpus', async () => {
       vi.stubGlobal('fetch', vi.fn(async (u: string) => ({
         ok: true, status: 200, statusText: 'OK',
-        json: async () => ({ documents: String(u).includes('/1/') ? 2 : 0, segments: 0, partners: [] }),
+        json: async () => (String(u) === '/api/projects' ? [] : { documents: String(u).includes('/1/') ? 2 : 0, segments: 0, partners: [] }),
       })));
       corpusStore.list = [
         { id: 1, name: 'a', lang: 'es', project_id: null, is_reference: 0, docs: 1, tokens: 1 },

@@ -10,18 +10,22 @@
   import ShortcutHelp from './lib/ui/ShortcutHelp.svelte';
   import type { Component } from 'svelte';
   import type { ScreenId } from './lib/router.svelte';
+  import BaseCorpora from './screens/BaseCorpora.svelte';
   import Collocations from './screens/Collocations.svelte';
   import Concordance from './screens/Concordance.svelte';
   import Equivalents from './screens/Equivalents.svelte';
   import Frequency from './screens/Frequency.svelte';
   import Keyness from './screens/Keyness.svelte';
   import Ngrams from './screens/Ngrams.svelte';
+  import Sources from './screens/Sources.svelte';
   import Termbase from './screens/Termbase.svelte';
   import TermDialog from './screens/TermDialog.svelte';
   import WordCloud from './screens/WordCloud.svelte';
 
   // Screen outlet: screens not built yet render the placeholder.
   const SCREEN_COMPONENTS: Partial<Record<ScreenId, Component>> = {
+    sources: Sources,
+    base: BaseCorpora,
     concordance: Concordance,
     frequency: Frequency,
     collocations: Collocations,
