@@ -86,9 +86,9 @@
   {:else if col.key === 'right'}
     {l.right}
   {:else if col.key === 'source'}
-    <span class="seg src"><Highlight text={l.source ?? ''} ranges={findRanges(l.source ?? '', [l.node], 'query')} /></span>
+    <span class="seg src" data-side="source"><Highlight text={l.source ?? ''} ranges={findRanges(l.source ?? '', [l.node], 'query')} /></span>
   {:else if col.key === 'target'}
-    <span class="seg tgt"><Highlight text={l.target ?? ''} ranges={findRanges(l.target ?? '', likelyEquiv, 'equiv')} /></span>
+    <span class="seg tgt" data-side="target" title={likelyEquiv.length ? t('cc.guessHint') : undefined}><Highlight text={l.target ?? ''} ranges={findRanges(l.target ?? '', likelyEquiv, 'equiv')} /></span>
   {:else}
     <span class="doc" title={l.doc}>{l.doc}</span>
   {/if}

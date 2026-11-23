@@ -30,4 +30,17 @@ describe('Dialog', () => {
     expect(document.querySelector('dialog')).not.toHaveAttribute('open');
     expect(screen.getByTestId('closed')).toHaveTextContent('1');
   });
+
+  it('scrolls only the body: header and footer stay outside the scroll container', async () => {
+    render(DialogHost);
+    screen.getByRole('button', { name: 'opener' }).click();
+    await tick();
+    const dlg = document.querySelector('dialog')!;
+    const body = dlg.querySelector('.body')!;
+    const footer = dlg.querySelector('footer')!;
+    expect(body.contains(footer)).toBe(false);
+    expect(body.contains(dlg.querySelector('header'))).toBe(false);
+    expect(getComputedStyle(body).overflowY).toBe('auto');
+    expect(getComputedStyle(dlg).overflowY).toBe('hidden');
+  });
 });

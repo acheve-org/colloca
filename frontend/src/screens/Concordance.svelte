@@ -64,6 +64,7 @@
   const likelyEquiv: string[] = [];
 
   let detailEl: HTMLElement | undefined = $state();
+  let tableEl: HTMLElement | undefined = $state();
 
   const hasCorpus = $derived(corpusStore.currentId !== null);
   const docCount = $derived(new Set(lines.map((l) => l.doc_id)).size);
@@ -90,8 +91,6 @@
     const mode = bilingual && corpusStore.aligned ? 'bilingual' : 'kwic';
     const path = `/api/corpora/${id}/${mode === 'bilingual' ? 'bilingual' : 'concordance'}`;
     const params = { q: query, unit, width: w, sort, limit: LIMIT, ...scopeParams() };
-    go('concordance', { q: query, unit, width: String(w), sort, bi: bilingual ? '1' : '' });
-
     const n = ++seq;
     loading = true; // previous rows stay visible (and selected) while loading
     messages.say(t('corpus.working'));
@@ -100,6 +99,8 @@
       if (n !== seq) return;
       lines = r.lines;
       result = { total: r.total, query, mode, path, params };
+      // Persist only a search that worked, so a failing query never reaches the URL.
+      go('concordance', { q: query, unit, width: String(w), sort, bi: bilingual ? '1' : '' });
       // DataTable reconciles a kept selection by key, but it is unmounted on zero hits.
       if (selected && !r.lines.some((x) => lineKey(x) === lineKey(selected!))) selected = null;
       messages.clear();
@@ -136,8 +137,10 @@
     const sel = window.getSelection();
     const text = (sel?.toString() ?? '').replace(/\s+/g, ' ').trim();
     const anchor = sel?.anchorNode instanceof Element ? sel.anchorNode : sel?.anchorNode?.parentElement;
-    const inTarget = !!anchor?.closest('[data-side="target"]');
-    const usable = text.length > 0 && text.length <= 120;
+    // Only a selection inside the hits table or the detail strip counts.
+    const inHits = !!anchor && (!!tableEl?.contains(anchor) || !!detailEl?.contains(anchor));
+    const inTarget = inHits && !!anchor?.closest('[data-side="target"]');
+    const usable = inHits && text.length > 0 && text.length <= 120;
     openTerm({
       source: usable && !inTarget ? text : l.node,
       target: usable && inTarget ? text : '',
@@ -221,7 +224,7 @@
           </span>
         {/if}
         <div class="actions">
-          <Button type="submit" variant="primary" disabled={loading}>{t('cc.search')}</Button>
+          <Button type="submit" variant="primary">{t('cc.search')}</Button>
           <Button title={t('cc.addTermHint')} onclick={addTermFromQuery}>{t('cc.addTerm')}</Button>
           {#if csvHref}<a class="csv" href={csvHref} download>{t('cc.csv')}</a>{/if}
         </div>
@@ -250,7 +253,7 @@
       </div>
     {/if}
 
-    <div class="table">
+    <div class="table" bind:this={tableEl}>
       {#if result && !lines.length && !loading}
         <EmptyState title={t('cc.noHits', { q: result.query })} hint={t('cc.noHitsHint')} />
       {:else if result || loading}

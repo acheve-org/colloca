@@ -79,6 +79,30 @@ describe('Kwic', () => {
     expect(eq[0].closest('.tgt')).not.toBeNull();
   });
 
+  it('marks source and target cells with data-side', () => {
+    render(Kwic, {
+      lines: [line(1, { source: 'La casa', target: 'La casa' })],
+      mode: 'bilingual',
+      query: 'casa',
+      selected: null,
+    });
+    const row = bodyRows()[0];
+    expect(row.querySelector('.src')).toHaveAttribute('data-side', 'source');
+    expect(row.querySelector('.tgt')).toHaveAttribute('data-side', 'target');
+    expect(row.querySelector('.tgt')).not.toHaveAttribute('title');
+  });
+
+  it('labels the target as a guess when likely equivalents are given', () => {
+    render(Kwic, {
+      lines: [line(1, { source: 'La casa', target: 'La casa grande' })],
+      mode: 'bilingual',
+      query: 'casa',
+      selected: null,
+      likelyEquiv: ['grande'],
+    });
+    expect(bodyRows()[0].querySelector('.tgt')?.getAttribute('title')).toMatch(/guess/i);
+  });
+
   it('calls onselect with the original line on click', async () => {
     const onselect = vi.fn();
     const lines = [line(1), line(2)];

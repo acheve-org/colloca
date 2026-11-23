@@ -3,7 +3,7 @@
   import { get } from '../lib/api';
   import { CORPUS_CHANGED, corpusStore, scopeParams } from '../lib/corpus.svelte';
   import { t } from '../lib/i18n';
-  import type { Facets, Project, ScopeInfo } from '../lib/types';
+  import type { Facets, ScopeInfo } from '../lib/types';
   import Button from '../lib/ui/Button.svelte';
   import Field from '../lib/ui/Field.svelte';
   import Select from '../lib/ui/Select.svelte';
@@ -12,7 +12,6 @@
   const scope = $derived(corpusStore.scope);
 
   let facets = $state.raw<Facets>({ tags: [], text_types: [], date_min: '', date_max: '' });
-  let projects = $state.raw<Project[]>([]);
   let info = $state.raw<ScopeInfo | null>(null);
   let infoError = $state('');
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -25,11 +24,6 @@
     ...(scope.type && !facets.text_types.some((x) => x.text_type === scope.type)
       ? [{ value: scope.type, label: scope.type }]
       : []),
-  ]);
-  const projectOptions = $derived([
-    { value: '', label: t('filter.anyProject') },
-    { value: 'none', label: t('filter.noProject') },
-    ...projects.map((p) => ({ value: String(p.id), label: p.name })),
   ]);
 
   const summary = $derived.by(() => {
@@ -92,9 +86,6 @@
     };
     window.addEventListener(CORPUS_CHANGED, onChange);
     refreshFacets();
-    get<Project[]>('/api/projects')
-      .then((p) => (projects = p))
-      .catch(() => {});
     return () => {
       window.removeEventListener(CORPUS_CHANGED, onChange);
       clearTimeout(timer);
@@ -125,11 +116,6 @@
   <Field label={t('filter.to')}>
     <input bind:value={scope.to} placeholder={facets.date_max || t('filter.toPlaceholder')} size="8" oninput={debounced} />
   </Field>
-  {#if projects.length}
-    <Field label={t('filter.project')}>
-      <Select label={t('filter.project')} bind:value={scope.project} options={projectOptions} />
-    </Field>
-  {/if}
   <Button onclick={clear}>{t('scope.clear')}</Button>
   <span class="summary" class:on={info?.filtered} class:err={!!infoError} aria-live="polite">{summary}</span>
 </div>

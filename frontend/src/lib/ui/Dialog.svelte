@@ -57,6 +57,13 @@
     background: var(--bg);
     border: 1px solid var(--line);
     border-radius: var(--radius);
+    /* Only the body scrolls: header and footer (the actions) stay visible. */
+    max-height: 85vh;
+    overflow: hidden;
+  }
+  dialog[open] {
+    display: flex;
+    flex-direction: column;
   }
   dialog::backdrop {
     background: rgb(0 0 0 / 0.45);
@@ -72,9 +79,16 @@
     border: 0;
     background: none;
   }
+  header,
+  footer {
+    flex: none;
+  }
   .body {
     display: flex;
     flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
     gap: var(--s-3);
     padding: var(--s-3);
   }

@@ -31,12 +31,24 @@ let calls: Call[];
 let conc: { status: number; body: unknown };
 let bi: { status: number; body: unknown };
 let gate: Promise<void> | null;
+let gateQ: string | null;
+let byQ: Record<string, unknown>;
 
-/** Holds /concordance responses until the returned function is called. */
-function holdConcordance(): () => void {
+/** Holds /concordance responses (for query `q`, or all) until the returned function is called. */
+function holdConcordance(q: string | null = null): () => void {
   let release: () => void = () => {};
   gate = new Promise<void>((r) => (release = r));
+  gateQ = q;
   return release;
+}
+
+/** Selects the whole text content of `el` in the document. */
+function selectText(el: Element) {
+  const r = document.createRange();
+  r.selectNodeContents(el);
+  const sel = window.getSelection()!;
+  sel.removeAllRanges();
+  sel.addRange(r);
 }
 
 const res = (status: number, body: unknown) => ({
@@ -46,6 +58,8 @@ const res = (status: number, body: unknown) => ({
 beforeEach(() => {
   calls = [];
   gate = null;
+  gateQ = null;
+  byQ = {};
   conc = { status: 200, body: { total: 2, lines: [line(1), line(2)] } };
   bi = { status: 200, body: { total: 0, lines: [] } };
   corpusStore.list = [corpus(1), corpus(2)];
@@ -67,8 +81,9 @@ beforeEach(() => {
     const p = u.pathname;
     if (p === '/api/corpora') return res(200, corpusStore.list);
     if (p.endsWith('/concordance')) {
-      if (gate) await gate;
-      return res(conc.status, conc.body);
+      const q = u.searchParams.get('q') ?? '';
+      if (gate && (gateQ === null || gateQ === q)) await gate;
+      return q in byQ ? res(200, byQ[q]) : res(conc.status, conc.body);
     }
     if (p.endsWith('/bilingual')) return res(bi.status, bi.body);
     if (p.endsWith('/parallel')) return res(200, { documents: corpusStore.aligned ? 1 : 0, segments: 0, partners: [] });
@@ -83,6 +98,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  window.getSelection()?.removeAllRanges();
   vi.unstubAllGlobals();
   corpusStore.list = [];
   corpusStore.currentId = null;
@@ -295,6 +311,89 @@ describe('Concordance', () => {
     await tick();
     expect(bodyRows()).toHaveLength(0);
     expect(screen.queryByText(/hits ·/)).toBeNull();
+  });
+
+  it('Mod+E uses text selected in the table target cell as the translation', async () => {
+    corpusStore.aligned = true;
+    bi.body = { total: 1, lines: [line(1, { source: 'La casa grande', target: 'La casa grande' })] };
+    render(TermDialog);
+    render(Concordance);
+    await fireEvent.click(screen.getByRole('switch', { name: 'Source + target' }));
+    await search('casa');
+    await fireEvent.click(bodyRows()[0]);
+    selectText(bodyRows()[0].querySelector('.tgt')!);
+    await fireEvent.keyDown(document.body, { key: 'e', ctrlKey: true });
+    await tick();
+    const dlg = screen.getByRole('dialog', { name: 'Add term' });
+    expect(within(dlg).getByLabelText('Source term')).toHaveValue('casa');
+    expect(within(dlg).getByLabelText('Translation')).toHaveValue('La casa grande');
+  });
+
+  it('Mod+E uses text selected in the detail strip as the source term', async () => {
+    render(TermDialog);
+    render(Concordance);
+    await search('casa');
+    await fireEvent.click(bodyRows()[0]);
+    const strip = screen.getByRole('region', { name: 'Selected hit' });
+    selectText(within(strip).getByText('doc1'));
+    await fireEvent.keyDown(document.body, { key: 'e', ctrlKey: true });
+    await tick();
+    const dlg = screen.getByRole('dialog', { name: 'Add term' });
+    expect(within(dlg).getByLabelText('Source term')).toHaveValue('doc1');
+  });
+
+  it('Mod+E ignores a selection outside the table and detail strip', async () => {
+    render(TermDialog);
+    render(Concordance);
+    await search('casa');
+    await fireEvent.click(bodyRows()[0]);
+    selectText(screen.getByText('2 hits · 2 documents'));
+    await fireEvent.keyDown(document.body, { key: 'e', ctrlKey: true });
+    await tick();
+    const dlg = screen.getByRole('dialog', { name: 'Add term' });
+    expect(within(dlg).getByLabelText('Source term')).toHaveValue('casa');
+    expect(within(dlg).getByLabelText('Translation')).toHaveValue('');
+  });
+
+  it('Mod+E is not active after the screen unmounts', async () => {
+    const { unmount } = render(Concordance);
+    await search('casa');
+    await fireEvent.click(bodyRows()[0]);
+    unmount();
+    const e = new KeyboardEvent('keydown', { key: 'e', ctrlKey: true, bubbles: true, cancelable: true });
+    document.body.dispatchEvent(e);
+    expect(e.defaultPrevented).toBe(false);
+    expect(termStore.open).toBe(false);
+  });
+
+  it('an older response arriving last does not overwrite the newer one', async () => {
+    byQ = {
+      old: { total: 1, lines: [line(1, { node: 'old' })] },
+      new: { total: 1, lines: [line(3, { node: 'new' })] },
+    };
+    render(Concordance);
+    const release = holdConcordance('old');
+    await fireEvent.input(queryInput(), { target: { value: 'old' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+    await fireEvent.input(queryInput(), { target: { value: 'new' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+    await waitFor(() => expect(screen.getByText('new')).toBeInTheDocument());
+    release();
+    await new Promise((r) => setTimeout(r, 0));
+    await tick();
+    expect(screen.getByText('new')).toBeInTheDocument();
+    expect(screen.queryByText('old')).toBeNull();
+  });
+
+  it('does not write a failing query to the URL', async () => {
+    render(Concordance);
+    await search('casa');
+    conc = { status: 400, body: { detail: 'Bad query' } };
+    await fireEvent.input(queryInput(), { target: { value: 'ca(' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+    await waitFor(() => expect(messages.current?.kind).toBe('err'));
+    expect(window.location.hash).toContain('q=casa');
+    expect(window.location.hash).not.toContain('ca(');
   });
 
   it('persists the query and options in route params when searching', async () => {
