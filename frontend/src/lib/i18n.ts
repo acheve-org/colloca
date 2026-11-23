@@ -11,6 +11,7 @@ const en: Record<string, string> = {
   'common.delete': 'Delete',
   'common.export': 'Export CSV',
   'common.noResults': 'No results',
+  'table.loading': 'Loading…',
   'nav.sources': 'Sources',
   'nav.base': 'Base corpus',
   'nav.concordance': 'Concordance',
