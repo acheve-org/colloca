@@ -187,4 +187,6 @@ export interface Term {
   context: string;
   context_source: string;
   origin: string;
+  /** Last change (SQLite CURRENT_TIMESTAMP, UTC). */
+  updated?: string;
 }

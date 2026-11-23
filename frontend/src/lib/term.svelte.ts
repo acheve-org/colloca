@@ -1,4 +1,4 @@
-import { get, post } from './api';
+import { get, patch, post } from './api';
 import { corpusStore, scopeParams } from './corpus.svelte';
 import { t } from './i18n';
 import { messages } from './messages.svelte';
@@ -24,7 +24,16 @@ export interface TermContext {
 }
 
 export interface OpenTermArgs {
+  /** Set to edit an existing termbase entry (saved with PATCH); no corpus is needed then. */
+  id?: number;
   source: string;
+  status?: TermDraft['status'];
+  domain?: string;
+  definition?: string;
+  notes?: string;
+  /** Edit mode: the entry's own language pair. */
+  srcLang?: string;
+  tgtLang?: string;
   /** spaCy UPOS (NOUN, VERB...) or a termbase POS value. */
   pos?: string;
   origin?: string;
@@ -56,6 +65,8 @@ export const termStore = $state<{
   draft: TermDraft;
   ctx: TermContext | null;
   langs: Languages;
+  /** Id of the entry being edited; null when adding. */
+  editingId: number | null;
   examples: Example[];
   examplesFor: string;
   saving: boolean;
@@ -64,15 +75,17 @@ export const termStore = $state<{
   draft: blank(),
   ctx: null,
   langs: {},
+  editingId: null,
   examples: [],
   examplesFor: '',
   saving: false,
 });
 
-/** Opens the Add term dialog for the current corpus, prefilled from `args`. */
+/** Opens the Add term dialog for the current corpus (or edits entry `args.id`), prefilled from `args`. */
 export function openTerm(args: OpenTermArgs): void {
+  const editing = args.id !== undefined;
   const c = corpusStore.current;
-  if (!c) {
+  if (!editing && !c) {
     messages.say(t('corpus.selectFirst'), 'err');
     return;
   }
@@ -81,11 +94,18 @@ export function openTerm(args: OpenTermArgs): void {
     ...blank(),
     src_term: args.source,
     tgt_term: args.target ?? '',
+    status: args.status ?? 'candidate',
     pos,
+    domain: args.domain ?? '',
+    definition: args.definition ?? '',
+    notes: args.notes ?? '',
     context: args.example ?? '',
     context_source: args.example ? (args.exampleSource ?? '') : '',
   };
-  termStore.ctx = { project_id: c.project_id, src_lang: c.lang, tgt_lang: '', origin: args.origin ?? 'manual' };
+  termStore.editingId = args.id ?? null;
+  termStore.ctx = editing
+    ? { project_id: null, src_lang: args.srcLang ?? '', tgt_lang: args.tgtLang ?? '', origin: args.origin ?? 'manual' }
+    : { project_id: c!.project_id, src_lang: c!.lang, tgt_lang: '', origin: args.origin ?? 'manual' };
   termStore.examples = [];
   termStore.examplesFor = '';
   termStore.open = true;
@@ -94,10 +114,10 @@ export function openTerm(args: OpenTermArgs): void {
     .then((l) => {
       termStore.langs = l;
       // The target language is the other supported one (as the old UI).
-      ctx.tgt_lang = Object.keys(l).find((k) => k !== ctx.src_lang) ?? '';
+      if (!editing) ctx.tgt_lang = Object.keys(l).find((k) => k !== ctx.src_lang) ?? '';
     })
     .catch((err) => messages.say(err instanceof Error ? err.message : String(err), 'err'));
-  findExamples(true);
+  if (!editing) findExamples(true);
 }
 
 /** Whole sentences with the source term, as example candidates. `quiet` swallows errors. */
@@ -122,23 +142,32 @@ export function useExample(x: Example): void {
   termStore.draft.context_source = x.doc;
 }
 
-/** POSTs the draft; returns true on success (the dialog then closes). */
+/** Fired on `window` after a term was added or updated, so open lists can reload. */
+export const TERM_SAVED = 'term-saved';
+
+/** POSTs the draft (PATCHes it when editing); returns true on success (the dialog then closes). */
 export async function saveTerm(): Promise<boolean> {
   const ctx = termStore.ctx;
   if (!ctx || termStore.saving) return false;
   const d = termStore.draft;
+  const id = termStore.editingId;
+  const body = { ...d, context_source: d.context.trim() ? d.context_source : '' };
   termStore.saving = true;
   try {
-    await post('/api/terms', {
-      ...d,
-      context_source: d.context.trim() ? d.context_source : '',
-      project_id: ctx.project_id,
-      src_lang: ctx.src_lang,
-      tgt_lang: ctx.tgt_lang,
-      origin: ctx.origin,
-    });
-    messages.say(t('term.saved'), 'ok');
+    if (id !== null) {
+      await patch(`/api/terms/${id}`, body);
+    } else {
+      await post('/api/terms', {
+        ...body,
+        project_id: ctx.project_id,
+        src_lang: ctx.src_lang,
+        tgt_lang: ctx.tgt_lang,
+        origin: ctx.origin,
+      });
+    }
+    messages.say(t(id !== null ? 'term.updated' : 'term.saved'), 'ok');
     termStore.open = false;
+    window.dispatchEvent(new CustomEvent(TERM_SAVED));
     return true;
   } catch (err) {
     messages.say(err instanceof Error ? err.message : String(err), 'err');

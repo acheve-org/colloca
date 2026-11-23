@@ -24,7 +24,7 @@
     if (!c) return '';
     const l = termStore.langs;
     const pair = t('term.langs', { src: l[c.src_lang] ?? c.src_lang, tgt: l[c.tgt_lang] ?? (c.tgt_lang || '?') });
-    return c.project_id == null ? `${pair} · ${t('term.general')}` : pair;
+    return c.project_id == null && termStore.editingId === null ? `${pair} · ${t('term.general')}` : pair;
   });
 
   async function submit(e: SubmitEvent): Promise<void> {
@@ -34,7 +34,7 @@
   }
 </script>
 
-<Dialog bind:open={termStore.open} title={t('term.add')}>
+<Dialog bind:open={termStore.open} title={t(termStore.editingId === null ? 'term.add' : 'term.edit')}>
   <form id="{uid}-form" class="term" onsubmit={submit}>
     <p class="langs">{langLine}</p>
     <Field label={t('term.source')}>
@@ -66,6 +66,7 @@
     <Field label={t('term.exampleSource')}>
       <input bind:value={termStore.draft.context_source} />
     </Field>
+    {#if termStore.editingId === null}
     <div class="examples">
       <Button onclick={() => findExamples(false)}>{t('term.findExamples')}</Button>
       {#if termStore.examples.length}
@@ -82,6 +83,7 @@
         <p class="none">{t('term.noExamples', { q: termStore.examplesFor })}</p>
       {/if}
     </div>
+    {/if}
   </form>
   {#snippet footer()}
     <Button onclick={() => (termStore.open = false)}>{t('common.cancel')}</Button>

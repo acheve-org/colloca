@@ -16,6 +16,7 @@
   import Frequency from './screens/Frequency.svelte';
   import Keyness from './screens/Keyness.svelte';
   import Ngrams from './screens/Ngrams.svelte';
+  import Termbase from './screens/Termbase.svelte';
   import TermDialog from './screens/TermDialog.svelte';
   import WordCloud from './screens/WordCloud.svelte';
 
@@ -28,6 +29,7 @@
     keyness: Keyness,
     equivalents: Equivalents,
     cloud: WordCloud,
+    termbase: Termbase,
   };
   const Screen = $derived(SCREEN_COMPONENTS[route.screen]);
 
