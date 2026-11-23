@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from dataclasses import asdict
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, UploadFile
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -810,4 +810,27 @@ def export_terms(format: str = "tbx", project: str = "", src_lang: str = "", tgt
                     headers={"Content-Disposition": f'attachment; filename="termbase.{ext}"'})
 
 
-app.mount("/", StaticFiles(directory=STATIC, html=True), name="static")
+_UI_MISSING = (
+    "<!doctype html><meta charset=utf-8><title>Colloca</title>"
+    "<h1>UI not built</h1><p>Run <code>mise run ui:build</code> and reload.</p>"
+)
+
+
+class _StaticApp:
+    """Serves the built UI, or a 503 page when it is missing.
+
+    STATIC is looked up per request so the check follows the directory's current state.
+    """
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http" and not os.path.isfile(os.path.join(STATIC, "index.html")):
+            await HTMLResponse(_UI_MISSING, status_code=503)(scope, receive, send)
+            return
+        await StaticFiles(directory=STATIC, html=True)(scope, receive, send)
+
+
+def _static_app() -> _StaticApp:
+    return _StaticApp()
+
+
+app.mount("/", _static_app(), name="static")
