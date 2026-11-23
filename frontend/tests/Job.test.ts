@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/sve
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Job from '../src/screens/Job.svelte';
 import { CORPUS_CHANGED, corpusStore } from '../src/lib/corpus.svelte';
+import { analysis } from '../src/lib/analysis.svelte';
 import { stopAllJobs } from '../src/lib/jobs.svelte';
 import { messages } from '../src/lib/messages.svelte';
 import { termStore } from '../src/lib/term.svelte';
@@ -78,6 +79,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  analysis.reset();
+  analysis.text = '';
   stopAllJobs();
   vi.useRealTimers();
   vi.unstubAllGlobals();
@@ -181,20 +184,22 @@ describe('Job', () => {
     render(Job);
     await runToReport();
     const link = (name: string) => screen.getByRole('link', { name }).getAttribute('href');
-    expect(link('CSV: known_terms')).toBe('/api/jobs/7/result?section=known_terms&format=csv');
-    expect(link('CSV: gaps')).toBe('/api/jobs/7/result?section=gaps&format=csv');
-    expect(link('CSV: key_terms')).toBe('/api/jobs/7/result?section=key_terms&format=csv');
-    expect(link('CSV: phrases')).toBe('/api/jobs/7/result?section=phrases&format=csv');
+    expect(link('CSV: Termbase terms in this text')).toBe('/api/jobs/7/result?section=known_terms&format=csv');
+    expect(link('CSV: Gaps')).toBe('/api/jobs/7/result?section=gaps&format=csv');
+    expect(link('CSV: Key terms')).toBe('/api/jobs/7/result?section=key_terms&format=csv');
+    expect(link('CSV: Repeated phrases')).toBe('/api/jobs/7/result?section=phrases&format=csv');
     expect(link('TBX')).toBe('/api/terms/export?format=tbx2&ids=4%2C5%2C6');
     expect(link('Excel')).toBe('/api/terms/export?format=xlsx&ids=4%2C5%2C6');
-    expect(link('CSV: glossary')).toBe('/api/terms/export?format=csv&ids=4%2C5%2C6');
+    expect(link('CSV: glossary for this job')).toBe('/api/terms/export?format=csv&ids=4%2C5%2C6');
     expect(screen.getByText('Key terms of the text (compared with the base corpus)')).toBeInTheDocument();
     const headers = screen.getAllByRole('columnheader').map((h) => h.textContent?.replace(/[▲▼]/g, '').trim());
     expect(headers).toEqual(expect.arrayContaining(['Base per M', 'LL', 'Lemma', 'Phrase', 'In text', 'In corpus', 'Termbase', 'Times', 'First occurrence']));
     expect(screen.getByRole('link', { name: 'fianza' })).toBeInTheDocument();
     expect(screen.getByText('el contrato de')).toBeInTheDocument();
     expect(screen.getByText('contract')).toBeInTheDocument();
-    expect(screen.getByText('(candidate)')).toBeInTheDocument();
+    // the backend's "(candidate)" marker shows as the translated Candidate badge
+    expect(screen.getByText('Candidate')).toBeInTheDocument();
+    expect(screen.queryByText('(candidate)')).toBeNull();
   });
 
   it('omits glossary links without known terms and drops the key-term ranking columns without a base corpus', async () => {
@@ -229,7 +234,8 @@ describe('Job', () => {
     expect(bad).toBeInTheDocument();
     const row = screen.getByText('renting ✗').closest('[role="row"]') as HTMLElement;
     expect(within(row).getByText('lease')).toBeInTheDocument();
-    expect(screen.getByText('renting ✗').closest('span[title]')).toHaveAttribute('title', 'forbidden — do not use');
+    expect(screen.getByText('renting ✗').closest('span[title]')).toHaveAttribute('title', 'Forbidden — do not use');
+    expect(within(row).getByText('lease').closest('span[title]')).toHaveAttribute('title', 'Approved');
   });
 
   it('shows text containing markup literally', async () => {
@@ -348,16 +354,84 @@ describe('Job', () => {
     expect(screen.queryByText('87%')).toBeNull();
   });
 
-  it('stops polling on unmount', async () => {
-    const { unmount } = render(Job);
+  it('keeps the report across unmount and remount (leaving the screen and coming back)', async () => {
+    const first = render(Job);
+    await runToReport();
+    first.unmount();
+    render(Job);
+    expect(screen.getByText('87%')).toBeInTheDocument();
+    expect(screen.getByText('Report for the pasted text')).toBeInTheDocument();
+    expect(screen.getByLabelText('Or paste the text here')).toHaveValue('Un texto de prueba para analizar.');
+    expect(screen.getByRole('link', { name: 'CSV: Gaps' })).toHaveAttribute('href', '/api/jobs/7/result?section=gaps&format=csv');
+  });
+
+  it('names the analysed file above the report', async () => {
+    render(Job);
+    const file = new File(['hola'], 'contrato.docx');
+    await fireEvent.change(screen.getByLabelText('File to analyse'), { target: { files: [file] } });
+    await fireEvent.click(analyse());
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(await screen.findByText('Report for contrato.docx')).toBeInTheDocument();
+  });
+
+  it('keeps polling after the screen is left and shows the report on return', async () => {
+    const first = render(Job);
+    await paste();
+    statuses = [jobOf('running'), jobOf('running'), jobOf('done', { progress: 1 })];
+    await fireEvent.click(analyse());
+    await waitFor(() => expect(pollCalls().length).toBeGreaterThan(0));
+    first.unmount();
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(calls.some((x) => x.path === '/api/jobs/7/result')).toBe(true);
+    render(Job);
+    expect(screen.getByText('87%')).toBeInTheDocument();
+    expect(analyse()).not.toBeDisabled();
+  });
+
+  it('shows the progress of an analysis still running when the screen is mounted again', async () => {
+    const first = render(Job);
+    await paste();
+    statuses = [jobOf('running')];
+    await fireEvent.click(analyse());
+    await waitFor(() => expect(screen.getByText('analysing…')).toBeInTheDocument());
+    first.unmount();
+    render(Job);
+    expect(screen.getByText('analysing…')).toBeInTheDocument();
+    expect(analyse()).toBeDisabled();
+  });
+
+  it('a corpus change clears a report kept while the screen was closed', async () => {
+    const first = render(Job);
+    await runToReport();
+    first.unmount();
+    window.dispatchEvent(new CustomEvent(CORPUS_CHANGED, { detail: { id: 2 } }));
+    render(Job);
+    expect(screen.queryByText('87%')).toBeNull();
+    expect(screen.getByText('No analysis yet')).toBeInTheDocument();
+  });
+
+  it('reset stops the poll for good: no timer is left behind', async () => {
+    const first = render(Job);
     await paste();
     statuses = [jobOf('running')];
     await fireEvent.click(analyse());
     await vi.advanceTimersByTimeAsync(1600);
-    expect(pollCalls().length).toBeGreaterThan(0);
-    unmount();
+    first.unmount();
+    stopAllJobs();
+    analysis.reset();
+    expect(vi.getTimerCount()).toBe(0);
     const n = pollCalls().length;
     await vi.advanceTimersByTimeAsync(5000);
     expect(pollCalls().length).toBe(n);
+    expect(analysis.busy).toBe(false);
+  });
+
+  it('an empty job error falls back to a generic analysis-failed message', async () => {
+    statuses = [jobOf('error', { error: '' })];
+    render(Job);
+    await paste();
+    await fireEvent.click(analyse());
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(await screen.findByRole('alert')).toHaveTextContent('The analysis failed: the server gave no reason');
   });
 });

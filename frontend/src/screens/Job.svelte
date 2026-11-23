@@ -1,20 +1,18 @@
 <script module lang="ts">
   const ACCEPT = '.docx,.pdf,.txt,.md,.html,.htm';
-  const POLL_MS = 700;
   type Kind = 'term' | 'forbidden';
 </script>
 
 <script lang="ts">
-  import { onMount } from 'svelte';
-  import { get, qs, upload } from '../lib/api';
-  import { CORPUS_CHANGED, corpusStore, scopeParams } from '../lib/corpus.svelte';
+  import { analysis } from '../lib/analysis.svelte';
+  import { qs } from '../lib/api';
+  import { corpusStore, scopeParams } from '../lib/corpus.svelte';
   import { toInt } from '../lib/explore.svelte';
   import { findRanges } from '../lib/highlight';
   import { t } from '../lib/i18n';
-  import { trackJobs } from '../lib/jobs.svelte';
   import { messages } from '../lib/messages.svelte';
   import { openTerm } from '../lib/term.svelte';
-  import type { Job, JobGap, JobKeyTerm, JobKnownTerm, JobPhrase, JobReport } from '../lib/types';
+  import type { JobGap, JobKeyTerm, JobKnownTerm, JobPhrase } from '../lib/types';
   import Badge from '../lib/ui/Badge.svelte';
   import Button from '../lib/ui/Button.svelte';
   import DataTable from '../lib/ui/DataTable.svelte';
@@ -30,132 +28,58 @@
   /** The key of the column holding the `+ Term` button. */
   const TERM_KEY = '_term';
 
-  let fileInput: HTMLInputElement | undefined = $state();
+  // The analysis (report, running job, pasted text) lives in `analysis`, so it survives
+  // leaving this screen; the options below are per visit.
   let file = $state.raw<File | null>(null);
-  let text = $state('');
   let minFreq = $state<number | null>(2);
   let minCorpus = $state<number | null>(3);
   let force = $state(false);
 
-  let busy = $state(false);
-  let job = $state.raw<Job | null>(null);
-  let error = $state('');
-  // The report on screen (kept while a new analysis runs or fails) and the job it came from.
-  let report = $state.raw<JobReport | null>(null);
-  let reportJob = $state(0);
+  const report = $derived(analysis.report);
+  const busy = $derived(analysis.busy);
+  const job = $derived(analysis.job);
+  const error = $derived(analysis.error);
 
-  // Selected rows, compared by key inside DataTable.
+  // Selected rows, compared by key inside DataTable; cleared when a new report arrives.
   let selKnown = $state.raw<JobKnownTerm | null>(null);
   let selGap = $state.raw<JobGap | null>(null);
   let selKey = $state.raw<JobKeyTerm | null>(null);
   let selPhrase = $state.raw<JobPhrase | null>(null);
+  $effect.pre(() => {
+    void analysis.reportJob;
+    selKnown = selGap = selKey = selPhrase = null;
+  });
 
-  let seq = 0;
-  let timer: ReturnType<typeof setTimeout> | undefined;
-
-  const errMsg = (err: unknown) => (err instanceof Error ? err.message : String(err));
-
-  function cancel(): void {
-    seq++;
-    clearTimeout(timer);
-    timer = undefined;
-  }
-
-  /** Sleeps one poll interval; the timer is cleared by cancel() (the promise then never settles). */
-  const sleep = () => new Promise<void>((r) => (timer = setTimeout(r, POLL_MS)));
-
-  function fail(message: string): void {
-    error = message;
-    job = null;
-    messages.say(message, 'err');
-  }
-
-  async function analyse(): Promise<void> {
+  function analyse(): void {
     const id = corpusStore.currentId;
     if (id === null) {
       messages.say(t('corpus.selectFirst'), 'err');
       return;
     }
-    if (!file && !text.trim()) {
+    if (!file && !analysis.text.trim()) {
       messages.say(t('job.needInput'), 'err');
       return;
     }
-    const fd = new FormData();
-    if (file) fd.append('file', file);
-    else fd.append('text', text);
-    const params = {
-      min_freq: toInt(minFreq, 2),
-      min_corpus_freq: toInt(minCorpus, 3),
-      force_language: force,
-      ...scopeParams(),
-    };
-    cancel();
-    const n = seq;
-    busy = true;
-    error = '';
-    messages.clear();
-    try {
-      const { job_id } = await upload<{ job_id: number }>(`/api/corpora/${id}/analyse-job`, fd, params);
-      if (n !== seq) return;
-      trackJobs(id, true); // the status line counts it like any background job
-      job = null;
-      let retried = false;
-      for (;;) {
-        let j: Job;
-        try {
-          j = await get<Job>(`/api/jobs/${job_id}`);
-        } catch (err) {
-          if (n !== seq) return;
-          // One retry before giving up: a single failed poll is often a blip.
-          if (retried) throw err;
-          retried = true;
-          await sleep();
-          if (n !== seq) return;
-          continue;
-        }
-        if (n !== seq) return;
-        retried = false;
-        if (j.status === 'error') throw new Error(j.error || t('common.noResults'));
-        if (j.status === 'done') break;
-        job = j;
-        await sleep();
-        if (n !== seq) return;
-      }
-      const r = await get<JobReport>(`/api/jobs/${job_id}/result`);
-      if (n !== seq) return;
-      report = r;
-      reportJob = job_id;
-      selKnown = selGap = selKey = selPhrase = null;
-      job = null;
-    } catch (err) {
-      if (n === seq) fail(errMsg(err));
-    } finally {
-      if (n === seq) busy = false;
-    }
+    const form = new FormData();
+    if (file) form.append('file', file);
+    else form.append('text', analysis.text);
+    void analysis.start({
+      corpusId: id,
+      form,
+      params: {
+        min_freq: toInt(minFreq, 2),
+        min_corpus_freq: toInt(minCorpus, 3),
+        force_language: force,
+        ...scopeParams(),
+      },
+      source: file?.name ?? '',
+    });
   }
-
-  function reset(): void {
-    cancel();
-    busy = false;
-    job = null;
-    error = '';
-    report = null;
-    reportJob = 0;
-    selKnown = selGap = selKey = selPhrase = null;
-  }
-
-  onMount(() => {
-    window.addEventListener(CORPUS_CHANGED, reset);
-    return () => {
-      window.removeEventListener(CORPUS_CHANGED, reset);
-      cancel();
-    };
-  });
 
   // ------------------------------------------------------------------ report
   const pct = (v: number) => `${v}%`;
   const sectionUrl = (name: string) =>
-    `/api/jobs/${reportJob}/result?${qs({ section: name, format: 'csv' })}`;
+    `/api/jobs/${analysis.reportJob}/result?${qs({ section: name, format: 'csv' })}`;
   const glossaryUrl = (fmt: string, ids: number[]) =>
     `/api/terms/export?${qs({ format: fmt, ids: ids.join(',') })}`;
 
@@ -220,7 +144,8 @@
 {/snippet}
 
 {#snippet termbaseCell(tb: string)}
-  {#if tb}<Badge kind={tb === '(candidate)' ? 'candidate' : 'approved'} label={tb} />{/if}
+  <!-- The backend marks an entry without a target term "(candidate)": show the Candidate badge. -->
+  {#if tb === '(candidate)'}<Badge kind="candidate" />{:else if tb}<Badge kind="approved" label={tb} />{/if}
 {/snippet}
 
 {#snippet lemmaCell(row: JobGap, col: Column<JobGap>)}
@@ -256,7 +181,9 @@
     {#each row.translations as tr (tr.id)}
       <span
         class="tr"
-        title={tr.status === 'forbidden' ? `${tr.status} — ${t('job.known.avoid')}` : tr.status}
+        title={tr.status === 'forbidden'
+          ? `${t('badge.forbidden')} — ${t('job.known.avoid')}`
+          : t(`badge.${tr.status}`)}
       >
         <Badge
           kind={tr.status === 'forbidden' ? 'forbidden' : tr.status === 'approved' ? 'approved' : 'candidate'}
@@ -280,8 +207,8 @@
   <div class="stat" title={hint || undefined}><b>{value}</b><span>{label}</span></div>
 {/snippet}
 
-{#snippet csv(section: string)}
-  <a class="csv" href={sectionUrl(section)} download aria-label={t('job.csvOf', { section })}>{t('job.csv')}</a>
+{#snippet csv(section: string, label: string)}
+  <a class="csv" href={sectionUrl(section)} download aria-label={t('job.csvOf', { section: label })}>{t('job.csv')}</a>
 {/snippet}
 
 <div class="job">
@@ -291,7 +218,6 @@
     <Toolbar label={t('job.toolbar')}>
       <Field label={t('job.file')}>
         <input
-          bind:this={fileInput}
           type="file"
           accept={ACCEPT}
           onchange={(e) => (file = e.currentTarget.files?.[0] ?? null)}
@@ -323,13 +249,16 @@
       <p class="intro">{t('job.intro')}</p>
       <textarea
         rows="5"
-        bind:value={text}
+        bind:value={analysis.text}
         aria-label={t('job.paste')}
         placeholder={t('job.pastePlaceholder')}
       ></textarea>
       {#if error}<p class="error" role="alert">{t('job.failed', { error })}</p>{/if}
 
       {#if report && summary}
+        <p class="muted">
+          {analysis.source ? t('job.reportOf', { source: analysis.source }) : t('job.reportOfPasted')}
+        </p>
         <div class="stats">
           {@render stat(t('job.stat.words'), summary.words.toLocaleString())}
           {@render stat(t('job.stat.distinct'), summary.distinct_lemmas, t('job.stat.distinctHint'))}
@@ -347,13 +276,13 @@
 
         <h3>
           {t('job.known')}
-          {@render csv('known_terms')}
+          {@render csv('known_terms', t('job.known'))}
           {#if termIds.length}
             <span class="glossary">
               · {t('job.glossary')}
               <a class="csv" href={glossaryUrl('tbx2', termIds)} download>{t('job.glossary.tbx')}</a>
               <a class="csv" href={glossaryUrl('xlsx', termIds)} download>{t('job.glossary.xlsx')}</a>
-              <a class="csv" href={glossaryUrl('csv', termIds)} download aria-label="CSV: glossary">{t('job.glossary.csv')}</a>
+              <a class="csv" href={glossaryUrl('csv', termIds)} download aria-label={t('job.glossary.csvLabel')}>{t('job.glossary.csv')}</a>
             </span>
           {/if}
         </h3>
@@ -368,17 +297,17 @@
           />
         </div>
 
-        <h3>{t('job.gaps')} {@render csv('gaps')}</h3>
+        <h3>{t('job.gaps')} {@render csv('gaps', t('job.section.gaps'))}</h3>
         <div class="table" style:height={tableHeight(report.gaps.length)}>
           <DataTable columns={lemmaCols} rows={report.gaps} rowKey={lemmaKey} bind:selected={selGap} cell={lemmaCell} />
         </div>
 
-        <h3>{summary.reference ? t('job.keys.ref') : t('job.keys.noref')} {@render csv('key_terms')}</h3>
+        <h3>{summary.reference ? t('job.keys.ref') : t('job.keys.noref')} {@render csv('key_terms', t('job.section.keys'))}</h3>
         <div class="table" style:height={tableHeight(report.key_terms.length)}>
           <DataTable columns={keyCols} rows={report.key_terms} rowKey={lemmaKey} bind:selected={selKey} cell={keyCell} />
         </div>
 
-        <h3>{t('job.phrases')} {@render csv('phrases')}</h3>
+        <h3>{t('job.phrases')} {@render csv('phrases', t('job.phrases'))}</h3>
         <div class="table" style:height={tableHeight(report.phrases.length)}>
           <DataTable
             columns={phraseCols}
