@@ -231,6 +231,28 @@ describe('Frequency', () => {
     expect(screen.queryByRole('link', { name: 'CSV' })).toBeNull();
   });
 
+  it('clears the "Working…" status when a request is dropped by a corpus change', async () => {
+    render(Frequency);
+    hold = new Promise<void>(() => {});
+    click('Show');
+    await waitFor(() => expect(messages.current?.text).toBe('Working…'));
+    window.dispatchEvent(new CustomEvent(CORPUS_CHANGED, { detail: { id: 2 } }));
+    expect(messages.current).toBeNull();
+  });
+
+  it('clears the "Working…" status when the screen is left mid-request, but not an error', async () => {
+    const { unmount } = render(Frequency);
+    hold = new Promise<void>(() => {});
+    click('Show');
+    await waitFor(() => expect(messages.current?.text).toBe('Working…'));
+    unmount();
+    expect(messages.current).toBeNull();
+    const again = render(Frequency);
+    messages.say('boom', 'err');
+    again.unmount();
+    expect(messages.current).toEqual({ text: 'boom', kind: 'err' });
+  });
+
   it('restores options from the route and runs once the corpus has loaded', async () => {
     corpusStore.loaded = false;
     go('frequency', { unit: 'form', pos: 'VERB', min: '7', stop: '0', ref: '1' });
@@ -370,6 +392,13 @@ describe('Keyness', () => {
 });
 
 describe('Equivalents', () => {
+  it('labels the unit choice "Search by" ("Match" is kept for segment match %)', () => {
+    go('equivalents');
+    render(Equivalents);
+    expect(screen.getByRole('combobox', { name: 'Search by' })).toBeInTheDocument();
+    expect(screen.queryByText('Match')).toBeNull();
+  });
+
   it('requests /equivalents and shows the segment count', async () => {
     go('equivalents');
     render(Equivalents);

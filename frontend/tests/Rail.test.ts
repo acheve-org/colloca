@@ -17,7 +17,7 @@ describe('Rail', () => {
     expect(screen.getByRole('navigation')).toBeInTheDocument();
     const links = screen.getAllByRole('link').map((a) => a.textContent?.trim());
     expect(links).toEqual([
-      'Sources', 'Base corpora', 'Concordance', 'Collocations', 'N-grams', 'Frequency',
+      'Sources', 'Base corpora', 'Concordance', 'Collocations', 'N-grams', 'Frequency list',
       'Keyness', 'Word cloud', 'Termbase', 'Job',
     ]);
   });

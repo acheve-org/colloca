@@ -125,6 +125,7 @@
     selected = null;
     filter = '';
     loading = false;
+    messages.clearWorking();
   }
 
   /** The text used as the term's example: the aligned segment, else the KWIC line. */
@@ -186,6 +187,7 @@
       window.removeEventListener(CORPUS_CHANGED, reset);
       off();
       seq++;
+      messages.clearWorking();
     };
   });
 </script>

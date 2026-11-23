@@ -269,6 +269,8 @@
       if (corpusStore.currentId === id) messages.say(errMsg(err), 'err');
     } finally {
       if (busy === name) busy = null;
+      // An action that ended without a message of its own (the corpus changed meanwhile).
+      messages.clearWorking();
     }
   }
 

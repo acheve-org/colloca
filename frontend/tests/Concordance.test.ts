@@ -233,6 +233,20 @@ describe('Concordance', () => {
     expect(calls).toHaveLength(0);
   });
 
+  it('clears the "Working…" status when a search is dropped (corpus change, leaving the screen)', async () => {
+    const { unmount } = render(Concordance);
+    holdConcordance();
+    await fireEvent.input(queryInput(), { target: { value: 'casa' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+    await waitFor(() => expect(messages.current?.text).toBe('Working…'));
+    window.dispatchEvent(new CustomEvent(CORPUS_CHANGED, { detail: { id: 2 } }));
+    expect(messages.current).toBeNull();
+    await fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+    await waitFor(() => expect(messages.current?.text).toBe('Working…'));
+    unmount();
+    expect(messages.current).toBeNull();
+  });
+
   it('clears results and selection when the corpus changes', async () => {
     render(Concordance);
     await search('casa');

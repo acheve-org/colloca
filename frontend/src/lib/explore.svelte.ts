@@ -65,6 +65,7 @@ export function useRunner(o: RunnerOptions) {
   function onCorpusChanged(): void {
     seq++;
     loading = false;
+    messages.clearWorking();
     o.reset();
   }
 
@@ -80,6 +81,7 @@ export function useRunner(o: RunnerOptions) {
     return () => {
       window.removeEventListener(CORPUS_CHANGED, onCorpusChanged);
       seq++;
+      messages.clearWorking();
     };
   });
 

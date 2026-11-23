@@ -24,12 +24,14 @@ let docs: { status: number; body: unknown };
 let jobList: Job[][];
 let uploadReply: { status: number; body: unknown };
 let docsGate: Promise<void> | null;
+let previewGate: Promise<void> | null;
 
 const res = (status: number, body: unknown) => ({ ok: status < 400, status, statusText: 'x', json: async () => body });
 
 beforeEach(() => {
   calls = [];
   docsGate = null;
+  previewGate = null;
   docs = { status: 200, body: [doc(1), doc(2, { tags: [], text_type: 'manual' })] };
   jobList = [[]];
   uploadReply = { status: 202, body: [{ file: 'a.txt', ok: true, job_id: 7 }, { file: 'b.docx', ok: true, job_id: 8 }] };
@@ -54,12 +56,15 @@ beforeEach(() => {
       const b = jobList.length > 1 ? jobList.shift()! : jobList[0];
       return res(200, b);
     }
+    if (p === '/api/preview-url' && previewGate) await previewGate;
     if (p === '/api/preview-url') return res(200, { url: 'https://example.org/final', title: 'Fetched title', text: 'one two three' });
     if (p === '/api/corpora/1/upload') return res(uploadReply.status, uploadReply.body);
     if (p === '/api/corpora/1/upload-pairs') return res(202, [{ file: 'tm.tmx', ok: true, job_id: 11, partner_corpus_id: 2 }]);
     if (p === '/api/corpora/1/reannotate') return res(202, { job_id: 12 });
     if (/^\/api\/documents\/\d+$/.test(p)) return method === 'DELETE' ? res(204, null) : res(200, { ok: true });
     if (p === '/api/corpora/1' && method === 'PATCH') return res(200, { ok: true });
+    if (p === '/api/corpora/2/documents') return res(200, []);
+    if (p === '/api/corpora/2/facets') return res(200, { tags: [], text_types: [], date_min: '', date_max: '' });
     if (p === '/api/corpora') return res(200, corpusStore.list);
     if (/\/parallel$/.test(p)) return res(200, { documents: 0, segments: 0, partners: [] });
     if (p === '/api/projects') return res(200, [{ id: 7, name: 'Acme', corpora: 0 }]);
@@ -316,5 +321,18 @@ describe('Sources', () => {
     release();
     await new Promise((r) => setTimeout(r, 10));
     expect(screen.queryByText('old corpus')).not.toBeInTheDocument();
+  });
+
+  it('clears the "Working…" status when an action ends after the corpus changed', async () => {
+    await ready();
+    let release: () => void = () => {};
+    previewGate = new Promise<void>((r) => (release = r));
+    await fireEvent.input(screen.getByLabelText('Web address'), { target: { value: 'https://example.org/a' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Fetch & preview' }));
+    await waitFor(() => expect(messages.current?.text).toBe('Working…'));
+    corpusStore.currentId = 2;
+    window.dispatchEvent(new CustomEvent(CORPUS_CHANGED, { detail: { id: 2 } }));
+    release();
+    await waitFor(() => expect(messages.current).toBeNull());
   });
 });
