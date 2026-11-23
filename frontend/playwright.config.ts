@@ -26,7 +26,7 @@ export default defineConfig({
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
   use: { baseURL: `http://127.0.0.1:${port}`, trace: 'retain-on-failure' },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
-  // Build the UI first (`npm run e2e`): the API serves frontend/dist as its static dir.
+  // Build the UI first (`npm run e2e`): Vite writes it to src/colloca/static, which the API serves.
   webServer: {
     command: `uv run uvicorn colloca.main:app --host 127.0.0.1 --port ${port}`,
     cwd: repoRoot,
@@ -36,7 +36,8 @@ export default defineConfig({
     env: {
       COLLOCA_DATA_DIR: join(process.env.E2E_TMP!, 'data'),
       SPACY_SIZE: 'sm',
-      COLLOCA_STATIC_DIR: join(repoRoot, 'frontend', 'dist'),
+      // The default location, made explicit so a stray COLLOCA_STATIC_DIR in the shell cannot win.
+      COLLOCA_STATIC_DIR: join(repoRoot, 'src', 'colloca', 'static'),
     },
   },
 });
