@@ -32,15 +32,14 @@
     onclose?.();
   }
 
-  function onkeydown(e: KeyboardEvent): void {
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      el?.close();
-    }
+  // Escape is handled natively: the browser fires `cancel` on the dialog.
+  function oncancel(e: Event): void {
+    e.preventDefault();
+    el?.close();
   }
 </script>
 
-<dialog bind:this={el} aria-labelledby="{uid}-t" onclose={handleClose} oncancel={(e) => { e.preventDefault(); el?.close(); }} {onkeydown}>
+<dialog bind:this={el} aria-labelledby="{uid}-t" onclose={handleClose} {oncancel}>
   <header>
     <h2 id="{uid}-t">{title}</h2>
     <button type="button" class="x" aria-label={t('common.close')} onclick={() => el?.close()}>×</button>

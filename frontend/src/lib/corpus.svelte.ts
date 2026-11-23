@@ -19,6 +19,8 @@ interface CorpusStore {
   currentId: number | null;
   readonly current: Corpus | null;
   aligned: boolean;
+  /** True once `aligned` reflects the current corpus (false while a load is in flight). */
+  loaded: boolean;
   scope: Scope;
   reload: () => Promise<void>;
   select: (id: number | null) => Promise<void>;
@@ -32,21 +34,27 @@ export const corpusStore: CorpusStore = $state<CorpusStore>({
     return corpusStore.list.find((c) => c.id === corpusStore.currentId) ?? null;
   },
   aligned: false,
+  loaded: false,
   scope: emptyScope(),
 
   async reload() {
     // Intentionally fires no corpus-changed when the current corpus is kept: results stay valid.
-    corpusStore.list = await get<Corpus[]>('/api/corpora');
-    const keep = corpusStore.list.some((c) => c.id === corpusStore.currentId);
-    const target = keep ? corpusStore.currentId : (corpusStore.list[0]?.id ?? null);
-    if (target !== corpusStore.currentId) await corpusStore.select(target);
-    else await loadAligned();
+    try {
+      corpusStore.list = await get<Corpus[]>('/api/corpora');
+      const keep = corpusStore.list.some((c) => c.id === corpusStore.currentId);
+      const target = keep ? corpusStore.currentId : (corpusStore.list[0]?.id ?? null);
+      if (target !== corpusStore.currentId) await corpusStore.select(target);
+      else await loadAligned();
+    } finally {
+      corpusStore.loaded = true;
+    }
   },
 
   async select(id) {
     corpusStore.currentId = id;
     corpusStore.scope = emptyScope();
     corpusStore.aligned = false;
+    corpusStore.loaded = false;
     window.dispatchEvent(new CustomEvent(CORPUS_CHANGED, { detail: { id } }));
     try {
       await loadAligned();
@@ -55,6 +63,8 @@ export const corpusStore: CorpusStore = $state<CorpusStore>({
         corpusStore.aligned = false;
         messages.say(err instanceof Error ? err.message : String(err), 'err');
       }
+    } finally {
+      if (corpusStore.currentId === id) corpusStore.loaded = true;
     }
   },
 

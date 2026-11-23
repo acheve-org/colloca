@@ -43,6 +43,11 @@ const pairs: [string, string, string][] = [
   ['--status-forbidden', '--surface', 'status-forbidden on surface'],
   ['--danger', '--surface', 'danger on surface'],
   ['--accent', '--surface', 'accent on surface'],
+  ['--rail-fg', '--rail-bg', 'rail text on rail'],
+  ['--rail-muted', '--rail-bg', 'rail muted on rail'],
+  ['--rail-fg', '--rail-hover', 'rail text on rail hover'],
+  ['--rail-muted', '--rail-hover', 'rail muted on rail hover'],
+  ['--rail-accent', '--rail-bg', 'rail accent on rail'],
   ...hits.map((h): [string, string, string] => [`--hit-${h}-fg`, `--hit-${h}-bg`, `hit-${h}`]),
 ];
 

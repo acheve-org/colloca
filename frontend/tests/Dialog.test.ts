@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import DialogHost from './DialogHost.svelte';
 
 describe('Dialog', () => {
-  it('opens, shows title, closes on Escape and restores focus to the opener', async () => {
+  it('opens, shows title, closes on the native cancel event and restores focus to the opener', async () => {
     render(DialogHost);
     const opener = screen.getByRole('button', { name: 'opener' });
     opener.focus();
@@ -14,7 +14,7 @@ describe('Dialog', () => {
     await tick();
     expect(dlg).toHaveAttribute('open');
     expect(dlg).toHaveAccessibleName('Hello');
-    await fireEvent.keyDown(dlg, { key: 'Escape' });
+    await fireEvent(dlg, new Event('cancel', { cancelable: true }));
     await tick();
     expect(dlg).not.toHaveAttribute('open');
     expect(screen.getByTestId('closed')).toHaveTextContent('1');

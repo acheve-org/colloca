@@ -1,12 +1,14 @@
 import { fireEvent, render, screen } from '@testing-library/svelte';
-import { afterEach, describe, expect, it } from 'vitest';
+import { tick } from 'svelte';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import Rail from '../src/lib/ui/Rail.svelte';
 import { corpusStore } from '../src/lib/corpus.svelte';
-import { route } from '../src/lib/router.svelte';
+import { route, go } from '../src/lib/router.svelte';
 
 afterEach(() => {
   corpusStore.aligned = false;
-  route.screen = 'sources';
+  corpusStore.loaded = false;
+  go('sources');
 });
 
 describe('Rail', () => {
@@ -16,7 +18,7 @@ describe('Rail', () => {
     const links = screen.getAllByRole('link').map((a) => a.textContent?.trim());
     expect(links).toEqual([
       'Sources', 'Base corpora', 'Concordance', 'Collocations', 'N-grams', 'Frequency',
-      'Keyness', 'Word cloud', 'Termbase', 'Job analysis',
+      'Keyness', 'Word cloud', 'Termbase', 'Job',
     ]);
   });
 
@@ -29,10 +31,10 @@ describe('Rail', () => {
   });
 
   it('hides Equivalents unless the corpus is aligned', async () => {
-    const { rerender } = render(Rail);
+    render(Rail);
     expect(screen.queryByRole('link', { name: 'Equivalents' })).toBeNull();
     corpusStore.aligned = true;
-    await rerender({});
+    await tick();
     expect(screen.getByRole('link', { name: 'Equivalents' })).toBeInTheDocument();
   });
 
@@ -42,5 +44,46 @@ describe('Rail', () => {
     await fireEvent.click(dark);
     expect(document.documentElement.dataset.theme).toBe('dark');
     expect(dark).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  describe('Equivalents redirect', () => {
+    it('keeps a deep link while loading, then while aligned turns true', async () => {
+      go('equivalents');
+      render(Rail);
+      await tick();
+      expect(route.screen).toBe('equivalents');
+      corpusStore.aligned = true;
+      corpusStore.loaded = true;
+      await tick();
+      expect(route.screen).toBe('equivalents');
+    });
+
+    it('redirects to concordance once loaded with aligned=false', async () => {
+      go('equivalents');
+      render(Rail);
+      corpusStore.loaded = true;
+      await tick();
+      expect(route.screen).toBe('concordance');
+    });
+
+    it('redirects after switching to a non-aligned corpus', async () => {
+      vi.stubGlobal('fetch', vi.fn(async (u: string) => ({
+        ok: true, status: 200, statusText: 'OK',
+        json: async () => ({ documents: String(u).includes('/1/') ? 2 : 0, segments: 0, partners: [] }),
+      })));
+      corpusStore.list = [
+        { id: 1, name: 'a', lang: 'es', project_id: null, is_reference: 0, docs: 1, tokens: 1 },
+        { id: 2, name: 'b', lang: 'es', project_id: null, is_reference: 0, docs: 1, tokens: 1 },
+      ];
+      await corpusStore.select(1);
+      go('equivalents');
+      render(Rail);
+      await tick();
+      expect(route.screen).toBe('equivalents');
+      await corpusStore.select(2);
+      await tick();
+      expect(route.screen).toBe('concordance');
+      vi.unstubAllGlobals();
+    });
   });
 });

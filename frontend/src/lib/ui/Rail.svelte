@@ -39,11 +39,19 @@
 
 <script lang="ts">
   import { t } from '../i18n';
-  import { route } from '../router.svelte';
+  import { go, route } from '../router.svelte';
   import { setMode, theme, type ThemeMode } from '../theme.svelte';
   import CorpusSwitcher from './CorpusSwitcher.svelte';
 
   const modes: ThemeMode[] = ['auto', 'light', 'dark'];
+
+  // Leave a screen whose rail item is hidden, but only once the corpus load has settled
+  // (a deep link to #/equivalents must survive the first load).
+  $effect(() => {
+    if (!corpusStore.loaded) return;
+    const item = NAV.flatMap((g) => g.items).find((i) => i.id === route.screen);
+    if (item?.visible && !item.visible()) go('concordance');
+  });
 </script>
 
 <aside class="rail">

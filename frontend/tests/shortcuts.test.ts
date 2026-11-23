@@ -90,4 +90,25 @@ describe('shortcut registry', () => {
     expect(formatKeys('Mod+K')).toBe('Ctrl+K');
     expect(formatKeys('Escape')).toBe('Esc');
   });
+
+  it('ignores keys during IME composition', () => {
+    const run = vi.fn();
+    reg({ id: 'k', keys: 'Mod+K', label: 'Go', run });
+    press({ key: 'k', ctrlKey: true, isComposing: true });
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it('newest registration wins; a guarded-off newer one falls through', () => {
+    const older = vi.fn();
+    const newer = vi.fn();
+    let on = true;
+    reg({ id: 'a', keys: 'Mod+K', label: 'A', run: older });
+    reg({ id: 'b', keys: 'Mod+K', label: 'B', when: () => on, run: newer });
+    press({ key: 'k', ctrlKey: true });
+    expect(newer).toHaveBeenCalledTimes(1);
+    expect(older).not.toHaveBeenCalled();
+    on = false;
+    press({ key: 'k', ctrlKey: true });
+    expect(older).toHaveBeenCalledTimes(1);
+  });
 });

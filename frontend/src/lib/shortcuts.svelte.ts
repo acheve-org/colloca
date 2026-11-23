@@ -64,8 +64,12 @@ function isTyping(t: EventTarget | null): boolean {
 }
 
 function onKeydown(e: KeyboardEvent): void {
+  if (e.isComposing) return;
   const typing = isTyping(e.target);
-  for (const s of registry) {
+  // Newest registration wins, so later screens can override earlier ones; a
+  // registration whose `when()` is false falls through to older ones.
+  for (let i = registry.length - 1; i >= 0; i--) {
+    const s = registry[i];
     const p = parse(s.keys);
     if (!matches(p, e)) continue;
     if (typing && !p.mod && p.key !== 'Escape') continue;

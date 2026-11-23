@@ -32,6 +32,7 @@
     Object.entries(languages).map(([value, label]) => ({ value, label })),
   );
   const current = $derived(corpusStore.current);
+  const canCreate = $derived(name.trim() !== '' && lang !== '');
   // The API does not report the spaCy model name yet: show the language only.
   const meta = $derived(
     current
@@ -41,6 +42,7 @@
 
   async function create(e: SubmitEvent): Promise<void> {
     e.preventDefault();
+    if (!canCreate) return;
     try {
       const { id } = await post<{ id: number }>('/api/corpora', { name: name.trim(), lang });
       newOpen = false;
@@ -93,7 +95,7 @@
   </form>
   {#snippet footer()}
     <Button onclick={() => (newOpen = false)}>{t('common.cancel')}</Button>
-    <button type="submit" form="new-corpus" class="primary">{t('corpus.create')}</button>
+    <button type="submit" form="new-corpus" class="primary" disabled={!canCreate}>{t('corpus.create')}</button>
   {/snippet}
 </Dialog>
 

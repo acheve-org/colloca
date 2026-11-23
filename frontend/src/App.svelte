@@ -32,15 +32,6 @@
         label: t('shortcuts.help'),
         run: () => (helpOpen = true),
       }),
-      registerShortcut({
-        id: 'escape',
-        keys: 'Escape',
-        label: t('shortcuts.escape'),
-        run: () => {
-          const open = document.querySelectorAll<HTMLDialogElement>('dialog[open]');
-          open[open.length - 1]?.close();
-        },
-      }),
     ];
     return () => offs.forEach((f) => f());
   });
