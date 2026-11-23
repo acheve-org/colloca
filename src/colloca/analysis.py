@@ -205,6 +205,29 @@ def concordance(conn, scope, q, unit="lemma", width=8, limit=300, sort="doc"):
     return {"total": len(hits), "lines": lines}
 
 
+def examples(conn, scope, q, unit="lemma", limit=5):
+    """Whole sentences containing `q`: the ones closest to a comfortable length come first."""
+    scope = as_scope(scope)
+    terms = _parse_query(q)
+    hits = _find_hits(conn, scope, terms, _unit(unit))
+    titles = {r["id"]: r["title"] for r in
+              conn.execute("SELECT id,title FROM documents WHERE corpus_id=?", (scope.corpus_id,))}
+    step = max(1, len(hits) // 300)               # look at an even spread of at most ~300 hits
+    seen, out = set(), []
+    for h in hits[::step]:
+        rows = conn.execute("SELECT form, sp FROM tokens WHERE doc_id=? AND sent=? ORDER BY pos",
+                            (h["doc_id"], h["sent"])).fetchall()
+        sentence = _join(rows)
+        key = sentence.lower()
+        if len(rows) < 4 or key in seen:
+            continue
+        seen.add(key)
+        out.append((abs(len(rows) - 18), {"sentence": sentence, "doc": titles.get(h["doc_id"], ""),
+                                          "doc_id": h["doc_id"]}))
+    out.sort(key=lambda x: x[0])
+    return [item for _, item in out[:limit]]
+
+
 # --------------------------------------------------------------------------- collocations
 def logdice(o: float, f_node: float, f_coll: float) -> float:
     """logDice (Rychlý 2008): 14 + log2(2·o / (f_node + f_coll)); max 14, independent of corpus size."""

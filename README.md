@@ -41,6 +41,29 @@ Use faster/smaller models with `SPACY_SIZE=sm` (edit `docker-compose.yml`). Data
   match a date filter. The API takes the same filter as query parameters on every analysis endpoint:
   `tags=a,b&text_type=contract&date_from=2022&date_to=2024-06&docs=1,2`.
 
+## Termbase
+
+Turn what you find into terminology you can reuse and hand over:
+
+- **Add**: click **+ term** next to any row of *Frequency*, *Collocations*, *N-grams* or *Keyness* (or the *+ term*
+  button next to the concordance search). The dialog pre-fills the term and its part of speech, and *Find examples*
+  lists whole sentences from the corpus (respecting the filter bar) to pick an example from.
+- **Entries** are (source term, translation) pairs with part of speech, status, domain, definition, notes and an
+  example sentence. *Status*: `candidate` (to be reviewed; the translation may be empty), `approved` (the term to
+  use) or `forbidden` (a translation that must **not** be used; it is exported as a deprecated term). Approved and
+  forbidden entries need a translation. Target language is the other supported language.
+- **Scope**: entries belong to the project of the corpus they were added from (corpora without a project share a
+  general termbase). The *Termbase* tab lists, searches, edits and deletes them.
+- **Export** (same tab, or `GET /api/terms/export?format=...&project=...&status=...`): `tbx`, `tbx2`, `xlsx`, `csv`.
+  By default only *approved* entries are exported; tick *include candidates* to add the rest.
+  - **TBX** (TermBase eXchange, ISO 30042) with TBX-Basic data categories only. `tbx` uses the 2019 structure
+    (`conceptEntry / langSec / termSec`), `tbx2` the 2008 one (`termEntry / langSet / tig`) that most CAT tools read.
+    Rows with the same source term form one concept; approved translations are `preferredTerm`, candidates
+    `admittedTerm`, forbidden ones `deprecatedTerm`.
+  - The TBX output is well-formed and covered by tests, but it has **not been validated against the official TBX
+    schema**; import it into your CAT tool (Trados, memoQ, …) to check before relying on it.
+  - Excel and CSV cells that start with `=`, `+`, `-` or `@` are neutralised (text, never formulas).
+
 ## Base corpora (general language per language)
 
 A corpus built for one client is usually small, so its statistics need something to be compared with. Each

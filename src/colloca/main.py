@@ -2,6 +2,7 @@
 import csv
 import io
 import os
+import sqlite3
 from contextlib import asynccontextmanager
 from dataclasses import asdict
 
@@ -10,7 +11,7 @@ from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import analysis, db, importer, ingest, metadata, nlp
+from . import analysis, db, importer, ingest, metadata, nlp, termbase, termexport
 
 
 @asynccontextmanager
@@ -31,14 +32,7 @@ def _corpus(conn, corpus_id: int):
     return row
 
 
-_FORMULA_START = ("=", "+", "-", "@", "\t", "\r")
-
-
-def _csv_safe(value):
-    """Neutralise spreadsheet formulas: text scraped from the web must not run when opened in Excel."""
-    if isinstance(value, str) and value.startswith(_FORMULA_START):
-        return "'" + value
-    return value
+_csv_safe = termexport.csv_safe
 
 
 def _reply(rows: list[dict], fmt: str, name: str):
@@ -533,6 +527,145 @@ def keyness(corpus_id: int, ref: int | None = None, unit: str = "lemma", min_fre
         rows = _run(analysis.keyness, conn, sq.scope(corpus_id), ref, unit, min_freq, exclude_stop,
                     _pos_list(pos), limit)
     return _reply(rows, format, "keyness")
+
+
+# --------------------------------------------------------------------------- examples & termbase
+@app.get("/api/corpora/{corpus_id}/examples")
+def examples(corpus_id: int, q: str, unit: str = "lemma", limit: int = Query(5, ge=1, le=20),
+             sq: ScopeQuery = Depends()):
+    """Whole sentences containing a word or phrase: candidates for a term's example sentence."""
+    with db.session() as conn:
+        _corpus(conn, corpus_id)
+        return _run(analysis.examples, conn, sq.scope(corpus_id), q, unit, limit)
+
+
+class TermIn(BaseModel):
+    project_id: int | None = None
+    src_lang: str
+    tgt_lang: str = ""
+    src_term: str
+    tgt_term: str = ""
+    pos: str = ""
+    status: str = "candidate"
+    domain: str = ""
+    definition: str = ""
+    notes: str = ""
+    context: str = ""
+    context_source: str = ""
+    origin: str = "manual"
+
+
+class TermPatch(BaseModel):
+    src_term: str | None = None
+    tgt_term: str | None = None
+    pos: str | None = None
+    status: str | None = None
+    domain: str | None = None
+    definition: str | None = None
+    notes: str | None = None
+    context: str | None = None
+    context_source: str | None = None
+
+
+_TERM_CONFLICT = "This term and translation are already in the termbase"
+
+
+def _term_error(exc: Exception) -> HTTPException:
+    return HTTPException(400, str(exc))
+
+
+@app.get("/api/terms")
+def list_terms(project: str = "", src_lang: str = "", tgt_lang: str = "", status: str = "", q: str = "",
+               limit: int = Query(5000, le=20000)):
+    """Termbase entries. project: '' (all), 'none' (general termbase) or a project id. status: comma list."""
+    try:
+        with db.session() as conn:
+            return termbase.list_terms(conn, project, src_lang, tgt_lang,
+                                       tuple(x for x in status.split(",") if x), q, limit)
+    except termbase.TermError as exc:
+        raise _term_error(exc) from exc
+
+
+@app.post("/api/terms", status_code=201)
+def create_term(body: TermIn):
+    try:
+        entry = termbase.clean(body.model_dump(exclude={"project_id"}))
+        termbase.check_consistency(entry)
+    except termbase.TermError as exc:
+        raise _term_error(exc) from exc
+    with db.session() as conn:
+        if body.project_id is not None:
+            _project(conn, body.project_id)
+        try:
+            cur = conn.execute(
+                """INSERT INTO terms (project_id,src_lang,tgt_lang,src_term,tgt_term,pos,status,domain,definition,
+                                      notes,context,context_source,origin)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (body.project_id, entry["src_lang"], entry["tgt_lang"], entry["src_term"], entry["tgt_term"],
+                 entry.get("pos", ""), entry.get("status", "candidate"), entry.get("domain", ""),
+                 entry.get("definition", ""), entry.get("notes", ""), entry.get("context", ""),
+                 entry.get("context_source", ""), entry.get("origin", "manual")))
+        except sqlite3.IntegrityError as exc:
+            raise HTTPException(409, _TERM_CONFLICT) from exc
+        return {"id": cur.lastrowid}
+
+
+@app.patch("/api/terms/{term_id}")
+def update_term(term_id: int, body: TermPatch):
+    sent = {k: getattr(body, k) for k in body.model_fields_set}
+    with db.session() as conn:
+        row = conn.execute("SELECT * FROM terms WHERE id=?", (term_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, "Term not found")
+        try:
+            changes = termbase.clean(sent, partial=True)
+            termbase.check_consistency({**dict(row), **changes})
+            if "src_term" in changes and not changes["src_term"]:
+                raise termbase.TermError("The source term is required")
+        except termbase.TermError as exc:
+            raise _term_error(exc) from exc
+        if changes:
+            cols = ", ".join(f"{k}=?" for k in changes)
+            try:
+                conn.execute(f"UPDATE terms SET {cols}, updated=CURRENT_TIMESTAMP WHERE id=?",
+                             [*changes.values(), term_id])
+            except sqlite3.IntegrityError as exc:
+                raise HTTPException(409, _TERM_CONFLICT) from exc
+    return {"ok": True}
+
+
+@app.delete("/api/terms/{term_id}", status_code=204)
+def delete_term(term_id: int):
+    with db.session() as conn:
+        conn.execute("DELETE FROM terms WHERE id=?", (term_id,))
+
+
+_EXPORTS = {"csv": ("text/csv; charset=utf-8", "csv"), "xlsx": (
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "xlsx"),
+    "tbx": ("application/xml", "tbx"), "tbx2": ("application/xml", "tbx")}
+
+
+@app.get("/api/terms/export")
+def export_terms(format: str = "tbx", project: str = "", src_lang: str = "", tgt_lang: str = "",
+                 status: str = "approved"):
+    """Download the termbase as `tbx` (ISO 30042:2019), `tbx2` (ISO 30042:2008, most CAT tools),
+    `xlsx` or `csv`. By default only approved entries; pass status=approved,candidate to include candidates."""
+    if format not in _EXPORTS:
+        raise HTTPException(400, f"format must be one of {', '.join(_EXPORTS)}")
+    try:
+        with db.session() as conn:
+            rows = termbase.list_terms(conn, project, src_lang, tgt_lang, tuple(x for x in status.split(",") if x))
+    except termbase.TermError as exc:
+        raise _term_error(exc) from exc
+    if format == "csv":
+        body = termexport.to_csv(rows).encode("utf-8")
+    elif format == "xlsx":
+        body = termexport.to_xlsx(rows)
+    else:
+        body = termexport.to_tbx(rows, 2 if format == "tbx2" else 3)
+    media, ext = _EXPORTS[format]
+    return Response(body, media_type=media,
+                    headers={"Content-Disposition": f'attachment; filename="termbase.{ext}"'})
 
 
 app.mount("/", StaticFiles(directory=STATIC, html=True), name="static")

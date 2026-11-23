@@ -93,7 +93,33 @@ INSERT OR IGNORE INTO doc_tags (doc_id, tag)
     WHERE trim(j.value) <> '';
 """
 
-MIGRATIONS: list[tuple[int, str]] = [(1, _V1), (2, _V2), (3, _V3), (4, _V4)]
+# --- v5: the termbase. One row = one (source term, translation) pair of a project; project_id NULL is
+# the general termbase for corpora that belong to no project.
+_V5 = """
+CREATE TABLE terms (
+    id INTEGER PRIMARY KEY,
+    project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
+    src_lang TEXT NOT NULL,
+    tgt_lang TEXT NOT NULL,
+    src_term TEXT NOT NULL,
+    tgt_term TEXT NOT NULL DEFAULT '',            -- '' = candidate still to be translated
+    pos TEXT NOT NULL DEFAULT '',                 -- TBX values: noun, verb, adjective, adverb, properNoun, other
+    status TEXT NOT NULL DEFAULT 'candidate',     -- candidate | approved | forbidden (do not use this translation)
+    domain TEXT NOT NULL DEFAULT '',
+    definition TEXT NOT NULL DEFAULT '',
+    notes TEXT NOT NULL DEFAULT '',
+    context TEXT NOT NULL DEFAULT '',             -- example sentence in the source language
+    context_source TEXT NOT NULL DEFAULT '',      -- title of the document it comes from
+    origin TEXT NOT NULL DEFAULT 'manual',        -- manual | frequency | keyness | collocation | ngram
+    created TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated TEXT DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX idx_terms_unique ON terms (
+    IFNULL(project_id, 0), src_lang, tgt_lang, lower(src_term), lower(tgt_term));
+CREATE INDEX idx_terms_project ON terms (project_id, src_lang, tgt_lang);
+"""
+
+MIGRATIONS: list[tuple[int, str]] = [(1, _V1), (2, _V2), (3, _V3), (4, _V4), (5, _V5)]
 SCHEMA_VERSION = MIGRATIONS[-1][0]
 
 

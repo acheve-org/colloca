@@ -24,13 +24,13 @@ function busy(btn, fn) {
     try { await fn(); } catch (e) { say(e.message, "err"); } finally { btn.disabled = false; }
   };
 }
-function table(cols, rows, mount, wordCols = []) {
-  const head = cols.map((c) => `<th class="${c.num ? "num" : ""}">${esc(c.label)}</th>`).join("");
+function table(cols, rows, mount, wordCols = [], origin = "") {
+  const head = cols.map((c) => `<th class="${c.num ? "num" : ""}">${esc(c.label)}</th>`).join("") + (origin ? "<th></th>" : "");
   const body = rows.map((r) => "<tr>" + cols.map((c) => {
     const v = r[c.key];
     const cell = wordCols.includes(c.key) ? `<a class="word" data-w="${esc(v)}">${esc(v)}</a>` : esc(v);
     return `<td class="${c.num ? "num" : ""}">${cell}</td>`;
-  }).join("") + "</tr>").join("");
+  }).join("") + (origin ? `<td><a class="addterm" title="Add to termbase" data-t="${esc(r.item)}" data-pos="${esc(r.pos || "")}" data-origin="${origin}">+ term</a></td>` : "") + "</tr>").join("");
   mount.innerHTML = rows.length ? `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>` : `<p class="muted" style="padding:.6rem">No results.</p>`;
 }
 // click a word anywhere -> concordance
@@ -45,7 +45,8 @@ document.addEventListener("click", (e) => {
 function showTab(name) {
   document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
   document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.id === "tab-" + name));
-  $("filterBar").hidden = !state.id || ["sources", "base"].includes(name);
+  $("filterBar").hidden = !state.id || ["sources", "base", "terms"].includes(name);
+  if (name === "terms") { syncTbScope(); loadTerms(); }
 }
 $("tabs").addEventListener("click", (e) => { if (e.target.dataset.tab) showTab(e.target.dataset.tab); });
 
@@ -76,7 +77,8 @@ async function loadCorpora(select) {
   if (state.facetFor !== state.id) { clearFilters(); state.facetFor = state.id; }
   if (cur) { await loadDocs(); await refreshFacets(); await pollJobs(); }
   else { $("docsTable").innerHTML = ""; $("jobs").innerHTML = ""; $("filterBar").hidden = true; }
-  $("filterBar").hidden = !cur || $("tab-sources").classList.contains("active") || $("tab-base").classList.contains("active");
+  $("filterBar").hidden = !cur || ["tab-sources", "tab-base", "tab-terms"].some((id) => $(id).classList.contains("active"));
+  if ($("tab-terms").classList.contains("active")) { syncTbScope(); await loadTerms(); }
 }
 $("corpusSel").addEventListener("change", (e) => loadCorpora(+e.target.value));
 
@@ -265,7 +267,7 @@ $("fqGo").onclick = busy($("fqGo"), async () => {
   const rows = await api(`${base()}/frequency?${qs(p)}`); setCsv("fqCsv", "frequency", p);
   table([{ key: "item", label: p.unit }, { key: "pos", label: "POS" }, { key: "freq", label: "Freq", num: 1 }, { key: "per_million", label: "Per million", num: 1 },
          { key: "docs", label: "Docs", num: 1 }, { key: "docs_pct", label: "Docs %", num: 1 },
-         ...(p.with_reference ? [{ key: "ref_per_million", label: "Base per M", num: 1 }] : [])], rows, $("fqOut"), ["item"]);
+         ...(p.with_reference ? [{ key: "ref_per_million", label: "Base per M", num: 1 }] : [])], rows, $("fqOut"), ["item"], "frequency");
   say(`${rows.length} items (click a word for its concordance).`, "ok");
 });
 
@@ -290,7 +292,7 @@ $("coGo").onclick = busy($("coGo"), async () => {
   table([{ key: "item", label: "Collocate (lemma)" }, { key: "pos", label: "POS" }, { key: "cooc", label: "Co-occ", num: 1 }, { key: "freq", label: "Corpus freq", num: 1 },
          { key: "docs", label: "Docs", num: 1 }, { key: "logdice", label: "logDice", num: 1 }, { key: "mi", label: "MI", num: 1 },
          { key: "tscore", label: "t-score", num: 1 }, { key: "ll", label: "LL", num: 1 },
-         ...(p.with_reference ? [{ key: "ref_per_million", label: "Base per M", num: 1 }] : [])], r.rows, $("coOut"), ["item"]);
+         ...(p.with_reference ? [{ key: "ref_per_million", label: "Base per M", num: 1 }] : [])], r.rows, $("coOut"), ["item"], "collocation");
   say("");
 });
 $("coQ").addEventListener("keydown", (e) => { if (e.key === "Enter") $("coGo").click(); });
@@ -299,7 +301,7 @@ $("ngGo").onclick = busy($("ngGo"), async () => {
   const p = { n: $("ngN").value, unit: $("ngUnit").value, min_freq: $("ngMin").value, min_docs: $("ngDocs").value, edge_stop: $("ngEdge").checked, ...scopeParams() };
   state.lastUnit = p.unit;
   const rows = await api(`${base()}/ngrams?${qs(p)}`); setCsv("ngCsv", "ngrams", p);
-  table([{ key: "item", label: `${p.n}-gram` }, { key: "freq", label: "Freq", num: 1 }, { key: "docs", label: "Docs", num: 1 }], rows, $("ngOut"), ["item"]);
+  table([{ key: "item", label: `${p.n}-gram` }, { key: "freq", label: "Freq", num: 1 }, { key: "docs", label: "Docs", num: 1 }], rows, $("ngOut"), ["item"], "ngram");
   say(`${rows.length} n-grams.`, "ok");
 });
 
@@ -311,8 +313,93 @@ $("kyGo").onclick = busy($("kyGo"), async () => {
   state.lastKeyness = p;
   table([{ key: "item", label: "Lemma" }, { key: "pos", label: "POS" }, { key: "freq", label: "Freq", num: 1 }, { key: "ref_freq", label: "Ref freq", num: 1 },
          { key: "per_million", label: "Per M", num: 1 }, { key: "ref_per_million", label: "Ref per M", num: 1 }, { key: "log_ratio", label: "Log ratio", num: 1 },
-         { key: "ll", label: "LL", num: 1 }], rows, $("kyOut"), ["item"]);
+         { key: "ll", label: "LL", num: 1 }], rows, $("kyOut"), ["item"], "keyness");
   say("");
+});
+
+// ------------------------------------------------------------------ termbase
+const curCorpus = () => state.corpora.find((c) => c.id === state.id);
+const otherLang = (lang) => Object.keys(state.langs).find((l) => l !== lang);
+let editingTerm = null, termCtx = null;
+function termFields(t = {}) {
+  $("tmSrc").value = t.src_term ?? ""; $("tmTgt").value = t.tgt_term ?? ""; $("tmStatus").value = t.status ?? "candidate";
+  $("tmPos").value = t.pos ?? ""; $("tmDomain").value = t.domain ?? ""; $("tmDef").value = t.definition ?? "";
+  $("tmNotes").value = t.notes ?? ""; $("tmCtx").value = t.context ?? ""; $("tmSrcDoc").textContent = t.context_source ? `from “${t.context_source}”` : "";
+  $("tmExamples").innerHTML = "";
+}
+const POS_MAP = { NOUN: "noun", VERB: "verb", AUX: "verb", ADJ: "adjective", ADV: "adverb", PROPN: "properNoun" };
+function openTerm(src, pos, origin) {
+  const c = curCorpus(); if (!c) return say("Create or select a corpus first.", "err");
+  editingTerm = null; termCtx = { origin, project_id: c.project_id, src_lang: c.lang };
+  $("termTitle").textContent = "Add term";
+  $("termLangs").textContent = `${state.langs[c.lang]} → ${state.langs[otherLang(c.lang)]}` + (c.project_id ? "" : " · general termbase (corpus has no project)");
+  termFields({ src_term: src, pos: POS_MAP[pos] ?? "" }); $("termDlg").showModal(); findExamples(true);
+}
+document.addEventListener("click", (e) => { const a = e.target.closest("a.addterm"); if (a) openTerm(a.dataset.t, a.dataset.pos, a.dataset.origin); });
+$("ccTerm").onclick = () => { const q = $("ccQ").value.trim(); if (!q) return say("Type a word or phrase first.", "err"); openTerm(q, "", "concordance"); };
+async function findExamples(quiet) {
+  const q = $("tmSrc").value.trim(); if (!q || !state.id) return;
+  try {
+    const unit = q.includes(" ") ? "form" : "lemma";
+    const ex = await api(`${base()}/examples?${qs({ q, unit, limit: 5, ...scopeParams() })}`);
+    $("tmExamples").innerHTML = ex.length ? ex.map((x, i) => `<div class="example" data-i="${i}" title="Click to use as the example">${esc(x.sentence)} <span class="muted">— ${esc(x.doc)}</span></div>`).join("")
+      : (quiet ? "" : `<p class="muted">No sentence found for “${esc(q)}”.</p>`);
+    termCtx.examples = ex;
+  } catch (err) { if (!quiet) say(err.message, "err"); }
+}
+$("tmFind").onclick = () => findExamples(false);
+$("tmExamples").addEventListener("click", (e) => {
+  const d = e.target.closest(".example"); if (!d) return;
+  const x = termCtx.examples[+d.dataset.i]; $("tmCtx").value = x.sentence; $("tmSrcDoc").textContent = `from “${x.doc}”`;
+});
+$("termForm").addEventListener("submit", async (e) => {
+  if (e.submitter?.value !== "ok") return;
+  const doc = $("tmSrcDoc").textContent.replace(/^from “|”$/g, "");
+  const body = { src_term: $("tmSrc").value, tgt_term: $("tmTgt").value, status: $("tmStatus").value, pos: $("tmPos").value,
+    domain: $("tmDomain").value, definition: $("tmDef").value, notes: $("tmNotes").value, context: $("tmCtx").value, context_source: $("tmCtx").value ? doc : "" };
+  try {
+    if (editingTerm) await api(`/api/terms/${editingTerm}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    else await post("/api/terms", { ...body, project_id: termCtx.project_id, src_lang: termCtx.src_lang, tgt_lang: otherLang(termCtx.src_lang), origin: termCtx.origin });
+    say(editingTerm ? "Term updated." : "Term added to the termbase.", "ok");
+    if ($("tab-terms").classList.contains("active")) await loadTerms();
+  } catch (err) { say(err.message, "err"); }
+});
+
+function syncTbScope() {
+  const keep = $("tbScope").dataset.pinned ? $("tbScope").value : null, c = curCorpus();
+  $("tbScope").innerHTML = `<option value="">all projects</option><option value="none">No project (general)</option>` + state.projects.map((p) => `<option value="${p.id}">${esc(p.name)}</option>`).join("");
+  $("tbScope").value = keep ?? (c ? (c.project_id ? String(c.project_id) : "none") : "");
+}
+const tbParams = () => ({ project: $("tbScope").value, status: $("tbStatus").value, q: $("tbQ").value.trim() });
+async function loadTerms() {
+  try {
+    const rows = await api(`/api/terms?${qs(tbParams())}`); state.terms = rows;
+    $("tbCount").textContent = `${rows.length} entr${rows.length === 1 ? "y" : "ies"}`;
+    $("domainList").innerHTML = [...new Set(rows.map((r) => r.domain).filter(Boolean))].map((d) => `<option value="${esc(d)}">`).join("");
+    const ex = { project: $("tbScope").value, status: $("tbCand").checked ? "approved,candidate" : "approved" };
+    $("tbTbx").href = `/api/terms/export?${qs({ ...ex, format: "tbx" })}`; $("tbTbx2").href = `/api/terms/export?${qs({ ...ex, format: "tbx2" })}`;
+    $("tbXlsx").href = `/api/terms/export?${qs({ ...ex, format: "xlsx" })}`; $("tbCsv").href = `/api/terms/export?${qs({ ...ex, format: "csv" })}`;
+    $("tbOut").innerHTML = rows.length ? `<table><thead><tr><th>Source</th><th>Translation</th><th>POS</th><th>Status</th><th>Domain</th><th>Example</th><th></th></tr></thead><tbody>` +
+      rows.map((r) => `<tr><td><b>${esc(r.src_term)}</b><br><span class="muted">${esc(r.src_lang)}→${esc(r.tgt_lang)}${r.project ? " · " + esc(r.project) : ""}</span></td>
+        <td>${esc(r.tgt_term) || `<span class="muted">—</span>`}</td><td class="muted">${esc(r.pos)}</td>
+        <td><span class="badge ${r.status === "forbidden" ? "warn" : r.status === "approved" ? "okb" : ""}">${r.status}</span></td>
+        <td>${esc(r.domain)}</td><td class="muted ctx" title="${esc(r.context_source)}">${esc(r.context)}</td>
+        <td class="nowrap"><button data-tedit="${r.id}">Edit</button> <button data-tdel="${r.id}" class="danger">Delete</button></td></tr>`).join("") + "</tbody></table>"
+      : `<p class="muted" style="padding:.6rem">No entries here yet.</p>`;
+  } catch (err) { say(err.message, "err"); }
+}
+$("tbScope").addEventListener("change", () => { $("tbScope").dataset.pinned = "1"; loadTerms(); });
+$("tbStatus").addEventListener("change", loadTerms); $("tbCand").addEventListener("change", loadTerms);
+$("tbQ").addEventListener("input", () => { clearTimeout(state.tbTimer); state.tbTimer = setTimeout(loadTerms, 300); });
+$("tbOut").addEventListener("click", async (e) => {
+  const d = e.target.dataset;
+  if (d.tedit) {
+    const t = state.terms.find((x) => x.id === +d.tedit); editingTerm = t.id; termCtx = { examples: [] };
+    $("termTitle").textContent = "Edit term"; $("termLangs").textContent = `${state.langs[t.src_lang]} → ${state.langs[t.tgt_lang]}`;
+    termFields(t); $("termDlg").showModal();
+  } else if (d.tdel && confirm("Delete this termbase entry?")) {
+    try { await api(`/api/terms/${d.tdel}`, { method: "DELETE" }); await loadTerms(); say("Entry deleted.", "ok"); } catch (err) { say(err.message, "err"); }
+  }
 });
 
 // ------------------------------------------------------------------ base (reference) corpora

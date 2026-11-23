@@ -51,3 +51,8 @@ canvas { max-width:100%; background:var(--card); border:1px solid var(--line); b
 .scope-on { color:var(--accent); font-weight:600; }
 .corpus-settings { margin:.4rem 0; } details.meta { margin:.4rem 0 .8rem; } details.meta summary { cursor:pointer; color:var(--muted); font-size:.9rem; }
 td.nowrap { white-space:nowrap; } #projList .row { margin:.3rem 0; }
+a.addterm { color:var(--accent); cursor:pointer; font-size:.8rem; white-space:nowrap; opacity:.75; } a.addterm:hover { opacity:1; text-decoration:underline; }
+.example { padding:.3rem .5rem; margin:.25rem 0; border:1px solid var(--line); border-radius:6px; cursor:pointer; font-size:.88rem; } .example:hover { border-color:var(--accent); }
+td.ctx { max-width:22rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.badge.okb { color:#1b7a3d; border-color:#1b7a3d; }
+#termForm textarea, #termForm input[type=text], #termForm input:not([type]) { width:100%; box-sizing:border-box; }
