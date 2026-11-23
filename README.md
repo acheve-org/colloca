@@ -19,12 +19,27 @@ Use faster/smaller models with `SPACY_SIZE=sm` (edit `docker-compose.yml`). Data
 
 ## Workflow
 
-1. **New corpus** (name + language), e.g. "Client X – wind energy [es]".
+1. **New corpus** (name + language), e.g. "Client X – wind energy [es]". Group the corpora of a client under a
+   **project** (header: *Projects…*); the Project selector narrows the corpus list.
 2. **Sources**: paste a URL → *Fetch & preview* → trim noise in the text box → *Add*.
    Or upload DOCX / PDF (text layer) / TXT / HTML. Exact duplicates are rejected.
 3. Explore with the tabs. Click any word in a table to jump to its concordance. Every table has a CSV export.
 4. **Keyness**: compares your corpus with the language's **base corpus** (below) by default, or with any other
    corpus of the same language you pick.
+
+## Projects, document details and filters
+
+- **Projects** are clients or jobs that group corpora. A corpus belongs to at most one project (change it under
+  *Sources*); deleting a project keeps its corpora. Base corpora belong to no project.
+- **Document details**: every document can carry **tags**, a **text type** (contract, manual…), a **date**
+  (`2024`, `2024-05` or `2024-05-17`) and an **author**. Set them for the documents you are about to add (the
+  “Details” box in *Sources*; it applies to URL, upload and pasted text alike) or edit them later with *Edit*.
+- **Filter bar** (above every analysis tab): restrict the analysis to documents with *all* the given tags, a text
+  type, and/or a date range. Everything is recomputed on that subset, including the sizes behind *per million*,
+  the *Docs %* column, collocation statistics and keyness (the filter narrows the studied corpus; the reference
+  stays whole). CSV exports use the same filter. A partial date counts as its first day; undated documents never
+  match a date filter. The API takes the same filter as query parameters on every analysis endpoint:
+  `tags=a,b&text_type=contract&date_from=2022&date_to=2024-06&docs=1,2`.
 
 ## Base corpora (general language per language)
 

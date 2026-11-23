@@ -66,7 +66,34 @@ ALTER TABLE corpora ADD COLUMN is_reference INTEGER NOT NULL DEFAULT 0;
 CREATE UNIQUE INDEX idx_one_reference_per_lang ON corpora(lang) WHERE is_reference = 1;
 """
 
-MIGRATIONS: list[tuple[int, str]] = [(1, _V1), (2, _V2), (3, _V3)]
+# --- v4: projects (clients) grouping corpora, and document metadata that analyses can filter on.
+# Tags move from the free-text documents.tags column (never used by the UI) to a proper table.
+_V4 = r"""
+CREATE TABLE projects (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    notes TEXT NOT NULL DEFAULT '',
+    created TEXT DEFAULT CURRENT_TIMESTAMP
+);
+ALTER TABLE corpora ADD COLUMN project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL;
+CREATE INDEX idx_corpora_project ON corpora(project_id);
+ALTER TABLE documents ADD COLUMN text_type TEXT NOT NULL DEFAULT '';   -- e.g. contract, manual, press release
+ALTER TABLE documents ADD COLUMN doc_date TEXT NOT NULL DEFAULT '';    -- YYYY, YYYY-MM or YYYY-MM-DD
+ALTER TABLE documents ADD COLUMN author TEXT NOT NULL DEFAULT '';
+CREATE TABLE doc_tags (
+    doc_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    tag TEXT NOT NULL,
+    PRIMARY KEY (doc_id, tag)
+) WITHOUT ROWID;
+CREATE INDEX idx_doc_tags_tag ON doc_tags(tag);
+INSERT OR IGNORE INTO doc_tags (doc_id, tag)
+    SELECT d.id, lower(trim(j.value))
+    FROM documents d,
+         json_each('["' || replace(replace(replace(d.tags, char(92), ''), '"', ''), ',', '","') || '"]') j
+    WHERE trim(j.value) <> '';
+"""
+
+MIGRATIONS: list[tuple[int, str]] = [(1, _V1), (2, _V2), (3, _V3), (4, _V4)]
 SCHEMA_VERSION = MIGRATIONS[-1][0]
 
 

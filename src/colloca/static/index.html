@@ -9,6 +9,10 @@
 <body>
 <header>
   <h1>Colloca</h1>
+  <label>Project
+    <select id="projSel"></select>
+  </label>
+  <button id="projBtn" title="Create, rename or delete projects (clients)">Projects…</button>
   <label>Corpus
     <select id="corpusSel"></select>
   </label>
@@ -17,11 +21,36 @@
   <span id="corpusInfo" class="muted"></span>
 </header>
 
+<dialog id="projDlg">
+  <form method="dialog">
+    <h3>Projects</h3>
+    <p class="muted">A project groups the corpora of one client. Deleting a project keeps its corpora.</p>
+    <div id="projList"></div>
+    <div class="row"><input id="projNew" placeholder="New project / client name"><button type="button" id="projAdd" class="primary">Add</button></div>
+    <menu><button value="close">Close</button></menu>
+  </form>
+</dialog>
+
+<dialog id="docDlg">
+  <form method="dialog" id="docForm">
+    <h3>Document details</h3>
+    <label>Title <input id="edTitle"></label>
+    <label>Tags <input id="edTags" list="tagList" placeholder="comma separated, e.g. legal, 2023"></label>
+    <label>Text type <input id="edType" list="typeList" placeholder="e.g. contract, manual"></label>
+    <label>Date <input id="edDate" placeholder="2024, 2024-05 or 2024-05-17" size="12"></label>
+    <label>Author <input id="edAuthor"></label>
+    <menu><button value="cancel" formnovalidate>Cancel</button><button id="edOk" value="ok">Save</button></menu>
+  </form>
+</dialog>
+<datalist id="tagList"></datalist>
+<datalist id="typeList"></datalist>
+
 <dialog id="newDlg">
   <form method="dialog" id="newForm">
     <h3>New corpus</h3>
     <label>Name <input id="newName" required placeholder="e.g. Client X – wind energy"></label>
     <label>Language <select id="newLang"></select></label>
+    <label>Project <select id="newProj"></select></label>
     <menu><button value="cancel" formnovalidate>Cancel</button><button id="newOk" value="ok">Create</button></menu>
   </form>
 </dialog>
@@ -36,10 +65,35 @@
   <button data-tab="cloud">Word cloud</button>
   <button data-tab="base">Base corpora</button>
 </nav>
+<div id="filterBar" hidden>
+  <b>Only documents with</b>
+  <label>tags <input id="fTags" list="tagList" placeholder="all of: a, b" size="16"></label>
+  <label>type <select id="fType"></select></label>
+  <label>from <input id="fFrom" placeholder="2022" size="9"></label>
+  <label>to <input id="fTo" placeholder="2024-06" size="9"></label>
+  <button id="fClear" type="button">Clear</button>
+  <span id="scopeInfo" class="muted"></span>
+</div>
 <div id="msg" role="status"></div>
 
 <main>
 <section id="tab-sources" class="tab active">
+  <div class="row corpus-settings">
+    <label>Corpus name <input id="cSetName" size="26"></label>
+    <label>Project <select id="cSetProj"></select></label>
+    <button id="cSetSave">Save</button>
+  </div>
+  <details class="meta">
+    <summary>Details for the documents I add next (optional): tags, type, date, author</summary>
+    <div class="row">
+      <label>Tags <input id="mTags" list="tagList" placeholder="legal, 2023" size="18"></label>
+      <label>Type <input id="mType" list="typeList" placeholder="contract" size="12"></label>
+      <label>Date <input id="mDate" placeholder="2024-05" size="10"></label>
+      <label>Author <input id="mAuthor" size="14"></label>
+    </div>
+    <p class="muted">Applied to every document added from a URL, an upload or pasted text until you clear these fields.
+    Tags, type and date are what the filter bar above the analyses selects on; you can edit them later per document.</p>
+  </details>
   <label class="force"><input type="checkbox" id="forceLang"> import even if the language looks wrong</label>
   <div id="jobs" aria-live="polite"></div>
   <div class="cards">
