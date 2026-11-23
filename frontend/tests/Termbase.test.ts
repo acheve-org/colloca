@@ -19,6 +19,7 @@ let calls: Call[];
 let terms: { status: number; body: unknown };
 let gate: Promise<void> | null;
 let patchStatus: number;
+let patchGate: Promise<void> | null;
 
 const res = (status: number, body: unknown) => ({
   ok: status < 400, status, statusText: 'x', json: async () => body,
@@ -32,6 +33,7 @@ beforeEach(() => {
   calls = [];
   gate = null;
   patchStatus = 200;
+  patchGate = null;
   terms = { status: 200, body: [term(1), term(2, { status: 'approved' })] };
   corpusStore.list = [corpus(1, null), corpus(2, 7)];
   corpusStore.currentId = 1;
@@ -48,6 +50,7 @@ beforeEach(() => {
       if (gate) await gate;
       return res(terms.status, terms.body);
     }
+    if (/^\/api\/terms\/\d+$/.test(p) && method === 'PATCH') { if (patchGate) await patchGate; }
     if (/^\/api\/terms\/\d+$/.test(p) && method === 'PATCH') return res(patchStatus, patchStatus < 400 ? { ok: true } : { detail: 'An approved term needs a translation' });
     if (/^\/api\/terms\/\d+$/.test(p) && method === 'DELETE') return { ok: true, status: 204, statusText: '', json: async () => null };
     if (p === '/api/projects') return res(200, [{ id: 7, name: 'Acme', corpora: 1 }]);
@@ -172,6 +175,8 @@ describe('Termbase', () => {
     await waitFor(() => expect(calls.some((c) => c.method === 'DELETE')).toBe(true));
     expect(calls.find((c) => c.method === 'DELETE')!.path).toBe('/api/terms/1');
     await waitFor(() => expect(bodyRows().length).toBe(1));
+    expect(screen.queryByRole('region', { name: 'Entry' })).not.toBeInTheDocument();
+    expect(screen.getByRole('grid')).toHaveFocus();
   });
 
   it('cancelling the confirmation deletes nothing', async () => {
@@ -245,5 +250,58 @@ describe('Termbase', () => {
     terms.body = [];
     render(Termbase);
     await waitFor(() => expect(screen.getByText('No entries here yet.')).toBeInTheDocument());
+  });
+
+  it('disables the row actions while a status change is in flight, then Edit sees the new status', async () => {
+    render(Termbase);
+    render(TermDialog);
+    await waitFor(() => expect(bodyRows().length).toBe(2));
+    await fireEvent.click(bodyRows()[0]);
+    let release: () => void = () => {};
+    patchGate = new Promise<void>((r) => (release = r));
+    await fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+    for (const n of ['Edit', 'Approve', 'Mark forbidden', 'Delete']) {
+      await waitFor(() => expect(screen.getByRole('button', { name: n })).toBeDisabled());
+    }
+    release();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Edit' })).toBeEnabled());
+    await fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    expect(termStore.draft.status).toBe('approved');
+  });
+
+  it('a list response in flight cannot overwrite a status change or bring back a deleted row', async () => {
+    await ready();
+    await fireEvent.click(bodyRows()[0]);
+    let release: () => void = () => {};
+    gate = new Promise<void>((r) => (release = r));
+    terms = { status: 200, body: [term(1), term(2, { status: 'approved' })] };
+    await fireEvent.click(screen.getByRole('button', { name: 'Reload' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+    await waitFor(() => expect(within(bodyRows()[0]).getByText('Approved')).toBeInTheDocument());
+    release();
+    await new Promise((r) => setTimeout(r, 10));
+    expect(within(bodyRows()[0]).getByText('Approved')).toBeInTheDocument();
+    gate = null;
+    gate = new Promise<void>((r) => (release = r));
+    await fireEvent.click(screen.getByRole('button', { name: 'Reload' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    await fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }));
+    await waitFor(() => expect(bodyRows().length).toBe(1));
+    release();
+    await new Promise((r) => setTimeout(r, 10));
+    expect(bodyRows().length).toBe(1);
+  });
+
+  it('offers the distinct loaded domains as suggestions in the dialog', async () => {
+    terms.body = [term(1, { domain: 'law' }), term(2, { domain: 'law' }), term(3, { domain: 'tech' })];
+    render(Termbase);
+    render(TermDialog);
+    await waitFor(() => expect(bodyRows().length).toBe(3));
+    expect(termStore.domains).toEqual(['law', 'tech']);
+    await fireEvent.click(bodyRows()[0]);
+    await fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    const input = within(screen.getByRole('dialog')).getByLabelText('Domain') as HTMLInputElement;
+    const list = document.getElementById(input.getAttribute('list')!)!;
+    expect([...list.querySelectorAll('option')].map((o) => o.getAttribute('value'))).toEqual(['law', 'tech']);
   });
 });

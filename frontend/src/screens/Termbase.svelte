@@ -7,13 +7,13 @@
 </script>
 
 <script lang="ts">
-  import { onMount, untrack } from 'svelte';
+  import { onMount, tick, untrack } from 'svelte';
   import { del, get, patch, qs } from '../lib/api';
   import { CORPUS_CHANGED, corpusStore } from '../lib/corpus.svelte';
   import { t } from '../lib/i18n';
   import { messages } from '../lib/messages.svelte';
   import { go, route } from '../lib/router.svelte';
-  import { openTerm, TERM_SAVED } from '../lib/term.svelte';
+  import { openTerm, TERM_SAVED, termStore } from '../lib/term.svelte';
   import type { Project, Term } from '../lib/types';
   import Badge from '../lib/ui/Badge.svelte';
   import Button from '../lib/ui/Button.svelte';
@@ -44,6 +44,9 @@
   let filter = $state('');
   let loading = $state(false);
   let loadedOnce = $state(false);
+  // Id of the row with a mutation in flight: its actions are disabled meanwhile.
+  let busyId = $state<number | null>(null);
+  let tableEl: HTMLElement | undefined = $state();
   let seq = 0;
   let timer: ReturnType<typeof setTimeout> | undefined;
 
@@ -106,6 +109,7 @@
       const rows = await get<Term[]>('/api/terms', params);
       if (n !== seq) return;
       terms = rows;
+      termStore.domains = [...new Set(rows.map((x) => x.domain).filter(Boolean))].sort();
       loadedOnce = true;
       // Persist only a load that worked.
       go('termbase', { project: toUrlScope(scope), status, q: params.q });
@@ -144,7 +148,9 @@
     load();
   }
 
-  function edit(r: Term): void {
+  function edit(row: Term): void {
+    const r = terms.find((x) => x.id === row.id) ?? row;
+    if (busyId === r.id) return;
     openTerm({
       id: r.id,
       source: r.src_term,
@@ -163,6 +169,11 @@
   }
 
   async function setStatus(r: Term, next: 'approved' | 'forbidden'): Promise<void> {
+    if (busyId !== null) return;
+    busyId = r.id;
+    // a list response still in flight predates this change
+    seq++;
+    loading = false;
     try {
       await patch(`/api/terms/${r.id}`, { status: next });
       const updated = { ...r, status: next };
@@ -171,6 +182,8 @@
       messages.say(t('tb.updated'), 'ok');
     } catch (err) {
       messages.say(errMsg(err), 'err');
+    } finally {
+      busyId = null;
     }
   }
 
@@ -182,14 +195,21 @@
   async function confirmDelete(): Promise<void> {
     const r = toDelete;
     confirmOpen = false;
-    if (!r) return;
+    if (!r || busyId !== null) return;
+    busyId = r.id;
+    seq++;
+    loading = false;
     try {
       await del(`/api/terms/${r.id}`);
       terms = terms.filter((x) => x.id !== r.id);
       if (selected?.id === r.id) selected = null;
       messages.say(t('tb.deleted'), 'ok');
+      await tick();
+      tableEl?.querySelector<HTMLElement>('[role="grid"]')?.focus();
     } catch (err) {
       messages.say(errMsg(err), 'err');
+    } finally {
+      busyId = null;
     }
   }
 
@@ -289,7 +309,7 @@
     </div>
   {/if}
 
-  <div class="table">
+  <div class="table" bind:this={tableEl}>
     {#if loadedOnce && !terms.length && !loading}
       <EmptyState title={t('tb.empty')} hint={t('tb.emptyHint')} />
     {:else}
@@ -312,10 +332,10 @@
     <div class="detail">
       <DetailStrip title={t('tb.detail')}>
         {#snippet actions()}
-          <Button onclick={() => edit(r)}>{t('tb.edit')}</Button>
-          <Button disabled={r.status === 'approved'} onclick={() => setStatus(r, 'approved')}>{t('tb.approve')}</Button>
-          <Button disabled={r.status === 'forbidden'} onclick={() => setStatus(r, 'forbidden')}>{t('tb.forbid')}</Button>
-          <Button variant="danger" onclick={() => askDelete(r)}>{t('tb.delete')}</Button>
+          <Button disabled={busyId === r.id} onclick={() => edit(r)}>{t('tb.edit')}</Button>
+          <Button disabled={busyId === r.id || r.status === 'approved'} onclick={() => setStatus(r, 'approved')}>{t('tb.approve')}</Button>
+          <Button disabled={busyId === r.id || r.status === 'forbidden'} onclick={() => setStatus(r, 'forbidden')}>{t('tb.forbid')}</Button>
+          <Button variant="danger" disabled={busyId === r.id} onclick={() => askDelete(r)}>{t('tb.delete')}</Button>
         {/snippet}
         <dl>
           <dt>{t('tb.col.source')}</dt>

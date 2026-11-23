@@ -67,6 +67,8 @@ export const termStore = $state<{
   langs: Languages;
   /** Id of the entry being edited; null when adding. */
   editingId: number | null;
+  /** Distinct domains of the loaded termbase, offered as suggestions. */
+  domains: string[];
   examples: Example[];
   examplesFor: string;
   saving: boolean;
@@ -76,6 +78,7 @@ export const termStore = $state<{
   ctx: null,
   langs: {},
   editingId: null,
+  domains: [],
   examples: [],
   examplesFor: '',
   saving: false,

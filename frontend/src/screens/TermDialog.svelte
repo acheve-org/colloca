@@ -51,7 +51,10 @@
         <Select label={t('term.pos')} bind:value={termStore.draft.pos} options={posOptions} />
       </Field>
       <Field label={t('term.domain')}>
-        <input bind:value={termStore.draft.domain} size="14" />
+        <input bind:value={termStore.draft.domain} size="14" list="{uid}-domains" />
+        <datalist id="{uid}-domains">
+          {#each termStore.domains as d (d)}<option value={d}></option>{/each}
+        </datalist>
       </Field>
     </div>
     <Field label={t('term.definition')}>

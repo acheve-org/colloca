@@ -311,6 +311,10 @@
     background: var(--accent);
     color: var(--accent-fg);
   }
+  /* status badges keep their own colours: a surface pill stays legible on the accent row */
+  .body.selected :global(.badge) {
+    background: var(--surface);
+  }
   .status {
     padding: 1rem;
     color: var(--muted);

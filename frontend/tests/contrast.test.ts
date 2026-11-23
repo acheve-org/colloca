@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import tableSrc from '../src/lib/ui/DataTable.svelte?raw';
 import css from '../src/lib/styles/tokens.css?raw';
 
 function lum(hex: string): number {
@@ -89,6 +90,17 @@ describe.each([
       const { r, g, b } = rgb(t[k]);
       expect(b, k).toBeGreaterThan(r);
       expect(b, k).toBeGreaterThan(g);
+    }
+  });
+});
+
+describe('status badges on a selected DataTable row', () => {
+  it('sit on a surface pill (status colours reach 4.5:1 on --surface in both themes)', () => {
+    expect(tableSrc).toMatch(/\.body\.selected :global\(\.badge\)\s*\{[^}]*background:\s*var\(--surface\)/);
+    for (const t of [light, dark]) {
+      for (const k of ['--status-candidate', '--status-approved', '--status-forbidden']) {
+        expect(contrast(t[k], t['--surface'])).toBeGreaterThanOrEqual(4.5);
+      }
     }
   });
 });
