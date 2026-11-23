@@ -10,11 +10,25 @@
   import ShortcutHelp from './lib/ui/ShortcutHelp.svelte';
   import type { Component } from 'svelte';
   import type { ScreenId } from './lib/router.svelte';
+  import Collocations from './screens/Collocations.svelte';
   import Concordance from './screens/Concordance.svelte';
+  import Equivalents from './screens/Equivalents.svelte';
+  import Frequency from './screens/Frequency.svelte';
+  import Keyness from './screens/Keyness.svelte';
+  import Ngrams from './screens/Ngrams.svelte';
   import TermDialog from './screens/TermDialog.svelte';
+  import WordCloud from './screens/WordCloud.svelte';
 
   // Screen outlet: screens not built yet render the placeholder.
-  const SCREEN_COMPONENTS: Partial<Record<ScreenId, Component>> = { concordance: Concordance };
+  const SCREEN_COMPONENTS: Partial<Record<ScreenId, Component>> = {
+    concordance: Concordance,
+    frequency: Frequency,
+    collocations: Collocations,
+    ngrams: Ngrams,
+    keyness: Keyness,
+    equivalents: Equivalents,
+    cloud: WordCloud,
+  };
   const Screen = $derived(SCREEN_COMPONENTS[route.screen]);
 
   let helpOpen = $state(false);
