@@ -56,4 +56,42 @@ describe('corpusStore', () => {
     corpusStore.clearScope();
     expect(corpusStore.scope.type).toBe('');
   });
+
+  it('fires corpus-changed and leaves aligned=false when /parallel fails', async () => {
+    const { corpusStore, CORPUS_CHANGED } = await load([c(1)]);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ ok: false, status: 500, statusText: 'boom', json: async () => ({}) })),
+    );
+    const spy = vi.fn();
+    window.addEventListener(CORPUS_CHANGED, spy);
+    await corpusStore.select(1);
+    window.removeEventListener(CORPUS_CHANGED, spy);
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(corpusStore.currentId).toBe(1);
+    expect(corpusStore.aligned).toBe(false);
+  });
+
+  it('a late response for A does not overwrite B (A then B)', async () => {
+    const { corpusStore } = await load([c(1), c(2)]);
+    const resolvers: Record<string, (v: unknown) => void> = {};
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        (url: string) =>
+          new Promise((resolve) => {
+            resolvers[url] = (documents) =>
+              resolve({ ok: true, status: 200, statusText: '', json: async () => ({ documents }) });
+          }),
+      ),
+    );
+    const a = corpusStore.select(1);
+    const b = corpusStore.select(2);
+    resolvers['/api/corpora/2/parallel'](0);
+    await b;
+    resolvers['/api/corpora/1/parallel'](5);
+    await a;
+    expect(corpusStore.currentId).toBe(2);
+    expect(corpusStore.aligned).toBe(false);
+  });
 });

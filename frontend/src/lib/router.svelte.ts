@@ -18,7 +18,9 @@ export const SCREENS: readonly ScreenId[] = [
 
 function parse(hash: string): { screen: ScreenId; params: Record<string, string> } {
   const m = hash.replace(/^#\/?/, '');
-  const [name, query = ''] = m.split('?', 2);
+  const q = m.indexOf('?');
+  const name = q < 0 ? m : m.slice(0, q);
+  const query = q < 0 ? '' : m.slice(q + 1);
   const screen = (SCREENS as readonly string[]).includes(name) ? (name as ScreenId) : 'sources';
   return { screen, params: Object.fromEntries(new URLSearchParams(query)) };
 }

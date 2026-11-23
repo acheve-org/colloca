@@ -1,4 +1,5 @@
 import { get } from './api';
+import { messages } from './messages.svelte';
 import type { Corpus, ParallelInfo } from './types';
 
 export const CORPUS_CHANGED = 'corpus-changed';
@@ -34,6 +35,7 @@ export const corpusStore: CorpusStore = $state<CorpusStore>({
   scope: emptyScope(),
 
   async reload() {
+    // Intentionally fires no corpus-changed when the current corpus is kept: results stay valid.
     corpusStore.list = await get<Corpus[]>('/api/corpora');
     const keep = corpusStore.list.some((c) => c.id === corpusStore.currentId);
     const target = keep ? corpusStore.currentId : (corpusStore.list[0]?.id ?? null);
@@ -44,8 +46,16 @@ export const corpusStore: CorpusStore = $state<CorpusStore>({
   async select(id) {
     corpusStore.currentId = id;
     corpusStore.scope = emptyScope();
-    await loadAligned();
+    corpusStore.aligned = false;
     window.dispatchEvent(new CustomEvent(CORPUS_CHANGED, { detail: { id } }));
+    try {
+      await loadAligned();
+    } catch (err) {
+      if (corpusStore.currentId === id) {
+        corpusStore.aligned = false;
+        messages.say(err instanceof Error ? err.message : String(err), 'err');
+      }
+    }
   },
 
   clearScope() {

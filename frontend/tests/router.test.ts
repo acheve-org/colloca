@@ -37,4 +37,20 @@ describe('router', () => {
     window.dispatchEvent(new HashChangeEvent('hashchange'));
     expect(route.screen).toBe('ngrams');
   });
+
+  it('round-trips awkward values through go()', async () => {
+    const { route, go } = await load();
+    const params = { q: 'a&b=c+d%e', w: 'naïve 日本?x' };
+    go('concordance', params);
+    route.params = {};
+    window.dispatchEvent(new HashChangeEvent('hashchange'));
+    expect(route.screen).toBe('concordance');
+    expect(route.params).toEqual(params);
+  });
+
+  it('keeps a literal second ? in the query', async () => {
+    location.hash = '#/concordance?q=a?b';
+    const { route } = await load();
+    expect(route.params).toEqual({ q: 'a?b' });
+  });
 });
