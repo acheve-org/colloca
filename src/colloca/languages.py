@@ -1,0 +1,105 @@
+"""The registry of languages the user works with (table `languages`)."""
+from collections.abc import Iterator, Mapping
+from dataclasses import dataclass
+
+from . import db
+
+
+class _Unset:
+    def __repr__(self) -> str:
+        return "UNSET"
+
+
+UNSET = _Unset()
+
+
+@dataclass(frozen=True)
+class Language:
+    code: str
+    name: str
+    model_size: str | None     # None: follow SPACY_SIZE
+    tesseract: str             # OCR language code, '' = none
+
+
+class LanguageInUse(Exception):
+    def __init__(self, count: int):
+        super().__init__(f"{count} corpora use this language")
+        self.count = count
+
+
+def _row(r) -> Language:
+    return Language(r["code"], r["name"], r["model_size"], r["tesseract"])
+
+
+def all_languages() -> list[Language]:
+    with db.session() as conn:
+        return [_row(r) for r in conn.execute("SELECT * FROM languages ORDER BY added, code")]
+
+
+def get(code: str) -> Language | None:
+    with db.session() as conn:
+        r = conn.execute("SELECT * FROM languages WHERE code=?", (code,)).fetchone()
+    return _row(r) if r else None
+
+
+def add(code: str, name: str, model_size: str | None, tesseract: str) -> Language:
+    with db.session() as conn:
+        if conn.execute("SELECT 1 FROM languages WHERE code=?", (code,)).fetchone():
+            raise ValueError(f"Language '{code}' is already set up")
+        conn.execute("INSERT INTO languages (code,name,model_size,tesseract) VALUES (?,?,?,?)",
+                     (code, name, model_size, tesseract))
+    return Language(code, name, model_size, tesseract)
+
+
+def update(code: str, *, name: str | None = None, model_size: "str | None | _Unset" = UNSET,
+           tesseract: str | None = None) -> Language:
+    with db.session() as conn:
+        if not conn.execute("SELECT 1 FROM languages WHERE code=?", (code,)).fetchone():
+            raise KeyError(code)
+        if name is not None:
+            conn.execute("UPDATE languages SET name=? WHERE code=?", (name, code))
+        if not isinstance(model_size, _Unset):
+            conn.execute("UPDATE languages SET model_size=? WHERE code=?", (model_size, code))
+        if tesseract is not None:
+            conn.execute("UPDATE languages SET tesseract=? WHERE code=?", (tesseract, code))
+    return get(code)
+
+
+def corpus_count(code: str) -> int:
+    """Corpora in this language, trashed ones included (a restore would orphan them)."""
+    with db.session() as conn:
+        return conn.execute("SELECT COUNT(*) FROM corpora WHERE lang=?", (code,)).fetchone()[0]
+
+
+def remove(code: str) -> None:
+    n = corpus_count(code)
+    if n:
+        raise LanguageInUse(n)
+    with db.session() as conn:
+        if conn.execute("DELETE FROM languages WHERE code=?", (code,)).rowcount == 0:
+            raise KeyError(code)
+
+
+class _Registry(Mapping):
+    """`{code: name}` read from the database on every access."""
+
+    def _all(self) -> dict[str, str]:
+        return {l.code: l.name for l in all_languages()}
+
+    def __getitem__(self, code: str) -> str:
+        lang = get(code)
+        if lang is None:
+            raise KeyError(code)
+        return lang.name
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._all())
+
+    def __len__(self) -> int:
+        return len(self._all())
+
+    def __contains__(self, code: object) -> bool:
+        return isinstance(code, str) and get(code) is not None
+
+
+REGISTRY = _Registry()

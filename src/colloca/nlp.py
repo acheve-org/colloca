@@ -5,7 +5,9 @@ from collections.abc import Callable, Iterator
 
 import spacy
 
-SUPPORTED = {"es": "Spanish", "it": "Italian"}
+from . import languages
+
+SUPPORTED = languages.REGISTRY   # live {code: name} of the registered languages
 _SIZES = [os.environ.get("SPACY_SIZE", "md"), "md", "sm", "lg"]
 _models: dict[str, spacy.language.Language] = {}
 _lock = threading.Lock()
