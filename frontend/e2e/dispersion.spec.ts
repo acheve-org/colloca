@@ -1,12 +1,8 @@
 import { expect, test } from '@playwright/test';
+import { newCorpus } from './helpers';
 
 test('dispersion plot: see where a word occurs and open the passage', async ({ page }) => {
-  await page.goto('/');
-  await page.getByRole('button', { name: 'New corpus' }).click();
-  const dialog = page.getByRole('dialog');
-  await dialog.getByLabel('Name').fill('Plot');
-  await dialog.getByRole('button', { name: 'Create' }).click();
-  await expect(dialog).toBeHidden();
+  await newCorpus(page, 'Plot');
 
   await page.getByLabel('Title of the pasted text').fill('Contrato A');
   await page.getByLabel('Pasted text', { exact: true }).fill(

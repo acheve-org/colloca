@@ -198,8 +198,9 @@
     });
   }
 
+  // Real projects only; a corpus without one (should not happen) shows a disabled placeholder.
   const projectOptions = $derived([
-    { value: '', label: t('src.noProject') },
+    ...(setProject ? [] : [{ value: '', label: t('src.chooseProject'), disabled: true }]),
     ...projectStore.list.map((p) => ({ value: String(p.id), label: p.name })),
   ]);
 
@@ -378,7 +379,7 @@
 
   const saveSettings = () =>
     act('settings', async (id) => {
-      await patch(`/api/corpora/${id}`, { name: setName.trim(), project_id: setProject ? Number(setProject) : null });
+      await patch(`/api/corpora/${id}`, { name: setName.trim(), ...(setProject ? { project_id: Number(setProject) } : {}) });
       if (!still(id)) return;
       messages.say(t('src.corpusSaved'), 'ok');
       await Promise.all([reloadProjects(), corpusStore.reload()]);

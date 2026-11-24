@@ -20,6 +20,8 @@ interface CorpusStore {
   aligned: boolean;
   /** True once `aligned` reflects the current corpus (false while a load is in flight). */
   loaded: boolean;
+  /** True when the last corpus list load failed. */
+  failed: boolean;
   scope: Scope;
   reload: () => Promise<void>;
   select: (id: number | null) => Promise<void>;
@@ -34,16 +36,21 @@ export const corpusStore: CorpusStore = $state<CorpusStore>({
   },
   aligned: false,
   loaded: false,
+  failed: false,
   scope: emptyScope(),
 
   async reload() {
     // Intentionally fires no corpus-changed when the current corpus is kept: results stay valid.
     try {
       corpusStore.list = await get<Corpus[]>('/api/corpora');
+      corpusStore.failed = false;
       const keep = corpusStore.list.some((c) => c.id === corpusStore.currentId);
       const target = keep ? corpusStore.currentId : (corpusStore.list[0]?.id ?? null);
       if (target !== corpusStore.currentId) await corpusStore.select(target);
       else await loadAligned();
+    } catch (err) {
+      corpusStore.failed = true;
+      throw err;
     } finally {
       corpusStore.loaded = true;
     }

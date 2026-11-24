@@ -18,7 +18,7 @@ An entry is a (source term, translation) pair.
 | Target language | The other supported language |
 
 - Every status except `candidate` needs a translation.
-- **Scope**: entries belong to the project of the corpus they were added from. Corpora without a project share a general termbase.
+- **Scope**: entries belong to the project of the corpus they were added from. Every working corpus belongs to a project. A corpus uses its project's termbase plus the general termbase (entries with no project), which is shared by all projects. Deleting a project permanently deletes its termbase entries; they do not go to the Trash.
 - **Termbase screen**: list, sort by any column, search, filter (status, domain, part of speech, modification date), edit status and translation in the table, bulk-apply status or domain, bulk delete.
 
 ## Concepts, synonyms, gender, number

@@ -270,7 +270,21 @@ def import_payload(conn: sqlite3.Connection, payload: dict, *, project_id: int |
                                                     (name, notes)).lastrowid
             rep.created["projects"] += 1
 
-    # corpora
+    # corpora: a working corpus always belongs to a project, so one left without goes to General
+    general: list[int] = []
+
+    def general_project() -> int:
+        if not general:
+            row = conn.execute("SELECT id FROM projects WHERE name='General' COLLATE NOCASE").fetchone()
+            if row:
+                general.append(row["id"])
+            else:
+                new_id = conn.execute("INSERT INTO projects (name) VALUES ('General')").lastrowid
+                assert new_id is not None
+                general.append(new_id)
+                rep.created["projects"] += 1
+        return general[0]
+
     cmap: dict[Any, int] = {}
     for c in corpora:
         try:
@@ -288,6 +302,8 @@ def import_payload(conn: sqlite3.Connection, payload: dict, *, project_id: int |
             rep.conflict("corpus", str(exc))
             continue
         pid = pmap.get(_ref(c.get("project_ref")), project_id) if c.get("project_ref") is not None else project_id
+        if not is_ref and pid is None:
+            pid = general_project()
         if is_ref:
             pid = None
             row = conn.execute("SELECT id FROM corpora WHERE lang=? AND is_reference=1", (lang,)).fetchone()

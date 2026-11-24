@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
+import { newCorpus } from './helpers';
 
 const TERM = 'parque eólico';
 
@@ -11,15 +12,6 @@ async function modifier(page: Page): Promise<'Meta' | 'Control'> {
     return /mac|iphone|ipad|ipod/i.test(nav.userAgentData?.platform ?? nav.platform ?? '');
   });
   return mac ? 'Meta' : 'Control';
-}
-
-async function newCorpus(page: Page, name: string): Promise<void> {
-  await page.goto('/');
-  await page.getByRole('button', { name: 'New corpus' }).click();
-  const dialog = page.getByRole('dialog');
-  await dialog.getByLabel('Name').fill(name);
-  await dialog.getByRole('button', { name: 'Create' }).click();
-  await expect(dialog).toBeHidden();
 }
 
 test('translator workflow', async ({ page }) => {

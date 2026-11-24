@@ -20,6 +20,8 @@ docker run --rm -v colloca-data:/d -v $PWD:/b alpine tar czf /b/colloca-backup.t
 - Schema versioned with `PRAGMA user_version`; migrations in `db.py`.
 - Before migrating, a copy is written beside the database: `corpus.db.bak-v<old version>`.
 - A database from a newer Colloca is refused, not corrupted.
+- Projects are mandatory for working corpora. The first start of this version (migration v15) creates a project named `General` (only if a working corpus had no project) and moves those corpora into it. Termbase entries without a project stay in the general termbase shared by all projects. An unsaved candidate basket kept in the browser for a project-less corpus is not carried over to `General`.
+- Importing a backup puts working corpora without a project into `General`.
 
 ## Logging
 

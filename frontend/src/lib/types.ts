@@ -6,6 +6,8 @@ export interface Project {
   id: number;
   name: string;
   corpora: number;
+  trashed: number;
+  terms: number;
 }
 
 export interface Corpus {

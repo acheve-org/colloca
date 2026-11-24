@@ -14,12 +14,13 @@
 
   export const NAV: NavGroup[] = [
     {
-      group: 'nav.group.corpus',
+      group: 'nav.group.setup',
       items: [
-        { id: 'sources', label: 'nav.sources' },
         { id: 'languages', label: 'nav.languages' },
+        { id: 'projects', label: 'nav.projects' },
       ],
     },
+    { group: 'nav.group.corpus', items: [{ id: 'sources', label: 'nav.sources' }] },
     {
       group: 'nav.group.explore',
       items: [
@@ -52,12 +53,23 @@
   import { go, route, screenHref } from '../router.svelte';
   import { setMode, theme, type ThemeMode } from '../theme.svelte';
   import { loadSession, logout, session } from '../session.svelte';
-  import CorpusSwitcher from './CorpusSwitcher.svelte';
+  import { ensureLanguageName, loadLanguageNames } from '../context.svelte';
+  import { messages } from '../messages.svelte';
+  import { reloadProjects } from '../projects.svelte';
+  import ContextBlock from './ContextBlock.svelte';
 
   const modes: ThemeMode[] = ['auto', 'light', 'dark'];
 
   onMount(() => {
     void loadSession();
+    const say = (err: unknown) => messages.say(err instanceof Error ? err.message : String(err), 'err');
+    reloadProjects().catch(say);
+    loadLanguageNames().catch(say);
+  });
+
+  // A corpus in a language added after the names were loaded.
+  $effect(() => {
+    void ensureLanguageName();
   });
 
   // Leave a screen whose rail item is hidden, but only once the corpus load has settled
@@ -71,7 +83,7 @@
 
 <aside class="rail">
   <div class="brand">{t('app.name')}</div>
-  <CorpusSwitcher />
+  <ContextBlock />
   <nav aria-label={t('nav.label')}>
     {#each NAV as g (g.group)}
       {@const items = g.items.filter((i) => !i.visible || i.visible())}

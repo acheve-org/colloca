@@ -2,7 +2,7 @@ import sqlite3
 
 import pytest
 
-from colloca import db
+from colloca import cql, db
 
 
 def columns(conn, table):
@@ -66,3 +66,88 @@ def test_failed_migration_rolls_back_completely(tmp_path, monkeypatch):
         db.migrate(conn)
     assert db.schema_version(conn) == db.SCHEMA_VERSION - 1                          # version not bumped
     assert conn.execute("SELECT 1 FROM sqlite_master WHERE name='half_done'").fetchone() is None
+
+
+def v14(path):
+    conn = raw(path)
+    cql.register(conn)
+    for version, sql in db.MIGRATIONS:
+        if version <= 14:
+            conn.executescript(sql)
+    conn.execute("PRAGMA user_version = 14")
+    conn.commit()
+    return conn
+
+
+def general_ids(conn):
+    return [r[0] for r in conn.execute("SELECT id FROM projects WHERE name = 'General' COLLATE NOCASE")]
+
+
+def test_v15_moves_projectless_corpora_into_general(tmp_path):
+    conn = v14(tmp_path / "a.db")
+    conn.execute("INSERT INTO corpora (id, name, lang) VALUES (1, 'work', 'es')")
+    conn.execute("INSERT INTO corpora (id, name, lang, is_reference) VALUES (2, 'base', 'es', 1)")
+    conn.execute("INSERT INTO corpora (id, name, lang, deleted_at) VALUES (3, 'trashed', 'it', '2026-01-01 00:00:00')")
+    conn.commit()
+    assert db.migrate(conn) == 15
+    (gid,) = general_ids(conn)
+
+    def pid(table, row_id):
+        return conn.execute(f"SELECT project_id FROM {table} WHERE id = ?", (row_id,)).fetchone()[0]
+
+    assert pid("corpora", 1) == gid and pid("corpora", 3) == gid
+    assert pid("corpora", 2) is None
+
+
+def test_v15_reuses_an_existing_general_project_case_insensitively(tmp_path):
+    conn = v14(tmp_path / "b.db")
+    conn.execute("INSERT INTO projects (id, name) VALUES (7, 'general')")
+    conn.execute("INSERT INTO corpora (name, lang) VALUES ('work', 'es')")
+    conn.commit()
+    db.migrate(conn)
+    assert conn.execute("SELECT COUNT(*) FROM projects").fetchone()[0] == 1
+    assert conn.execute("SELECT project_id FROM corpora").fetchone()[0] == 7
+
+
+def test_v15_creates_nothing_when_nothing_is_unassigned(tmp_path):
+    conn = v14(tmp_path / "c.db")
+    conn.execute("INSERT INTO projects (id, name) VALUES (1, 'Acme')")
+    conn.execute("INSERT INTO corpora (name, lang, project_id) VALUES ('work', 'es', 1)")
+    conn.commit()
+    db.migrate(conn)
+    assert general_ids(conn) == []
+    fresh = raw(tmp_path / "d.db")
+    db.migrate(fresh)
+    assert general_ids(fresh) == []
+
+
+def test_v15_is_idempotent(tmp_path):
+    conn = v14(tmp_path / "e.db")
+    conn.execute("INSERT INTO corpora (name, lang) VALUES ('work', 'es')")
+    conn.commit()
+    db.migrate(conn)
+    db.migrate(conn)
+    assert len(general_ids(conn)) == 1
+
+
+def test_v15_leaves_the_general_termbase_alone_and_creates_no_general_for_it(tmp_path):
+    conn = v14(tmp_path / "f.db")
+    conn.execute("INSERT INTO terms (src_lang, tgt_lang, src_term) VALUES ('es', 'it', 'casa')")
+    conn.execute("INSERT INTO term_rejections (lang, term) VALUES ('es', 'foo')")
+    conn.commit()
+    assert db.migrate(conn) == 15
+    assert general_ids(conn) == []
+    assert conn.execute("SELECT project_id FROM terms").fetchone()[0] is None
+    assert conn.execute("SELECT project_id FROM term_rejections").fetchone()[0] is None
+
+
+def test_v15_keeps_null_terms_null_even_when_general_is_created_for_corpora(tmp_path):
+    conn = v14(tmp_path / "g.db")
+    conn.execute("INSERT INTO corpora (name, lang) VALUES ('work', 'es')")
+    conn.execute("INSERT INTO terms (src_lang, tgt_lang, src_term) VALUES ('es', 'it', 'casa')")
+    conn.execute("INSERT INTO term_rejections (lang, term) VALUES ('es', 'foo')")
+    conn.commit()
+    db.migrate(conn)
+    assert len(general_ids(conn)) == 1
+    assert conn.execute("SELECT project_id FROM terms").fetchone()[0] is None
+    assert conn.execute("SELECT project_id FROM term_rejections").fetchone()[0] is None

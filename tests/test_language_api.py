@@ -2,6 +2,8 @@ import pytest
 
 from colloca import db, languages, models, ocrdata
 
+from .test_api import default_project
+
 
 @pytest.fixture()
 def calls(client, monkeypatch):
@@ -59,7 +61,8 @@ def test_patch_size_reinstalls(client, calls):
 
 def test_delete_with_corpus_is_409_and_with_none_is_204(client, calls):
     client.post("/api/languages", json={"code": "fr", "install_model": False})
-    cid = client.post("/api/corpora", json={"name": "fr corpus", "lang": "fr"}).json()["id"]
+    body = {"name": "fr corpus", "lang": "fr", "project_id": default_project(client)}
+    cid = client.post("/api/corpora", json=body).json()["id"]
     r = client.delete("/api/languages/fr")
     assert r.status_code == 409 and "1" in r.json()["detail"]
     client.delete(f"/api/corpora/{cid}")                          # to the Trash
@@ -94,5 +97,6 @@ def test_model_and_ocr_endpoints(client, calls, monkeypatch):
 
 
 def test_corpus_in_unregistered_language_is_400(client):
-    assert client.post("/api/corpora", json={"name": "x", "lang": "zz"}).status_code == 400
+    body = {"name": "x", "lang": "zz", "project_id": default_project(client)}
+    assert client.post("/api/corpora", json=body).status_code == 400
     assert client.post("/api/references", json={"lang": "zz"}).status_code == 400

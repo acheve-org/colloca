@@ -1,12 +1,8 @@
 import { expect, test } from '@playwright/test';
+import { newCorpus } from './helpers';
 
 test('job report: save it, reopen it after a reload, delete it', async ({ page }) => {
-  await page.goto('/');
-  await page.getByRole('button', { name: 'New corpus' }).click();
-  const dialog = page.getByRole('dialog');
-  await dialog.getByLabel('Name').fill('Informes');
-  await dialog.getByRole('button', { name: 'Create' }).click();
-  await expect(dialog).toBeHidden();
+  await newCorpus(page, 'Informes');
   await page.getByLabel('Pasted text', { exact: true }).fill(
     'El parque eólico produce energía limpia. El parque eólico de la sierra es nuevo.',
   );

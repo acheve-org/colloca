@@ -2,6 +2,7 @@
   interface Option {
     value: string;
     label: string;
+    disabled?: boolean;
   }
   interface Props {
     value: string;
@@ -16,6 +17,6 @@
 
 <select {id} {disabled} aria-label={label} bind:value onchange={() => onchange?.(value)}>
   {#each options as o (o.value)}
-    <option value={o.value}>{o.label}</option>
+    <option value={o.value} disabled={o.disabled}>{o.label}</option>
   {/each}
 </select>

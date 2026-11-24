@@ -5,7 +5,7 @@ import pytest
 
 from colloca import analysis, db, metadata
 
-from .test_api import ES_TEXT, add, make_corpus, wait_for_jobs
+from .test_api import ES_TEXT, add, default_project, make_corpus, wait_for_jobs
 
 _project_seq = itertools.count(1)
 
@@ -42,7 +42,7 @@ def test_project_crud_and_corpus_assignment(client):
 
     assert client.patch(f"/api/projects/{pid}", json={"name": "Client Y", "notes": "NDA"}).status_code == 200
     assert next(p for p in client.get("/api/projects").json() if p["id"] == pid)["name"] == "Client Y"
-    assert client.delete(f"/api/projects/{pid}").status_code == 204
+    assert client.delete(f"/api/projects/{pid}").status_code == 409                 # it still has a corpus
 
 
 def test_move_and_rename_corpus(client):
@@ -56,23 +56,64 @@ def test_move_and_rename_corpus(client):
     client.patch(f"/api/corpora/{cid}", json={"description": "only this"})             # project untouched
     c = next(c for c in client.get("/api/corpora").json() if c["id"] == cid)
     assert c["project_id"] == b and c["description"] == "only this"
-    client.patch(f"/api/corpora/{cid}", json={"project_id": None})
-    assert next(c for c in client.get("/api/corpora").json() if c["id"] == cid)["project_id"] is None
     assert client.patch(f"/api/corpora/{cid}", json={"project_id": 9999}).status_code == 404
 
 
-def test_deleting_a_project_keeps_its_corpora(client):
+def test_corpus_requires_a_project(client):
+    body = {"name": "c", "lang": "es"}
+    assert client.post("/api/corpora", json=body).status_code == 422
+    assert client.post("/api/corpora", json={**body, "project_id": 9999}).status_code == 404
+    assert client.post("/api/corpora", json={**body, "project_id": project(client)}).status_code == 201
+
+
+def test_corpus_cannot_leave_its_project(client):
     pid = project(client)
-    cid = client.post("/api/corpora", json={"name": "kept", "lang": "es", "project_id": pid}).json()["id"]
-    add(client, cid, ES_TEXT)
-    assert client.delete(f"/api/projects/{pid}").status_code == 204
-    c = next(c for c in client.get("/api/corpora").json() if c["id"] == cid)
-    assert c["project_id"] is None and c["docs"] == 1
+    cid = make_corpus(client, project_id=pid)
+    r = client.patch(f"/api/corpora/{cid}", json={"project_id": None})
+    assert r.status_code == 400 and "project" in r.json()["detail"]
+    assert next(c for c in client.get("/api/corpora").json() if c["id"] == cid)["project_id"] == pid
 
 
-def test_base_corpus_cannot_join_a_project(client):
+def test_reference_corpus_still_refuses_a_project(client):
     ref = client.post("/api/references", json={"lang": "es"}).json()["id"]
     assert client.patch(f"/api/corpora/{ref}", json={"project_id": project(client)}).status_code == 400
+
+
+def test_delete_project_refused_while_it_has_corpora(client):
+    pid, other = project(client), project(client)
+    cid = make_corpus(client, project_id=pid)
+    add(client, cid, ES_TEXT)
+    r = client.delete(f"/api/projects/{pid}")
+    assert r.status_code == 409 and "still has 1 corpora" in r.json()["detail"]
+    client.delete(f"/api/corpora/{cid}")                                   # to the Trash: still blocks
+    r = client.delete(f"/api/projects/{pid}")
+    assert r.status_code == 409 and "still has 1 corpora" in r.json()["detail"]
+    assert client.delete("/api/projects/999999").status_code == 404
+    moved = make_corpus(client, project_id=other)      # refused while it holds a corpus, deletable once moved out
+    assert client.delete(f"/api/projects/{other}").status_code == 409
+    assert client.patch(f"/api/corpora/{moved}", json={"project_id": default_project(client)}).status_code == 200
+    assert client.delete(f"/api/projects/{other}").status_code == 204
+
+
+def test_projects_list_reports_trashed_count(client):
+    pid = project(client)
+    make_corpus(client, project_id=pid)
+    gone = make_corpus(client, project_id=pid)
+    client.delete(f"/api/corpora/{gone}")
+    p = next(p for p in client.get("/api/projects").json() if p["id"] == pid)
+    assert (p["corpora"], p["trashed"]) == (1, 1)
+
+
+def test_projects_list_counts_the_termbase_entries_live_and_trashed(client):
+    pid = project(client)
+    make_corpus(client, project_id=pid)
+    ids = [client.post("/api/terms", json={"src_lang": "es", "src_term": t, "tgt_term": "x", "status": "approved",
+                                           "project_id": pid}).json()["id"] for t in ("casa", "perro")]
+    client.delete(f"/api/terms/{ids[1]}")
+    p = next(p for p in client.get("/api/projects").json() if p["id"] == pid)
+    assert (p["corpora"], p["terms"]) == (1, 2)
+    empty = project(client)
+    assert next(p for p in client.get("/api/projects").json() if p["id"] == empty)["terms"] == 0
 
 
 # --------------------------------------------------------------------------- metadata
@@ -253,5 +294,6 @@ def test_v3_database_upgrades_and_old_tags_become_filterable(tmp_path):
     assert db.migrate(conn) == db.SCHEMA_VERSION
     tags = [tuple(r) for r in conn.execute("SELECT doc_id, tag FROM doc_tags ORDER BY tag")]
     assert tags == [(1, "cliente x"), (1, "contrato")]
-    assert conn.execute("SELECT project_id FROM corpora").fetchone()[0] is None
+    general = conn.execute("SELECT id FROM projects WHERE name = 'General'").fetchone()[0]
+    assert conn.execute("SELECT project_id FROM corpora").fetchone()[0] == general    # v15: project-less -> General
     assert conn.execute("SELECT text_type, doc_date, author FROM documents").fetchone()[:] == ("", "", "")
