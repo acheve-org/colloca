@@ -45,6 +45,26 @@
 
   let helpOpen = $state(false);
 
+  // Not from inside a modal (the term dialog, the shortcut help): it would navigate behind it.
+  const noModal = (): boolean => !document.querySelector('dialog[open]');
+
+  /** Go to the concordance and focus its query, filled with the selected text if there is a short one-line selection. */
+  async function focusQuery(): Promise<void> {
+    const sel = (window.getSelection()?.toString() ?? '').replace(/\s+/g, ' ').trim();
+    const fill = sel && sel.length <= 120 ? sel : '';
+    // Keep the current search params when already on the concordance.
+    if (route.screen !== 'concordance') go('concordance', fill ? { q: fill } : {});
+    await tick();
+    requestAnimationFrame(() => {
+      const input = document.getElementById('cc-query') as HTMLInputElement | null;
+      if (fill && input && input.value !== fill) {
+        input.value = fill;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      input?.focus();
+    });
+  }
+
   onMount(() => {
     // Background jobs of the current corpus are followed here, whatever screen is open.
     const stopJobs = startJobTracking();
@@ -52,19 +72,8 @@
       messages.say(err instanceof Error ? err.message : String(err), 'err');
     });
     const offs = [
-      registerShortcut({
-        id: 'search',
-        keys: 'Mod+K',
-        label: t('shortcuts.search'),
-        // Not from inside a modal (the term dialog, the shortcut help): it would navigate behind it.
-        when: () => !document.querySelector('dialog[open]'),
-        run: async () => {
-          // Keep the current search params when already on the concordance.
-          if (route.screen !== 'concordance') go('concordance');
-          await tick();
-          requestAnimationFrame(() => document.getElementById('cc-query')?.focus());
-        },
-      }),
+      registerShortcut({ id: 'search', keys: 'Mod+K', label: t('shortcuts.search'), when: noModal, run: focusQuery }),
+      registerShortcut({ id: 'search-slash', keys: '/', label: t('shortcuts.search'), when: noModal, run: focusQuery }),
       registerShortcut({
         id: 'help',
         keys: '?',

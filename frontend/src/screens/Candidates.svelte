@@ -20,6 +20,7 @@
   } from '../lib/candidates.svelte';
   import { CORPUS_CHANGED, corpusStore } from '../lib/corpus.svelte';
   import { t } from '../lib/i18n';
+  import { registerShortcut, withKeys } from '../lib/shortcuts.svelte';
   import { TERM_SAVED } from '../lib/term.svelte';
   import DataTable from '../lib/ui/DataTable.svelte';
   import { cellValue, type Column } from '../lib/ui/DataTable.types';
@@ -85,7 +86,29 @@
     window.addEventListener(TERM_SAVED, again);
     window.addEventListener(STOPLIST_CHANGED, again);
     window.addEventListener(CORPUS_CHANGED, onCorpus);
+    const offs = [
+      registerShortcut({
+        id: 'cand-accept',
+        keys: 'a',
+        label: t('shortcuts.accept'),
+        scope: 'table',
+        when: () => selected !== null && !document.querySelector('dialog[open]'),
+        run: () => selected && void doAccept(selected),
+      }),
+      registerShortcut({
+        id: 'cand-drop',
+        keys: 'd',
+        label: t('shortcuts.drop'),
+        scope: 'table',
+        when: () => selected !== null && !document.querySelector('dialog[open]'),
+        run: () => {
+          if (!selected) return;
+          void (isDropped(selected) ? restoreTerms([selected.item]) : dropTerms([selected.item]));
+        },
+      }),
+    ];
     return () => {
+      offs.forEach((f) => f());
       window.removeEventListener(TERM_SAVED, again);
       window.removeEventListener(STOPLIST_CHANGED, again);
       window.removeEventListener(CORPUS_CHANGED, onCorpus);
@@ -109,7 +132,7 @@
     />
   {:else if col.key === '_actions'}
     <span class="actions">
-      <button type="button" title={t('cand.acceptHint')} onclick={(e) => { e.stopPropagation(); void doAccept(row); }}
+      <button type="button" title={withKeys(t('cand.acceptHint'), 'cand-accept')} onclick={(e) => { e.stopPropagation(); void doAccept(row); }}
         >{t('cand.accept')}</button
       >
       {#if isDropped(row)}
@@ -117,7 +140,7 @@
           >{t('cand.restore')}</button
         >
       {:else}
-        <button type="button" onclick={(e) => { e.stopPropagation(); void dropTerms([row.item]); }}
+        <button type="button" title={withKeys(t('cand.drop'), 'cand-drop')} onclick={(e) => { e.stopPropagation(); void dropTerms([row.item]); }}
           >{t('cand.drop')}</button
         >
       {/if}

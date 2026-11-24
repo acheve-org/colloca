@@ -3,6 +3,8 @@
 </script>
 
 <script lang="ts">
+  import { onMount } from 'svelte';
+  import { registerShortcut } from '../lib/shortcuts.svelte';
   import { corpusStore } from '../lib/corpus.svelte';
   import { t } from '../lib/i18n';
   import { findExamples, saveTerm, TERM_POS, termStore, useExample } from '../lib/term.svelte';
@@ -33,6 +35,19 @@
     termStore.editingId === null ||
       (corpusStore.current !== null && corpusStore.current.lang === termStore.ctx?.src_lang),
   );
+
+  onMount(() => {
+    const offs = Array.from({ length: 9 }, (_, i) =>
+      registerShortcut({
+        id: `term-example-${i + 1}`,
+        keys: String(i + 1),
+        label: t('shortcuts.example'),
+        when: () => termStore.open && i < termStore.examples.length,
+        run: () => useExample(termStore.examples[i]),
+      }),
+    );
+    return () => offs.forEach((f) => f());
+  });
 
   async function submit(e: SubmitEvent): Promise<void> {
     e.preventDefault();
@@ -84,6 +99,7 @@
           {#each termStore.examples as x, i (i)}
             <li>
               <button type="button" class="example" title={t('term.useExample')} onclick={() => useExample(x)}>
+                {#if i < 9}<kbd>{i + 1}</kbd>{/if}
                 {x.sentence} <span class="doc">— {x.doc}</span>
               </button>
             </li>

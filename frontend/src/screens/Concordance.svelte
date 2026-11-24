@@ -32,7 +32,7 @@
   import { t } from '../lib/i18n';
   import { messages } from '../lib/messages.svelte';
   import { go, route } from '../lib/router.svelte';
-  import { formatKeys, registerShortcut } from '../lib/shortcuts.svelte';
+  import { formatKeys, registerShortcut, withKeys } from '../lib/shortcuts.svelte';
   import { openTerm, termStore } from '../lib/term.svelte';
   import type { BilingualResult, ConcLine, ConcordanceResult, DocContext } from '../lib/types';
   import Badge from '../lib/ui/Badge.svelte';
@@ -400,7 +400,7 @@
         <DetailStrip title={t('cc.detail')}>
           {#snippet actions()}
             <Button onclick={() => (viewerOpen = true)}>{t('doc.open')}</Button>
-            <Button onclick={addTermFromHit}>{t('cc.addTermSel')} <Kbd keys="Mod+E" /></Button>
+            <Button title={withKeys(t('shortcuts.addTerm'), 'cc-add-term')} onclick={addTermFromHit}>{t('cc.addTermSel')} <Kbd keys="Mod+E" /></Button>
             {#if csvHref}<a class="csv" href={csvHref} download>{t('cc.csv')}</a>{/if}
           {/snippet}
           <dl>
