@@ -24,6 +24,7 @@ XML_LANG = "{http://www.w3.org/XML/1998/namespace}lang"
 
 ADMIN_STATUS = {"admittedTerm-admn-sts", "deprecatedTerm-admn-sts", "supersededTerm-admn-sts", "preferredTerm-admn-sts"}
 PART_OF_SPEECH = {"adjective", "noun", "other", "verb", "adverb"}
+GENDER = {"masculine", "feminine", "neuter", "other"}      # TBX-Basic.rng: grammaticalGender
 DESCRIP_TYPES = {"subjectField", "context", "definition"}
 TERMNOTE_TYPES = {"administrativeStatus", "partOfSpeech", "geographicalUsage", "grammaticalGender", "termLocation",
                   "termType"}
@@ -38,6 +39,20 @@ MORE_ROWS = ROWS + [
     dict(project_id=1, project="Acme", src_lang="es", tgt_lang="it", src_term="plazo", tgt_term=tgt, pos="noun",
          status=status, domain="", definition="", notes="", context="", context_source="")
     for tgt, status in [("termine", "admitted"), ("scadenza", "superseded"), ("durata", "candidate")]
+] + [
+    # one concept with a synonym on each side, genders, numbers and term-level notes (T19)
+    dict(project_id=1, project="Acme", src_lang="es", tgt_lang="it", src_term="vivienda", tgt_term="abitazione",
+         pos="noun", status="approved", domain="housing", definition="Lugar donde se vive.", notes="", context="",
+         context_source="", concept_id=900, src_gender="feminine", src_number="singular", tgt_gender="feminine",
+         tgt_number="singular", src_note="Uso general.", tgt_note="Più formale di casa."),
+    dict(project_id=1, project="Acme", src_lang="es", tgt_lang="it", src_term="vivienda", tgt_term="casa",
+         pos="noun", status="admitted", domain="", definition="", notes="", context="", context_source="",
+         concept_id=900, src_gender="feminine", src_number="singular", tgt_gender="feminine", tgt_number="singular",
+         src_note="", tgt_note=""),
+    dict(project_id=1, project="Acme", src_lang="es", tgt_lang="it", src_term="domicilio", tgt_term="abitazione",
+         pos="noun", status="approved", domain="", definition="", notes="", context="", context_source="",
+         concept_id=900, src_gender="masculine", src_number="singular", tgt_gender="feminine", tgt_number="plural",
+         src_note="", tgt_note=""),
 ]
 
 
@@ -64,6 +79,8 @@ def basic_rule_errors(root, tags):
                 errors.append(f"administrativeStatus {node.text!r}")
             if typ == "partOfSpeech" and node.text not in PART_OF_SPEECH:
                 errors.append(f"partOfSpeech {node.text!r}")
+            if typ == "grammaticalGender" and node.text not in GENDER:
+                errors.append(f"grammaticalGender {node.text!r}")
     return errors
 
 

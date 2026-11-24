@@ -26,7 +26,8 @@ REPORT_ROWS = 200          # rejected / duplicate rows listed in a report (the c
 PREVIEW_ROWS = 10
 
 FIELDS = ("src_term", "tgt_term", "pos", "status", "domain", "definition", "notes", "context",
-          "src_lang", "tgt_lang")
+          "src_lang", "tgt_lang", "src_gender", "src_number", "src_note", "tgt_gender", "tgt_number", "tgt_note",
+          "concept")
 # Header words (lower-case) recognised when guessing the mapping: the labels `termexport` writes, plus common ones.
 _HEADERS = {
     "src_term": ("source term", "source", "term", "src", "termino", "término", "termine"),
@@ -39,6 +40,10 @@ _HEADERS = {
     "context": ("example", "context", "ejemplo", "esempio"),
     "src_lang": ("source language", "src lang", "source lang"),
     "tgt_lang": ("target language", "tgt lang", "target lang"),
+    "src_gender": ("source gender",), "src_number": ("source number",), "src_note": ("source note",),
+    "tgt_gender": ("translation gender", "target gender"), "tgt_number": ("translation number", "target number"),
+    "tgt_note": ("translation note", "target note"),
+    "concept": ("concept", "concept id"),      # rows with the same value are synonyms of one concept
 }
 _STATUS_WORDS = {
     "approved": "approved", "preferred": "approved", "admitted": "admitted", "superseded": "superseded",
@@ -200,6 +205,7 @@ def _term_sections(lang_sec) -> list[dict]:
                 notes.setdefault(n.get("type"), _text(n))
         out.append({
             "term": _text(term), "pos": notes.get("partOfSpeech", ""), "admin": notes.get("administrativeStatus", ""),
+            "gender": notes.get("grammaticalGender", ""),
             "context": next(iter(_descrips(sec, "context", deep=True)), ""),
             "definition": next(iter(_descrips(sec, "definition", deep=True)), ""),
             "notes": "\n".join(t for n in sec.iter() if _local(n) == "note" and (t := _text(n)))})
@@ -255,7 +261,8 @@ def tbx_records(data: bytes, src_lang: str = "", tgt_lang: str = "") -> tuple[li
     for entry in entries:
         sources = entry["sections"].get(src_lang, {}).get("terms", [])
         targets = entry["sections"].get(tgt_lang, {}).get("terms", [])
-        base = {"row": entry["row"], "src_lang": src_lang, "tgt_lang": tgt_lang, "domain": entry["domain"]}
+        base = {"row": entry["row"], "src_lang": src_lang, "tgt_lang": tgt_lang, "domain": entry["domain"],
+                "concept": f"tbx:{entry['row']}"}              # the terms of one entry are one concept
         if not sources:
             records.append({**base, "src_term": "", "tgt_term": targets[0]["term"] if targets else ""})
             continue
@@ -269,7 +276,9 @@ def tbx_records(data: bytes, src_lang: str = "", tgt_lang: str = "") -> tuple[li
                     **base, "src_term": src["term"], "tgt_term": tgt["term"] if tgt else "",
                     "pos": pos if pos in termbase.POS_VALUES else ("other" if pos else ""),
                     "status": status if tgt else "candidate", "definition": definition,
-                    "notes": (tgt or src)["notes"], "context": src["context"]})
+                    "notes": (tgt or src)["notes"], "context": src["context"],
+                    "src_gender": src["gender"], "tgt_gender": (tgt or {}).get("gender", ""),
+                    "src_note": src["notes"] if tgt else ""})
     return records, src_lang, tgt_lang
 
 
@@ -304,9 +313,12 @@ def plan(conn: sqlite3.Connection, records: list[dict], *, project_id: int | Non
             fields["status"] = _STATUS_WORDS[word]
             fields.setdefault("src_term", "")
             fields.setdefault("tgt_term", "")
+            group = fields.pop("concept", "")
             entry = termbase.clean(fields)
             entry.setdefault("status", fields["status"])
             termbase.check_consistency(entry)
+            if group:
+                entry["group"] = str(group)
         except termbase.TermError as exc:
             rejected.append({**shown, "reason": str(exc)})
             continue
@@ -334,13 +346,26 @@ def apply(conn: sqlite3.Connection, result: dict, project_id: int | None) -> int
     before = conn.total_changes
     for _, e in result["add"]:
         termbase.drop_trashed_twin(conn, project_id, e["src_lang"], e["tgt_lang"], e["src_term"], e["tgt_term"])
-    conn.executemany(
-        """INSERT OR IGNORE INTO terms (project_id, src_lang, tgt_lang, src_term, tgt_term, pos, status, domain,
-                                        definition, notes, context, context_source, origin)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'manual')""",
-        [(project_id, e["src_lang"], e["tgt_lang"], e["src_term"], e["tgt_term"], e.get("pos", ""), e["status"],
-          e.get("domain", ""), e.get("definition", ""), e.get("notes", ""), e.get("context", ""),
-          e.get("context_source", "")) for _, e in result["add"]])
+    # the file's own grouping (a TBX entry, a "Concept" column) -> the concept id it became
+    groups: dict[str, int] = {}
+    for _, e in result["add"]:
+        group = e.get("group")
+        try:
+            concept = termbase.assign_concept(conn, project_id, e["src_lang"], e["tgt_lang"], e["src_term"],
+                                              groups.get(group) if group else None)
+        except termbase.TermError:                # the first row of the group was not stored: start from the term
+            concept = termbase.assign_concept(conn, project_id, e["src_lang"], e["tgt_lang"], e["src_term"])
+        if group:
+            groups.setdefault(group, concept)
+        conn.execute(
+            """INSERT OR IGNORE INTO terms (project_id, src_lang, tgt_lang, src_term, tgt_term, pos, status, domain,
+                                            definition, notes, context, context_source, origin, concept_id,
+                                            src_gender, src_number, tgt_gender, tgt_number, src_note, tgt_note)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'manual',?,?,?,?,?,?,?)""",
+            (project_id, e["src_lang"], e["tgt_lang"], e["src_term"], e["tgt_term"], e.get("pos", ""), e["status"],
+             e.get("domain", ""), e.get("definition", ""), e.get("notes", ""), e.get("context", ""),
+             e.get("context_source", ""), concept, e.get("src_gender", ""), e.get("src_number", ""),
+             e.get("tgt_gender", ""), e.get("tgt_number", ""), e.get("src_note", ""), e.get("tgt_note", "")))
     return conn.total_changes - before
 
 

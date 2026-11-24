@@ -1275,6 +1275,13 @@ class TermIn(BaseModel):
     context: str = ""
     context_source: str = ""
     origin: str = "manual"
+    concept_id: int | None = None      # join this concept as a synonym (same project and language pair)
+    src_gender: str = ""
+    src_number: str = ""
+    tgt_gender: str = ""
+    tgt_number: str = ""
+    src_note: str = ""
+    tgt_note: str = ""
 
 
 class TermPatch(BaseModel):
@@ -1287,6 +1294,12 @@ class TermPatch(BaseModel):
     notes: str | None = None
     context: str | None = None
     context_source: str | None = None
+    src_gender: str | None = None
+    src_number: str | None = None
+    tgt_gender: str | None = None
+    tgt_number: str | None = None
+    src_note: str | None = None
+    tgt_note: str | None = None
 
 
 _TERM_CONFLICT = "This term and translation are already in the termbase"
@@ -1315,7 +1328,7 @@ def list_terms(project: str = "", src_lang: str = "", tgt_lang: str = "", status
 @app.post("/api/terms", status_code=201)
 def create_term(body: TermIn):
     try:
-        entry = termbase.clean(body.model_dump(exclude={"project_id"}))
+        entry = termbase.clean(body.model_dump(exclude={"project_id", "concept_id"}))
         termbase.check_consistency(entry)
     except termbase.TermError as exc:
         raise _term_error(exc) from exc
@@ -1325,17 +1338,25 @@ def create_term(body: TermIn):
         termbase.drop_trashed_twin(conn, body.project_id, entry["src_lang"], entry["tgt_lang"], entry["src_term"],
                                    entry["tgt_term"])
         try:
+            concept = termbase.assign_concept(conn, body.project_id, entry["src_lang"], entry["tgt_lang"],
+                                              entry["src_term"], body.concept_id)
+        except termbase.TermError as exc:
+            raise _term_error(exc) from exc
+        try:
             cur = conn.execute(
                 """INSERT INTO terms (project_id,src_lang,tgt_lang,src_term,tgt_term,pos,status,domain,definition,
-                                      notes,context,context_source,origin)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                                      notes,context,context_source,origin,concept_id,src_gender,src_number,
+                                      tgt_gender,tgt_number,src_note,tgt_note)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (body.project_id, entry["src_lang"], entry["tgt_lang"], entry["src_term"], entry["tgt_term"],
                  entry.get("pos", ""), entry.get("status", "candidate"), entry.get("domain", ""),
                  entry.get("definition", ""), entry.get("notes", ""), entry.get("context", ""),
-                 entry.get("context_source", ""), entry.get("origin", "manual")))
+                 entry.get("context_source", ""), entry.get("origin", "manual"), concept,
+                 entry.get("src_gender", ""), entry.get("src_number", ""), entry.get("tgt_gender", ""),
+                 entry.get("tgt_number", ""), entry.get("src_note", ""), entry.get("tgt_note", "")))
         except sqlite3.IntegrityError as exc:
             raise HTTPException(409, _TERM_CONFLICT) from exc
-        return {"id": cur.lastrowid}
+        return {"id": cur.lastrowid, "concept_id": concept}
 
 
 class TermBulk(BaseModel):

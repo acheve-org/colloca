@@ -403,3 +403,94 @@ describe('Termbase', () => {
     expect([...list.querySelectorAll('option')].map((o) => o.getAttribute('value'))).toEqual(['law', 'tech']);
   });
 });
+
+describe('Termbase concepts', () => {
+  const concept = () => [
+    term(1, { src_term: 'vivienda', tgt_term: 'abitazione', status: 'approved', concept_id: 5, project_id: 7, src_gender: 'feminine',
+              tgt_gender: 'feminine', tgt_number: 'plural', src_note: 'Uso general.' }),
+    term(2, { src_term: 'vivienda', tgt_term: 'casa', status: 'admitted', concept_id: 5, project_id: 7 }),
+    term(3, { src_term: 'domicilio', tgt_term: 'abitazione', status: 'approved', concept_id: 5, project_id: 7, src_gender: 'masculine' }),
+    term(4, { src_term: 'contrato', tgt_term: 'contratto', status: 'approved', concept_id: 6, project_id: 7 }),
+  ];
+  // rows in the order of `concept()`: vivienda/abitazione, vivienda/casa, domicilio/abitazione, contrato/contratto
+  const select = async (index: number) => {
+    await ready();
+    await fireEvent.click(bodyRows()[index]);
+  };
+
+  it('shows the gender, number and notes of the selected term and its synonyms in the same concept', async () => {
+    terms = { status: 200, body: concept() };
+    await select(0);
+    const strip = screen.getByRole('region', { name: 'Entry' });
+    expect(within(strip).getByText('feminine')).toBeInTheDocument();
+    expect(within(strip).getByText('feminine, plural')).toBeInTheDocument();
+    expect(within(strip).getByText('Uso general.')).toBeInTheDocument();
+    const same = within(strip).getByText('Same concept').nextElementSibling!;
+    expect(same.textContent).toContain('vivienda → casa');
+    expect(same.textContent).toContain('domicilio → abitazione');
+    expect(same.textContent).not.toContain('contrato');
+  });
+
+  it('adds a translation to the concept: same source term, the concept id sent on save', async () => {
+    terms = { status: 200, body: concept() };
+    await select(3);
+    await fireEvent.click(screen.getByRole('button', { name: 'Add translation' }));
+    expect(termStore.open).toBe(true);
+    expect(termStore.draft.src_term).toBe('contrato');
+    expect(termStore.draft.tgt_term).toBe('');
+    expect(termStore.ctx).toMatchObject({ concept_id: 6, project_id: 7, src_lang: 'es', tgt_lang: 'it' });
+  });
+
+  it('adds a source synonym: empty source term, the translation prefilled, no corpus needed', async () => {
+    corpusStore.list = [];
+    corpusStore.currentId = null;
+    terms = { status: 200, body: concept() };
+    await select(0);
+    await fireEvent.click(screen.getByRole('button', { name: 'Add source synonym' }));
+    expect(termStore.open).toBe(true);
+    expect(termStore.draft.src_term).toBe('');
+    expect(termStore.draft.tgt_term).toBe('abitazione');
+    expect(termStore.draft.src_gender).toBe('');
+    expect(termStore.draft.tgt_gender).toBe('feminine');
+    expect(termStore.ctx?.concept_id).toBe(5);
+  });
+
+  it('the synonym buttons are off for a row without a concept', async () => {
+    await ready();
+    await fireEvent.click(bodyRows()[0]);
+    expect(screen.getByRole('button', { name: 'Add translation' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Add source synonym' })).toBeDisabled();
+  });
+
+  it('editing opens the dialog with the stored gender, number and notes', async () => {
+    terms = { status: 200, body: concept() };
+    await select(0);
+    await fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    expect(termStore.draft).toMatchObject({ src_gender: 'feminine', tgt_gender: 'feminine', tgt_number: 'plural', src_note: 'Uso general.' });
+  });
+});
+
+describe('Term dialog data', () => {
+  it('saves gender, number and notes, and joins the concept when adding a synonym', async () => {
+    calls.length = 0;
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      const method = init?.method ?? 'GET';
+      calls.push({ method, path: new URL(url, 'http://x').pathname, params: new URL(url, 'http://x').searchParams, body: init?.body ? JSON.parse(String(init.body)) : undefined });
+      if (url === '/api/languages') return res(200, { es: 'Spanish', it: 'Italian' });
+      return res(201, { id: 9, concept_id: 5 });
+    }));
+    render(TermDialog);
+    const { openTerm } = await import('../src/lib/term.svelte');
+    openTerm({ source: 'domicilio', target: 'abitazione', conceptId: 5, projectId: 7, srcLang: 'es', tgtLang: 'it', status: 'approved' });
+    await screen.findByRole('dialog');
+    await fireEvent.change(screen.getByLabelText('Gender (source)'), { target: { value: 'masculine' } });
+    await fireEvent.change(screen.getByLabelText('Number (target)'), { target: { value: 'plural' } });
+    await fireEvent.input(screen.getByLabelText('Usage note (target)'), { target: { value: 'Più formale.' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(calls.some((c) => c.method === 'POST' && c.path === '/api/terms')).toBe(true));
+    expect(calls.find((c) => c.method === 'POST')!.body).toMatchObject({
+      src_term: 'domicilio', tgt_term: 'abitazione', concept_id: 5, project_id: 7, src_lang: 'es', tgt_lang: 'it',
+      src_gender: 'masculine', tgt_number: 'plural', tgt_note: 'Più formale.',
+    });
+  });
+});

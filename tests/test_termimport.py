@@ -15,7 +15,8 @@ from .test_projects import project
 SAMPLES = Path(__file__).parent.parent / "docs" / "samples"
 FIELDS = ("src_lang", "tgt_lang", "src_term", "tgt_term", "pos", "status", "domain", "definition", "notes", "context")
 MAPPING = {"src_term": 0, "tgt_term": 1, "src_lang": 2, "tgt_lang": 3, "pos": 4, "status": 5, "domain": 6,
-           "definition": 7, "notes": 8, "context": 9}
+           "definition": 7, "notes": 8, "context": 9, "src_gender": 12, "src_number": 13, "src_note": 14,
+           "tgt_gender": 15, "tgt_number": 16, "tgt_note": 17, "concept": 18}
 
 ENTRIES = [
     dict(src_term="contrato", tgt_term="contratto", pos="noun", status="approved", domain="legal",

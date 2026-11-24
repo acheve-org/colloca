@@ -51,7 +51,7 @@ The T-numbers are stable labels used for cross-references; the **row order is th
 | T17 | Query performance for large corpora | Medium | M | P2 | Roadmap 16 |
 | T18 | Segment lookup with match percentages (fuzzy matching against aligned texts) (**done**) | Medium | L | P2 | Research #9 |
 | T28 | Engineering health: browser tests, split `app.js`, logging, type checking (**partly done**: browser tests, UI split) | Medium | M | P2 | Audit |
-| T19 | Term entry model: several terms per language, term-level notes, gender and number | Medium | L | P3 | Research #11 |
+| T19 | Term entry model: several terms per language, term-level notes, gender and number (**done**, as concept ids over the pair rows) | Medium | L | P3 | Research #11 |
 | T20 | TMX export of aligned corpora, keep TMX inline markup (**done**, not yet checked against the official DTD or a CAT tool) | Low | M | P3 | Research #10 |
 | T21 | Related-term suggestions from word embeddings | Low | L | P3 | Roadmap 14 |
 | T22 | Interface language (Spanish, Italian) and a semantic colour system (**done**, `docs/accessibility.md`) | Low | M | P3 | Audit, Research #12 |
@@ -541,6 +541,12 @@ fast (an index on word shingles or a trigram table, not a full scan).
 ### T19. Term entry model: several terms per language, term-level notes, gender and number
 
 **Priority** P3 · **Value** Medium · **Effort** L · **Source** Research #11
+
+**Status: done, with a lighter model than the scope sketched** (migration v13). Rather than a concept table with one row per term, rows stay (source, translation) pairs and gain a
+`concept_id`; the rows of a concept are its synonyms on both sides, so the Job matching, the badges, Check text and every query are untouched and the existing exports are
+byte-identical after the migration (tested). Gender, number and a usage note per side; TBX writes a concept's terms per language and the gender (TBX-Basic has no number
+category: number is in Excel and CSV). What this does not do: a definition and a domain are still per pair (the first non-empty one in a concept is exported), and a synonym is
+linked to the pairs you enter, not to every combination.
 
 **Why it matters.** An entry is a single (source, translation) pair. TBX and memoQ model a concept with several terms per language (synonyms, variants), term-level
 usage notes and, for Romance languages, gender and number. Today synonyms are separate rows, grouped only at export time by source term.

@@ -296,6 +296,14 @@ export interface Term {
   context: string;
   context_source: string;
   origin: string;
+  /** Rows with the same concept id are synonyms of one concept. */
+  concept_id?: number | null;
+  src_gender?: string;
+  src_number?: string;
+  tgt_gender?: string;
+  tgt_number?: string;
+  src_note?: string;
+  tgt_note?: string;
   /** Last change (SQLite CURRENT_TIMESTAMP, UTC). */
   updated?: string;
 }

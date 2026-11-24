@@ -215,6 +215,18 @@ Turn what you find into terminology you can reuse and hand over:
   press **Ctrl/Cmd+E** (with text selected in the hit, the selection becomes the term, or the translation when it is
   in the target segment). The dialog pre-fills the term, its part of speech and the example sentence, and *Find
   examples* lists whole sentences from the current corpus (respecting the document filter) to pick an example from.
+- **Concepts, synonyms, gender and number**: an entry is still one (source term, translation) pair, but pairs about the same
+  thing share a **concept**: by default all pairs with the same source term (any case) in a project and language pair, so a term with
+  three translations is one concept. In the entry's detail strip, *Add translation* adds another translation of the same source
+  term and *Add source synonym* adds another source term (e.g. *domicilio* for *vivienda*) to the same concept; *Same concept* lists
+  the other pairs. Each side has its own **gender** (masculine, feminine, neuter, other), **number** (singular, plural, dual, mass,
+  other) and **usage note** (*Gender, number and notes* in the dialog; a Spanish or Italian word such as *femminile* or *pl* is
+  understood when importing). Exports: **TBX** writes one entry per concept with all its source terms and all its translations as the
+  terms of the two language sections, the gender as `grammaticalGender` (a TBX-Basic category) and the usage notes as `note`s;
+  TBX-Basic has no category for number, so **number goes to Excel and CSV only** (new columns after *Project*: source and
+  translation gender, number, note, and *Concept*, so a spreadsheet round trip keeps the grouping). Importing TBX makes each
+  entry one concept; importing a sheet with a *Concept* column does the same, without one the source term decides. The Job
+  matching, the *In termbase* badges and *Check text* still work per pair, so they are unchanged.
 - **Review candidates**: every candidate table (*Frequency*, *Collocations*, *N-grams*, *Keyness*, and the Job gaps, key
   terms and phrases) shows an **In termbase** badge (single words match by lemma, phrases by their word forms; any
   status counts) and has *Only not in termbase* and *Show dropped* switches. **Drop** puts a term on the project's

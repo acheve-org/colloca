@@ -14,6 +14,12 @@ export interface TermDraft {
   notes: string;
   context: string;
   context_source: string;
+  src_gender: string;
+  src_number: string;
+  src_note: string;
+  tgt_gender: string;
+  tgt_number: string;
+  tgt_note: string;
 }
 
 export interface TermContext {
@@ -21,6 +27,8 @@ export interface TermContext {
   src_lang: string;
   tgt_lang: string;
   origin: string;
+  /** Adding a synonym: the concept the new row joins. */
+  concept_id?: number;
 }
 
 export interface OpenTermArgs {
@@ -40,6 +48,15 @@ export interface OpenTermArgs {
   target?: string;
   example?: string;
   exampleSource?: string;
+  /** Add a row to this concept (a source synonym or another translation); needs `srcLang`, `tgtLang`, `projectId`. */
+  conceptId?: number;
+  projectId?: number | null;
+  srcGender?: string;
+  srcNumber?: string;
+  srcNote?: string;
+  tgtGender?: string;
+  tgtNumber?: string;
+  tgtNote?: string;
 }
 
 /** UPOS tag -> termbase part of speech (as the old UI). */
@@ -47,10 +64,14 @@ const POS_MAP: Record<string, string> = {
   NOUN: 'noun', VERB: 'verb', AUX: 'verb', ADJ: 'adjective', ADV: 'adverb', PROPN: 'properNoun',
 };
 export const TERM_POS = ['noun', 'verb', 'adjective', 'adverb', 'properNoun', 'other'];
+/** TBX-Basic grammaticalGender values; number has no TBX-Basic category (CSV and Excel only). */
+export const GENDERS = ['masculine', 'feminine', 'neuter', 'other'];
+export const NUMBERS = ['singular', 'plural', 'dual', 'mass', 'other'];
 
 const blank = (): TermDraft => ({
   src_term: '', tgt_term: '', status: 'candidate', pos: '', domain: '', definition: '', notes: '',
-  context: '', context_source: '',
+  context: '', context_source: '', src_gender: '', src_number: '', src_note: '', tgt_gender: '', tgt_number: '',
+  tgt_note: '',
 });
 
 let languages: Languages | null = null;
@@ -87,8 +108,9 @@ export const termStore = $state<{
 /** Opens the Add term dialog for the current corpus (or edits entry `args.id`), prefilled from `args`. */
 export function openTerm(args: OpenTermArgs): void {
   const editing = args.id !== undefined;
+  const synonym = args.conceptId !== undefined;
   const c = corpusStore.current;
-  if (!editing && !c) {
+  if (!editing && !synonym && !c) {
     messages.say(t('corpus.selectFirst'), 'err');
     return;
   }
@@ -104,11 +126,22 @@ export function openTerm(args: OpenTermArgs): void {
     notes: args.notes ?? '',
     context: args.example ?? '',
     context_source: args.example ? (args.exampleSource ?? '') : '',
+    src_gender: args.srcGender ?? '',
+    src_number: args.srcNumber ?? '',
+    src_note: args.srcNote ?? '',
+    tgt_gender: args.tgtGender ?? '',
+    tgt_number: args.tgtNumber ?? '',
+    tgt_note: args.tgtNote ?? '',
   };
   termStore.editingId = args.id ?? null;
   termStore.ctx = editing
     ? { project_id: null, src_lang: args.srcLang ?? '', tgt_lang: args.tgtLang ?? '', origin: args.origin ?? 'manual' }
-    : { project_id: c!.project_id, src_lang: c!.lang, tgt_lang: '', origin: args.origin ?? 'manual' };
+    : synonym
+      ? {
+          project_id: args.projectId ?? null, src_lang: args.srcLang ?? '', tgt_lang: args.tgtLang ?? '',
+          origin: args.origin ?? 'manual', concept_id: args.conceptId,
+        }
+      : { project_id: c!.project_id, src_lang: c!.lang, tgt_lang: '', origin: args.origin ?? 'manual' };
   termStore.examples = [];
   termStore.examplesFor = '';
   termStore.open = true;
@@ -117,7 +150,7 @@ export function openTerm(args: OpenTermArgs): void {
     .then((l) => {
       termStore.langs = l;
       // The target language is the other supported one (as the old UI).
-      if (!editing) ctx.tgt_lang = Object.keys(l).find((k) => k !== ctx.src_lang) ?? '';
+      if (!editing && !synonym) ctx.tgt_lang = Object.keys(l).find((k) => k !== ctx.src_lang) ?? '';
     })
     .catch((err) => messages.say(err instanceof Error ? err.message : String(err), 'err'));
   if (!editing) findExamples(true);
@@ -166,6 +199,7 @@ export async function saveTerm(): Promise<boolean> {
         src_lang: ctx.src_lang,
         tgt_lang: ctx.tgt_lang,
         origin: ctx.origin,
+        ...(ctx.concept_id !== undefined ? { concept_id: ctx.concept_id } : {}),
       });
     }
     messages.say(t(id !== null ? 'term.updated' : 'term.saved'), 'ok');

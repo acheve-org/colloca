@@ -208,8 +208,40 @@
       srcLang: r.src_lang,
       tgtLang: r.tgt_lang,
       origin: r.origin,
+      srcGender: r.src_gender,
+      srcNumber: r.src_number,
+      srcNote: r.src_note,
+      tgtGender: r.tgt_gender,
+      tgtNumber: r.tgt_number,
+      tgtNote: r.tgt_note,
     });
   }
+
+  /** Add a row to the selected entry's concept: another source term (`source`) or another translation. */
+  function addToConcept(r: Term, kind: 'source' | 'translation'): void {
+    if (r.concept_id == null) return;
+    openTerm({
+      source: kind === 'source' ? '' : r.src_term,
+      target: kind === 'source' ? r.tgt_term : '',
+      pos: r.pos,
+      domain: r.domain,
+      status: 'approved',
+      conceptId: r.concept_id,
+      projectId: r.project_id,
+      srcLang: r.src_lang,
+      tgtLang: r.tgt_lang,
+      srcGender: kind === 'source' ? '' : r.src_gender,
+      srcNumber: kind === 'source' ? '' : r.src_number,
+      tgtGender: kind === 'source' ? r.tgt_gender : '',
+      tgtNumber: kind === 'source' ? r.tgt_number : '',
+    });
+  }
+
+  /** The other rows of the selected entry's concept (its synonyms), from the entries loaded. */
+  const relatives = (r: Term) =>
+    r.concept_id == null ? [] : terms.filter((x) => x.concept_id === r.concept_id && x.id !== r.id);
+  const termData = (g?: string, n?: string) =>
+    [g ? t(`term.gender.${g}`) : '', n ? t(`term.number.${n}`) : ''].filter(Boolean).join(', ');
 
   async function setStatus(r: Term, next: 'approved' | 'forbidden'): Promise<void> {
     if (busyId !== null) return;
@@ -535,6 +567,8 @@
           <Button disabled={busyId === r.id} onclick={() => edit(r)}>{t('tb.edit')}</Button>
           <Button disabled={busyId === r.id || r.status === 'approved'} onclick={() => setStatus(r, 'approved')}>{t('tb.approve')}</Button>
           <Button disabled={busyId === r.id || r.status === 'forbidden'} onclick={() => setStatus(r, 'forbidden')}>{t('tb.forbid')}</Button>
+          <Button disabled={busyId === r.id || r.concept_id == null} onclick={() => addToConcept(r, 'translation')}>{t('tb.addTranslation')}</Button>
+          <Button disabled={busyId === r.id || r.concept_id == null} onclick={() => addToConcept(r, 'source')}>{t('tb.addSynonym')}</Button>
           <Button variant="danger" disabled={busyId === r.id} onclick={() => askDelete(r)}>{t('tb.delete')}</Button>
         {/snippet}
         <dl>
@@ -546,6 +580,18 @@
           <dd>{r.src_lang}→{r.tgt_lang}{r.project ? ` · ${r.project}` : ''}</dd>
           <dt>{t('tb.col.status')}</dt>
           <dd><Badge kind={r.status as Status} /></dd>
+          {#if termData(r.src_gender, r.src_number)}<dt>{t('tb.srcData')}</dt><dd>{termData(r.src_gender, r.src_number)}</dd>{/if}
+          {#if termData(r.tgt_gender, r.tgt_number)}<dt>{t('tb.tgtData')}</dt><dd>{termData(r.tgt_gender, r.tgt_number)}</dd>{/if}
+          {#if r.src_note}<dt>{t('term.srcNote')}</dt><dd>{r.src_note}</dd>{/if}
+          {#if r.tgt_note}<dt>{t('term.tgtNote')}</dt><dd>{r.tgt_note}</dd>{/if}
+          {#if relatives(r).length}
+            <dt>{t('tb.concept')}</dt>
+            <dd>
+              <ul class="concept">
+                {#each relatives(r) as x (x.id)}<li>{x.src_term} → {x.tgt_term || '—'} <Badge kind={x.status as Status} /></li>{/each}
+              </ul>
+            </dd>
+          {/if}
           {#if r.pos}<dt>{t('tb.col.pos')}</dt><dd>{r.pos}</dd>{/if}
           {#if r.domain}<dt>{t('tb.col.domain')}</dt><dd>{r.domain}</dd>{/if}
           {#if r.definition}<dt>{t('tb.definition')}</dt><dd>{r.definition}</dd>{/if}
@@ -652,6 +698,10 @@
   .filter {
     width: 14rem;
     margin-left: var(--s-2);
+  }
+  .concept {
+    margin: 0;
+    padding-left: 1.1rem;
   }
   .muted {
     color: var(--muted);
