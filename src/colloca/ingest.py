@@ -172,13 +172,17 @@ def extract_html(data: bytes) -> tuple[str, str]:
 
 
 def extract_pdf(data: bytes, lang: str | None = None, notes: list[str] | None = None,
-                progress=None) -> str:
-    """Text of a PDF. Without a text layer the pages are OCRed (see ocr.py); `notes` collects warnings."""
+                progress=None, report: dict | None = None) -> str:
+    """Text of a PDF, columns read one after the other and table rows kept as rows (see pdftext). Without a text
+    layer the pages are OCRed (see ocr.py). `notes` collects warnings; `report`, if given, receives the quality of
+    the extracted text under "quality" (see pdftext.quality)."""
     from pypdf import PdfReader
+
+    from . import pdftext
     reader = PdfReader(io.BytesIO(data))
     if len(reader.pages) > MAX_PDF_PAGES:
         raise IngestError(f"PDF has {len(reader.pages)} pages (limit {MAX_PDF_PAGES}; set MAX_PDF_PAGES)")
-    pages = [(p.extract_text() or "") for p in reader.pages]
+    pages = [pdftext.page_text(p) for p in reader.pages]
     if not any(p.strip() for p in pages):
         from . import ocr
         res = ocr.ocr_pdf(data, lang, progress)
@@ -202,9 +206,16 @@ def extract_pdf(data: bytes, lang: str | None = None, notes: list[str] | None = 
         out.append("\n".join(lines))
     text = "\n".join(out)
     text = re.sub(r"(\w)-\n(\w)", r"\1\2", text)           # de-hyphenate line breaks
-    # join soft-wrapped lines: a line that doesn't end a sentence continues on the next one
-    text = re.sub(r"(?<![.!?:;»”\"])\n(?=[a-zà-ÿ0-9(¿¡«“\"])", " ", text)
-    return normalize_text(text)
+    # join soft-wrapped lines: a line that doesn't end a sentence continues on the next one (never a table row)
+    text = re.sub(rf"(?<![.!?:;»”\"{pdftext.ROW_END}])\n(?=[a-zà-ÿ0-9(¿¡«“\"])", " ", text)
+    text = normalize_text(text.replace(pdftext.ROW_END, ""))
+    score = pdftext.quality(text)
+    if report is not None:
+        report["quality"] = score
+    if notes is not None and score["level"] != "good":
+        notes.append(f"The text of this PDF may be unreliable (quality {score['score']}/100, {score['level']}): "
+                     + " ".join(i["message"] for i in score["issues"]) + " Check the preview before adding it.")
+    return text
 
 
 def extract_docx(data: bytes) -> str:
@@ -240,15 +251,18 @@ def decode_text(data: bytes) -> str:
 # --------------------------------------------------------------------------- entry points
 def fetch_url(url: str, polite: bool = False) -> dict:
     data, ctype = _download(url, polite)
+    extra: dict = {}
     if "pdf" in ctype or data[:5] == b"%PDF-":
-        text, title = extract_pdf(data), ""
+        notes: list[str] = []
+        text, title = extract_pdf(data, None, notes, None, extra), ""
+        extra["warnings"] = notes
     elif "html" in ctype or "xml" in ctype or b"<html" in data[:2048].lower():
         title, text = extract_html(data)
     elif ctype.startswith("text/"):
         text, title = decode_text(data), ""
     else:
         raise IngestError(f"Unsupported content type: {ctype or 'unknown'}")
-    return {"url": url, "title": title or urlparse(url).netloc, "text": text}
+    return {"url": url, "title": title or urlparse(url).netloc, "text": text, **extra}
 
 
 READ_EXTENSIONS = (".docx", ".pdf", ".odt", ".rtf", ".xlsx", ".csv", ".tsv", ".xlf", ".xliff", ".srt", ".vtt",
@@ -262,10 +276,11 @@ def read_file(filename: str, data: bytes, lang: str | None = None, columns: str 
     ext = os.path.splitext(filename)[1].lower()
     title = os.path.splitext(os.path.basename(filename))[0]
     notes: list[str] = []
+    extra: dict = {}
     if ext == ".docx":
         text = extract_docx(data)
     elif ext == ".pdf":
-        text = extract_pdf(data, lang, notes, progress)
+        text = extract_pdf(data, lang, notes, progress, extra)
     elif ext == ".odt":
         text = formats.extract_odt(data)
     elif ext == ".rtf":
@@ -286,4 +301,4 @@ def read_file(filename: str, data: bytes, lang: str | None = None, columns: str 
                           ".vtt, .txt, .md, .html)")
     if not text.strip():
         raise IngestError("File contains no text")
-    return {"title": title, "text": text, "warnings": notes}
+    return {"title": title, "text": text, "warnings": notes, **extra}

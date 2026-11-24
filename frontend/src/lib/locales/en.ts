@@ -824,4 +824,12 @@ export const en: Messages = {
   'tmx.markup': 'keep inline markup',
   'tmx.hint': 'A TMX 1.4b translation memory of this corpus and its aligned translations; formatting codes kept from imported TMX files are written back.',
   'tmx.go': 'Download TMX',
+  'src.preview.title': 'Preview before adding',
+  'src.preview.file': 'Preview file',
+  'src.preview.fileHint': 'Read the chosen file and show its text (and, for a PDF, its quality) before adding it',
+  'src.preview.one': 'Choose exactly one file to preview.',
+  'src.quality.good': 'Text quality: good',
+  'src.quality.fair': 'Text quality: fair',
+  'src.quality.poor': 'Text quality: poor',
+  'src.quality.score': '{n} / 100',
 };
