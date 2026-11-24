@@ -89,7 +89,7 @@ def test_delete_project_refused_while_it_has_corpora(client):
     r = client.delete(f"/api/projects/{pid}")
     assert r.status_code == 409 and "still has 1 corpora" in r.json()["detail"]
     assert client.delete("/api/projects/999999").status_code == 404
-    moved = make_corpus(client, project_id=other)                          # no corpus row left -> deletable
+    moved = make_corpus(client, project_id=other)      # refused while it holds a corpus, deletable once moved out
     assert client.delete(f"/api/projects/{other}").status_code == 409
     assert client.patch(f"/api/corpora/{moved}", json={"project_id": default_project(client)}).status_code == 200
     assert client.delete(f"/api/projects/{other}").status_code == 204
@@ -97,11 +97,11 @@ def test_delete_project_refused_while_it_has_corpora(client):
 
 def test_projects_list_reports_trashed_count(client):
     pid = project(client)
-    live, gone = make_corpus(client, project_id=pid), make_corpus(client, project_id=pid)
+    make_corpus(client, project_id=pid)
+    gone = make_corpus(client, project_id=pid)
     client.delete(f"/api/corpora/{gone}")
     p = next(p for p in client.get("/api/projects").json() if p["id"] == pid)
     assert (p["corpora"], p["trashed"]) == (1, 1)
-    assert live
 
 
 # --------------------------------------------------------------------------- metadata

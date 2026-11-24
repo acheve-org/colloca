@@ -269,6 +269,24 @@ def test_import_into_a_chosen_project(client):
     assert len(client.get("/api/terms", params={"project": dst}).json()) == 1
 
 
+def test_import_puts_a_projectless_working_corpus_into_general(client):
+    payload = {"format": "colloca-export", "format_version": 1,
+               "corpora": [{"ref": 1, "name": "orphan", "lang": "es", "project_ref": None},
+                           {"ref": 2, "name": "base", "lang": "es", "is_reference": True}],
+               "documents": [{"ref": 1, "corpus_ref": 1, "title": "d", "text": ES_TEXT}]}
+    for _ in range(2):
+        r = client.post("/api/import", data={"dry_run": "false", "annotate": "false"},
+                        files={"file": ("p.json", json.dumps(payload).encode())})
+        assert r.status_code == 200, r.text
+    general = [p["id"] for p in client.get("/api/projects").json() if p["name"].lower() == "general"]
+    assert len(general) == 1
+    corpora = client.get("/api/corpora").json()
+    orphans = [c for c in corpora if c["name"] == "orphan"]
+    assert [c["project_id"] for c in orphans] == general
+    with db.session() as conn:
+        assert [r[0] for r in conn.execute("SELECT project_id FROM corpora WHERE name='base'")] == [None]
+
+
 def test_database_backup_has_a_consistent_sqlite_copy_and_excludes_the_trash(client, tmp_path):
     cid = make_corpus(client, "es", "in-backup")
     add(client, cid, ES_TEXT)
