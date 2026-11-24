@@ -38,6 +38,12 @@ def import_tmx(client, cid, data, name="memory.tmx", **params):
     return r.json()[0]
 
 
+@pytest.fixture(autouse=True)
+def _clean_terms(client):
+    with db.session() as conn:
+        conn.execute("DELETE FROM terms")
+
+
 @pytest.fixture()
 def pair(client):
     es, it = make_corpus(client, "es", "ES side"), make_corpus(client, "it", "IT side")
@@ -305,3 +311,68 @@ def test_v5_database_upgrades_to_v6(tmp_path):
     conn.execute("INSERT INTO segments VALUES (1, 0, 0, 3)")
     conn.execute("DELETE FROM documents WHERE id=1")
     assert conn.execute("SELECT COUNT(*) FROM segments").fetchone()[0] == 0                # cascade
+
+
+# --------------------------------------------------------------------------- highlighted equivalents (T01)
+def _marked(text, marks):
+    return [text[m["start"]:m["end"]] for m in marks]
+
+
+def test_bilingual_lines_mark_the_hit_and_the_likely_equivalent(client, pair):
+    es, it, _ = pair
+    res = client.get(f"/api/corpora/{es}/bilingual", params={"q": "contrato"}).json()
+    assert len(res["lines"]) == 6
+    for line in res["lines"]:
+        assert _marked(line["source"], line["source_marks"]) == ["contrato"]
+        assert _marked(line["target"], line["target_marks"]) == ["contratto"]
+        assert all(m["guess"] and 0 < m["score"] <= 1 for m in line["target_marks"])
+    # searching from the target corpus marks the hit in its own segment and the Spanish word in the other
+    rev = client.get(f"/api/corpora/{it}/bilingual", params={"q": "contratto"}).json()
+    assert _marked(rev["lines"][0]["source"], rev["lines"][0]["source_marks"]) == ["contratto"]
+    assert _marked(rev["lines"][0]["target"], rev["lines"][0]["target_marks"]) == ["contrato"]
+
+
+def test_an_approved_termbase_translation_beats_the_statistical_guess(client, pair):
+    es, _, _ = pair
+    assert client.post("/api/terms", json={"src_lang": "es", "src_term": "contrato", "tgt_term": "obblighi",
+                                           "status": "approved"}).status_code == 201
+    line = client.get(f"/api/corpora/{es}/bilingual", params={"q": "contrato"}).json()["lines"][0]
+    assert _marked(line["target"], line["target_marks"]) == ["obblighi"]
+    assert line["target_marks"][0]["guess"] is False
+    # a forbidden entry is not a recommended translation: the statistical guess is used instead
+    client.post("/api/terms", json={"src_lang": "es", "src_term": "plazo", "tgt_term": "scadenza",
+                                    "status": "forbidden"})
+    plazo = client.get(f"/api/corpora/{es}/bilingual", params={"q": "plazo"}).json()["lines"][0]
+    assert plazo["target_marks"] and all(m["guess"] for m in plazo["target_marks"])
+    assert "scadenza" not in _marked(plazo["target"], plazo["target_marks"])
+
+
+def test_marks_follow_the_occurrence_and_the_lemma_not_the_surface_form(client):
+    es, it = make_corpus(client, "es", "ES"), make_corpus(client, "it", "IT")
+    pairs = [(f"El contrato anterior sustituye al contrato nuevo en el caso {k}.",
+              f"I contratti precedenti sostituiscono il contratto nuovo nel caso {k}.") for k in range(1, 5)]
+    import_tmx(client, es, tmx(pairs), partner_corpus_id=it)
+    assert wait_for_jobs(client, es)[0]["status"] == "done"
+    lines = client.get(f"/api/corpora/{es}/bilingual", params={"q": "contrato", "sort": "doc"}).json()["lines"]
+    assert len(lines) == 8
+    first, second = lines[0], lines[1]
+    assert first["pos"] != second["pos"]
+    assert first["source_marks"] != second["source_marks"]                   # each line marks its own occurrence
+    assert _marked(first["source"], first["source_marks"]) == ["contrato"]
+    assert first["source"].index("contrato") == first["source_marks"][0]["start"]
+    assert second["source_marks"][0]["start"] == second["source"].rindex("contrato")
+    assert _marked(first["target"], first["target_marks"]) == ["contratti", "contratto"]   # lemma: inflected + singular
+
+
+def test_csv_export_of_a_bilingual_search_is_unchanged(client, pair):
+    es, _, _ = pair
+    header = client.get(f"/api/corpora/{es}/bilingual", params={"q": "contrato", "format": "csv"}).text.splitlines()[0]
+    assert "marks" not in header and "target" in header
+
+
+def test_a_termbase_translation_missing_from_a_segment_falls_back_to_the_guess(client, pair):
+    es, _, _ = pair
+    client.post("/api/terms", json={"src_lang": "es", "src_term": "contrato", "tgt_term": "accordo",
+                                    "status": "approved"})
+    line = client.get(f"/api/corpora/{es}/bilingual", params={"q": "contrato"}).json()["lines"][0]
+    assert _marked(line["target"], line["target_marks"]) == ["contratto"] and line["target_marks"][0]["guess"]

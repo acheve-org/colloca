@@ -63,7 +63,11 @@ and search them side by side:
   Removing one side's document unlinks the other.
 - **Concordance → *Source + target*** (appears when the corpus has aligned texts) shows each hit as its source
   segment next to the aligned target segment; run it on the target-language corpus to search by the translation
-  instead.
+  instead. The query is marked in the source segment, and the **likely equivalent** in the target: an **approved**
+  termbase translation of the query (solid underline) wins; otherwise the best candidate of *Equivalents* is marked
+  with a dotted underline and the label *guess*. A guess is statistical: check it before adopting it (in a small
+  memory several words can tie, and the one that looks most like the query is chosen). Words are matched by lemma,
+  so *contratti* is marked for *contrato*. The CSV export is unchanged.
 - **Equivalents** screen (in the rail only when the corpus has aligned texts): candidate translations of a word or phrase, i.e. the target lemmas that keep appearing in
   the aligned segments of its occurrences, scored by Dice against their overall frequency in the target text (so
   everyday words score low). Single words only on the target side, and a statistical hint, not a verdict: confirm

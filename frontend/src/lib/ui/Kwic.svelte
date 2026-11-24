@@ -14,7 +14,7 @@
 
 <script lang="ts">
   import { t } from '../i18n';
-  import { findRanges } from '../highlight';
+  import { sourceRanges, targetIsGuess, targetRanges } from '../highlight';
   import DataTable from './DataTable.svelte';
   import type { Column } from './DataTable.types';
   import Highlight from './Highlight.svelte';
@@ -86,9 +86,9 @@
   {:else if col.key === 'right'}
     {l.right}
   {:else if col.key === 'source'}
-    <span class="seg src" data-side="source"><Highlight text={l.source ?? ''} ranges={findRanges(l.source ?? '', [l.node], 'query')} /></span>
+    <span class="seg src" data-side="source"><Highlight text={l.source ?? ''} ranges={sourceRanges(l)} /></span>
   {:else if col.key === 'target'}
-    <span class="seg tgt" data-side="target" title={likelyEquiv.length ? t('cc.guessHint') : undefined}><Highlight text={l.target ?? ''} ranges={findRanges(l.target ?? '', likelyEquiv, 'equiv')} /></span>
+    <span class="seg tgt" data-side="target" title={targetIsGuess(l, likelyEquiv) ? t('cc.guessHint') : undefined}><Highlight text={l.target ?? ''} ranges={targetRanges(l, likelyEquiv)} /></span>
   {:else}
     <span class="doc" title={l.doc}>{l.doc}</span>
   {/if}

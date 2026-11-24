@@ -79,6 +79,54 @@ describe('Kwic', () => {
     expect(eq[0].closest('.tgt')).not.toBeNull();
   });
 
+  it('uses the server marks: only the hit occurrence in the source, the guess dotted in the target', () => {
+    render(Kwic, {
+      lines: [
+        line(1, {
+          source: 'El contrato y el contrato nuevo.',
+          target: 'Il contratto e il contratto nuovo.',
+          source_marks: [{ start: 17, end: 25 }],
+          target_marks: [{ start: 3, end: 12, score: 0.8, guess: true }],
+        }),
+      ],
+      mode: 'bilingual',
+      query: 'contrato',
+      selected: null,
+    });
+    const row = bodyRows()[0];
+    const q = row.querySelectorAll('.hit-query');
+    expect(q).toHaveLength(1);
+    const before = Array.from(row.querySelector('.src')!.childNodes)
+      .slice(0, Array.from(row.querySelector('.src')!.childNodes).indexOf(q[0]))
+      .map((n) => n.textContent)
+      .join('');
+    expect(before).toBe('El contrato y el '); // the second occurrence is marked, not the first
+    const eq = row.querySelectorAll('.hit-equiv');
+    expect(eq).toHaveLength(1);
+    expect(eq[0].textContent).toBe('contratto');
+    expect(row.querySelector('.tgt')?.getAttribute('title')).toMatch(/guess/i);
+  });
+
+  it('shows an approved termbase translation as a term hit, without the guess label', () => {
+    render(Kwic, {
+      lines: [
+        line(1, {
+          source: 'El contrato.',
+          target: 'Il contratto.',
+          source_marks: [{ start: 3, end: 11 }],
+          target_marks: [{ start: 3, end: 12, score: 1, guess: false }],
+        }),
+      ],
+      mode: 'bilingual',
+      query: 'contrato',
+      selected: null,
+    });
+    const row = bodyRows()[0];
+    expect(row.querySelector('.tgt .hit-term')?.textContent).toBe('contratto');
+    expect(row.querySelector('.hit-equiv')).toBeNull();
+    expect(row.querySelector('.tgt')).not.toHaveAttribute('title');
+  });
+
   it('marks source and target cells with data-side', () => {
     render(Kwic, {
       lines: [line(1, { source: 'La casa', target: 'La casa' })],
