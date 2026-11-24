@@ -1183,7 +1183,8 @@ def concordance(corpus_id: int, q: str, unit: str = "lemma", width: int = Query(
     finds the words anywhere in one sentence; `sample=<seed>` returns a reproducible random selection of
     `limit` hits; `sort` is doc, left, right, or l1 l2 r1 r2 (the 1st/2nd word to the left/right).
     `advanced=true` reads `q` as a token query (regex, lemma/pos conditions, `|`, gaps;
-    docs/analysis.md, "Advanced query language") and returns it in words as `parsed`; `accent_insensitive=true` makes `cafe` find `café`."""
+    docs/analysis.md, "Advanced query language") and returns it in words as `parsed`;
+    `accent_insensitive=true` makes `cafe` find `café`."""
     with db.session() as conn:
         _corpus(conn, corpus_id)
         res = _run(analysis.concordance, conn, sq.scope(corpus_id), q, unit, width, limit, sort,
