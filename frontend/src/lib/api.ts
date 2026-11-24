@@ -1,3 +1,5 @@
+import { beginRequest } from './activity.svelte';
+
 export class ApiError extends Error {
   status: number;
   constructor(message: string, status: number) {
@@ -29,23 +31,31 @@ export function toLogin(): void {
   window.location.assign(`/login?next=${encodeURIComponent(here)}`);
 }
 
+/** Job polling runs every second for as long as a job lives: it is not a slow request. */
+const isPolling = (path: string) => /\/jobs(\?|$)/.test(path);
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, init);
-  if (res.status === 401) toLogin();
-  if (!res.ok) {
-    let detail = res.statusText;
-    try {
-      const j = await res.json();
-      if (j && j.detail !== undefined) {
-        detail = typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail);
+  const end = isPolling(path) ? null : beginRequest();
+  try {
+    const res = await fetch(path, init);
+    if (res.status === 401) toLogin();
+    if (!res.ok) {
+      let detail = res.statusText;
+      try {
+        const j = await res.json();
+        if (j && j.detail !== undefined) {
+          detail = typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail);
+        }
+      } catch {
+        // body was not JSON: keep statusText
       }
-    } catch {
-      // body was not JSON: keep statusText
+      throw new ApiError(detail, res.status);
     }
-    throw new ApiError(detail, res.status);
+    if (res.status === 204) return null as T;
+    return (await res.json()) as T;
+  } finally {
+    end?.();
   }
-  if (res.status === 204) return null as T;
-  return (await res.json()) as T;
 }
 
 const json = (method: string, body: unknown): RequestInit => ({

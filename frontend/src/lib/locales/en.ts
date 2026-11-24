@@ -533,6 +533,7 @@ export const en: Messages = {
   'model.small': 'small model',
   'model.missing': 'no model installed',
   'model.smallWarning': 'Small models make more lemma and part-of-speech errors. Use md or lg for better quality (see the README).',
+  'activity.working': 'Working…',
   'jobs.label': 'Background jobs',
   'jobs.done': 'done',
   'jobs.queued': 'queued',
