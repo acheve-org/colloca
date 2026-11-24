@@ -217,6 +217,11 @@ lemma quality: install `md` or `lg` (`uv pip install` the wheel from the spacy-m
 download es_core_news_lg it_core_news_lg`) and set `SPACY_SIZE`. `GET /api/status` reports what is in use.
 Add dependencies with `uv add <pkg>`; `uv.lock` is committed.
 
+Sample data and benchmarks: `uv run python scripts/make_sample_corpus.py --lang es --words 1m --db /tmp/s.db` builds
+a synthetic annotated corpus (`100k`, `1m`, `5m` or any number; seeded, so reproducible; 1M words take under 10
+seconds), and `uv run python scripts/bench_analyses.py --words 1m` times every analysis on one and prints a table.
+It only measures; it changes no data outside its own temporary database.
+
 Layout (`src` layout): `src/colloca/ingest.py` (URL/DOCX/PDF → text), `nlp.py` (spaCy),
 `analysis.py` (all statistics, SQL + Python), `main.py` (API, also serves the built UI from `static/`);
 tests in `tests/`. The UI source is in `frontend/` (see below); its build output `src/colloca/static/` is git-ignored.
