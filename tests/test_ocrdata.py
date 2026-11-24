@@ -101,7 +101,8 @@ def _logging_tesseract(tmp_path, monkeypatch, langs="eng"):
     exe = tmp_path / "tesseract"
     exe.write_text(f"#!/bin/sh\necho \"$@\" >> {log}\nif [ \"$1\" = \"--list-langs\" ]; then "
                    f"printf 'List of available languages:\\n{langs}\\n'; exit 0; fi\n"
-                   "printf 'level\\tpage_num\\tblock_num\\tpar_num\\tline_num\\tword_num\\tleft\\ttop\\twidth\\theight\\tconf\\ttext\\n"
+                   "printf 'level\\tpage_num\\tblock_num\\tpar_num\\tline_num\\tword_num\\tleft\\ttop\\t"
+                   "width\\theight\\tconf\\ttext\\n"
                    "5\\t1\\t1\\t1\\t1\\t1\\t0\\t0\\t1\\t1\\t90\\thola\\n'\n")
     exe.chmod(exe.stat().st_mode | stat.S_IEXEC)
     monkeypatch.setenv("PATH", f"{tmp_path}{os.pathsep}{os.environ['PATH']}")
