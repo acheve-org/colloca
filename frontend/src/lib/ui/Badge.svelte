@@ -1,7 +1,7 @@
 <script lang="ts">
   import { t } from '../i18n';
 
-  type Kind = 'candidate' | 'approved' | 'forbidden' | 'intb' | 'neutral';
+  type Kind = 'candidate' | 'approved' | 'admitted' | 'superseded' | 'forbidden' | 'intb' | 'neutral';
   let { kind, label }: { kind: Kind; label?: string } = $props();
   const text = $derived(label ?? (kind === 'neutral' ? '' : t(`badge.${kind}`)));
 </script>
@@ -23,6 +23,14 @@
   }
   .approved {
     color: var(--status-approved);
+  }
+  .admitted {
+    color: var(--status-approved);
+    border-style: dashed;
+  }
+  .superseded {
+    color: var(--muted);
+    font-style: italic;
   }
   .forbidden {
     color: var(--status-forbidden);

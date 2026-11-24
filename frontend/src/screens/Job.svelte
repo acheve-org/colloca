@@ -186,7 +186,7 @@
           : t(`badge.${tr.status}`)}
       >
         <Badge
-          kind={tr.status === 'forbidden' ? 'forbidden' : tr.status === 'approved' ? 'approved' : 'candidate'}
+          kind={tr.status as 'candidate' | 'approved' | 'admitted' | 'superseded' | 'forbidden'}
           label={`${tr.term || '—'}${tr.status === 'forbidden' ? ' ✗' : ''}`}
         />
       </span>

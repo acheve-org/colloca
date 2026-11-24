@@ -106,18 +106,20 @@ Turn what you find into terminology you can reuse and hand over:
   in the target segment). The dialog pre-fills the term, its part of speech and the example sentence, and *Find
   examples* lists whole sentences from the current corpus (respecting the document filter) to pick an example from.
 - **Entries** are (source term, translation) pairs with part of speech, status, domain, definition, notes and an
-  example sentence. *Status*: `candidate` (to be reviewed; the translation may be empty), `approved` (the term to
-  use) or `forbidden` (a translation that must **not** be used; it is exported as a deprecated term). Approved and
-  forbidden entries need a translation. Target language is the other supported language.
+  example sentence. *Status*: `candidate` (to be reviewed; the translation may be empty), `approved` (the preferred term),
+  `admitted` (an acceptable alternative), `superseded` (obsolete) or `forbidden` (a translation that must **not** be
+  used; it is exported as a deprecated term). Every status but `candidate` needs a translation. Target language is the other supported language.
 - **Scope**: entries belong to the project of the corpus they were added from (corpora without a project share a
-  general termbase). The *Termbase* screen lists, searches, filters by status, edits, approves, marks forbidden and
-  deletes them.
+  general termbase). The *Termbase* screen lists entries, sorts by any column, searches, filters by status, domain,
+  part of speech and modification date, edits status and translation in the table, and applies a status or domain to,
+  or deletes, the selected rows.
 - **Export** (same screen, or `GET /api/terms/export?format=...&project=...&status=...`): `tbx`, `tbx2`, `xlsx`, `csv`.
-  By default only *approved* entries are exported; tick *include candidates* to add the rest.
+  By default *approved* and *admitted* entries are exported; tick *include candidates* to add the candidates.
   - **TBX** (TermBase eXchange, ISO 30042) with TBX-Basic data categories only. `tbx` uses the 2019 structure
     (`conceptEntry / langSec / termSec`), `tbx2` the 2008 one (`termEntry / langSet / tig`) that most CAT tools read.
-    Rows with the same source term form one concept; approved translations are `preferredTerm`, candidates
-    `admittedTerm`, forbidden ones `deprecatedTerm`.
+    Rows with the same source term form one concept; approved translations are `preferredTerm`, admitted ones
+    `admittedTerm`, superseded ones `supersededTerm` and forbidden ones `deprecatedTerm`; candidates carry no
+    `administrativeStatus` (TBX-Basic has no "proposed" value). Excel and CSV write the status word as it is.
   - **Checked so far:** the `tbx` output validates against the official TBX core structure RELAX NG schema
     (`tests/schemas/`, run with lxml in `tests/test_tbx_schema.py`), and the TBX-Basic value lists and placements
     (`partOfSpeech`, `administrativeStatus`, where `definition`, `context` and `subjectField` may sit) are checked by

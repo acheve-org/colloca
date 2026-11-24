@@ -141,8 +141,11 @@ def analyse(conn, scope, corpus, text: str, *, min_freq: int = 2, min_corpus_fre
 
     def tb(lemma: str) -> str:
         entries = single.get(lemma, [])
-        return next((e["tgt_term"] for e in entries if e["status"] == "approved" and e["tgt_term"]),
-                    "(candidate)" if entries else "")
+        for wanted in ("approved", "admitted"):          # the preferred translation first, then an acceptable one
+            found = next((e["tgt_term"] for e in entries if e["status"] == wanted and e["tgt_term"]), "")
+            if found:
+                return found
+        return "(candidate)" if entries else ""
 
     well = sum(c for lemma, c in job_freq.items() if corpus_freq[lemma] >= min_corpus_freq)
     seen = sum(c for lemma, c in job_freq.items() if corpus_freq[lemma] > 0)

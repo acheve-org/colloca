@@ -14,7 +14,7 @@
   const uid = $props.id();
   const d = $derived(termStore.draft);
 
-  const statusOptions = ['candidate', 'approved', 'forbidden'].map((s) => ({
+  const statusOptions = ['candidate', 'approved', 'admitted', 'superseded', 'forbidden'].map((s) => ({
     value: s,
     label: t(`term.status.${s}`),
   }));

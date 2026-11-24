@@ -3,7 +3,9 @@ import re
 
 from . import nlp
 
-STATUSES = ("candidate", "approved", "forbidden")
+# approved = the preferred term, admitted = an acceptable alternative, superseded = obsolete, forbidden = do not use
+STATUSES = ("candidate", "approved", "admitted", "superseded", "forbidden")
+NEEDS_TRANSLATION = ("approved", "admitted", "superseded", "forbidden")
 POS_VALUES = ("noun", "verb", "adjective", "adverb", "properNoun", "other")   # TBX-Basic partOfSpeech values
 ORIGINS = ("manual", "frequency", "keyness", "collocation", "ngram", "concordance", "equivalent", "job")
 UPOS_TO_TBX = {"NOUN": "noun", "VERB": "verb", "AUX": "verb", "ADJ": "adjective", "ADV": "adverb",
@@ -66,8 +68,8 @@ def clean(fields: dict, *, partial: bool = False) -> dict:
 
 
 def check_consistency(entry: dict) -> None:
-    """Rules across fields: an approved or forbidden translation needs a translation."""
-    if entry["status"] in ("approved", "forbidden") and not entry["tgt_term"]:
+    """Rules across fields: every status but candidate needs a translation."""
+    if entry["status"] in NEEDS_TRANSLATION and not entry["tgt_term"]:
         raise TermError(f"A {entry['status']} entry needs a translation")
 
 
@@ -82,8 +84,17 @@ def project_where(project: str) -> tuple[str, list]:
     return "t.project_id=?", [int(project)]
 
 
+# Sortable columns (whitelisted: they are interpolated into the SQL). Text sorts case-insensitively.
+SORT_COLUMNS = {"src_term": "lower(t.src_term)", "tgt_term": "lower(t.tgt_term)", "pos": "t.pos",
+                "status": "t.status", "domain": "lower(t.domain)", "updated": "t.updated", "created": "t.created",
+                "context": "lower(t.context)"}
+
+
 def list_terms(conn, project: str = "", src_lang: str = "", tgt_lang: str = "",
-               statuses: tuple[str, ...] = (), q: str = "", limit: int = 5000) -> list[dict]:
+               statuses: tuple[str, ...] = (), q: str = "", limit: int = 5000, *, sort: str = "", desc: bool = False,
+               domain: str = "", pos: str = "", modified_since: str = "") -> list[dict]:
+    """Entries of a project, filtered and sorted in SQL so a large termbase is cut after sorting, not before.
+    `domain` matches exactly (case-insensitive), `pos` exactly, `modified_since` is an ISO date (YYYY-MM-DD)."""
     where, params = [project_where(project)[0]], project_where(project)[1]
     if src_lang:
         where.append("t.src_lang=?")
@@ -94,12 +105,56 @@ def list_terms(conn, project: str = "", src_lang: str = "", tgt_lang: str = "",
     if statuses:
         where.append(f"t.status IN ({','.join('?' * len(statuses))})")
         params += statuses
+    if domain:
+        where.append("lower(t.domain)=?")
+        params.append(domain.strip().lower())
+    if pos:
+        where.append("t.pos=?")
+        params.append(pos)
+    if modified_since:
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", modified_since):
+            raise TermError("modified_since must be a date like 2026-01-31")
+        where.append("t.updated >= ?")
+        params.append(modified_since)
     if q.strip():
         like = "%" + q.strip().lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
         where.append("(lower(t.src_term) LIKE ? ESCAPE '\\' OR lower(t.tgt_term) LIKE ? ESCAPE '\\')")
         params += [like, like]
+    if sort and sort not in SORT_COLUMNS:
+        raise TermError(f"sort must be one of {', '.join(SORT_COLUMNS)}")
+    order = ""
+    if sort:
+        order = f"{SORT_COLUMNS[sort]} {'DESC' if desc else 'ASC'}, "
     rows = conn.execute(
         f"""SELECT t.*, p.name AS project FROM terms t LEFT JOIN projects p ON p.id=t.project_id
-            WHERE {' AND '.join(where)} ORDER BY lower(t.src_term), lower(t.tgt_term), t.id LIMIT ?""",
+            WHERE {' AND '.join(where)} ORDER BY {order}lower(t.src_term), lower(t.tgt_term), t.id LIMIT ?""",
         [*params, limit]).fetchall()
     return [dict(r) for r in rows]
+
+
+def bulk_update(conn, ids: list[int], *, status: str | None = None, domain: str | None = None) -> int:
+    """Set the status and/or domain of several entries at once; all or nothing.
+    Setting a status that needs a translation fails if any selected entry has none."""
+    if not ids:
+        raise TermError("No entries selected")
+    changes = clean({k: v for k, v in (("status", status), ("domain", domain)) if v is not None}, partial=True)
+    if not changes:
+        raise TermError("Nothing to change")
+    marks = ",".join("?" * len(ids))
+    rows = conn.execute(f"SELECT id, tgt_term FROM terms WHERE id IN ({marks})", ids).fetchall()
+    if changes.get("status") in NEEDS_TRANSLATION:
+        missing = [r["id"] for r in rows if not r["tgt_term"]]
+        if missing:
+            raise TermError(f"{len(missing)} selected entries have no translation, so they cannot be "
+                            f"{changes['status']}")
+    cols = ", ".join(f"{c}=?" for c in changes)
+    conn.execute(f"UPDATE terms SET {cols}, updated=CURRENT_TIMESTAMP WHERE id IN ({marks})",
+                 [*changes.values(), *ids])
+    return len(rows)
+
+
+def bulk_delete(conn, ids: list[int]) -> int:
+    if not ids:
+        raise TermError("No entries selected")
+    cur = conn.execute(f"DELETE FROM terms WHERE id IN ({','.join('?' * len(ids))})", ids)
+    return cur.rowcount

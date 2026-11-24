@@ -3,7 +3,7 @@
   <martifHeader>
     <fileDesc>
       <sourceDesc>
-        <p>Colloca sample termbase: 8 entries, exported from Colloca</p>
+        <p>Colloca sample termbase: 11 entries, exported from Colloca</p>
       </sourceDesc>
     </fileDesc>
     <encodingDesc>
@@ -40,6 +40,23 @@
         <langSet xml:lang="es">
           <tig>
             <term>plazo</term>
+            <termNote type="partOfSpeech">noun</termNote>
+          </tig>
+        </langSet>
+        <langSet xml:lang="it">
+          <tig>
+            <term>termine</term>
+            <termNote type="partOfSpeech">noun</termNote>
+            <termNote type="administrativeStatus">admittedTerm-admn-sts</termNote>
+          </tig>
+          <tig>
+            <term>scadenza</term>
+            <termNote type="partOfSpeech">noun</termNote>
+            <termNote type="administrativeStatus">supersededTerm-admn-sts</termNote>
+          </tig>
+          <tig>
+            <term>durata</term>
+            <termNote type="partOfSpeech">noun</termNote>
           </tig>
         </langSet>
       </termEntry>

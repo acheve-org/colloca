@@ -54,6 +54,8 @@ beforeEach(() => {
       if (patchGate) await patchGate;
       return res(patchStatus, patchStatus < 400 ? { ok: true } : { detail: 'An approved term needs a translation' });
     }
+    if (p === '/api/terms' && method === 'PATCH') return res(patchStatus, patchStatus < 400 ? { updated: 2 } : { detail: '1 selected entries have no translation' });
+    if (p === '/api/terms/delete' && method === 'POST') return res(200, { deleted: 2 });
     if (/^\/api\/terms\/\d+$/.test(p) && method === 'DELETE') return { ok: true, status: 204, statusText: '', json: async () => null };
     if (p === '/api/projects') return res(200, [{ id: 7, name: 'Acme', corpora: 1 }]);
     if (p === '/api/languages') return res(200, { es: 'Spanish', it: 'Italian' });
@@ -68,9 +70,10 @@ afterEach(() => {
   go('termbase');
 });
 
+const busyDone = () => !(screen.getByLabelText('Status of term1') as HTMLSelectElement).disabled;
 const listCalls = () => calls.filter((c) => c.path === '/api/terms' && c.method === 'GET');
 const bodyRows = () => screen.queryAllByRole('row').filter((r) => r.classList.contains('body'));
-const firstCells = () => bodyRows().map((r) => within(r).getAllByRole('gridcell')[0].textContent ?? '');
+const firstCells = () => bodyRows().map((r) => within(r).getAllByRole('gridcell')[1].textContent ?? '');
 
 async function ready() {
   render(Termbase);
@@ -134,8 +137,11 @@ describe('Termbase', () => {
   it('shows the status label next to the colour', async () => {
     await ready();
     const rows = bodyRows();
-    expect(within(rows[0]).getByText('Candidate')).toHaveClass('badge', 'candidate');
-    expect(within(rows[1]).getByText('Approved')).toHaveClass('badge', 'approved');
+    const statusOf = (i: number) => within(rows[i]).getByRole('combobox', { name: /^Status of/ }) as HTMLSelectElement;
+    expect(statusOf(0).value).toBe('candidate');
+    expect(statusOf(0).selectedOptions[0].textContent).toBe('Candidate');
+    expect(statusOf(1)).toHaveClass('approved');
+    expect(statusOf(1).selectedOptions[0].textContent).toBe('Approved');
   });
 
   it('sorts by source ignoring accents and case', async () => {
@@ -153,7 +159,9 @@ describe('Termbase', () => {
     const c = calls.find((x) => x.method === 'PATCH')!;
     expect(c.path).toBe('/api/terms/1');
     expect(c.body).toEqual({ status: 'approved' });
-    await waitFor(() => expect(within(bodyRows()[0]).getByText('Approved')).toBeInTheDocument());
+    await waitFor(() =>
+      expect((within(bodyRows()[0]).getByRole('combobox', { name: /^Status of/ }) as HTMLSelectElement).value).toBe('approved'),
+    );
     expect(listCalls().length).toBe(1);
   });
 
@@ -164,7 +172,7 @@ describe('Termbase', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Mark forbidden' }));
     await waitFor(() => expect(messages.current?.text).toBe('An approved term needs a translation'));
     expect(calls.find((x) => x.method === 'PATCH')!.body).toEqual({ status: 'forbidden' });
-    expect(within(bodyRows()[0]).getByText('Candidate')).toBeInTheDocument();
+    expect((within(bodyRows()[0]).getByRole('combobox', { name: /^Status of/ }) as HTMLSelectElement).value).toBe('candidate');
   });
 
   it('Delete asks for confirmation, then DELETEs and removes the row', async () => {
@@ -197,11 +205,60 @@ describe('Termbase', () => {
       const u = href(name);
       expect(u.pathname).toBe('/api/terms/export');
       expect(u.searchParams.get('format')).toBe(fmt);
-      expect(u.searchParams.get('status')).toBe('approved');
+      expect(u.searchParams.get('status')).toBe('approved,admitted');
       expect(u.searchParams.get('project')).toBe('none');
     }
     await fireEvent.click(screen.getByRole('switch', { name: 'Include candidates' }));
-    expect(href('CSV').searchParams.get('status')).toBe('approved,candidate');
+    expect(href('CSV').searchParams.get('status')).toBe('approved,admitted,candidate');
+  });
+
+  it('sends the new filters and the sort to the server', async () => {
+    await ready();
+    await fireEvent.input(screen.getByLabelText('Modified since'), { target: { value: '2026-01-31' } });
+    await fireEvent.change(screen.getByLabelText('Modified since'));
+    await waitFor(() => expect(listCalls().length).toBe(2));
+    expect(listCalls()[1].params.get('modified_since')).toBe('2026-01-31');
+    await fireEvent.change(screen.getByLabelText('Part of speech'), { target: { value: 'verb' } });
+    await waitFor(() => expect(listCalls().length).toBe(3));
+    expect(listCalls()[2].params.get('pos')).toBe('verb');
+    await fireEvent.click(screen.getByRole('columnheader', { name: /Source/ }));
+    await waitFor(() => expect(listCalls().length).toBe(4));
+    expect([listCalls()[3].params.get('sort'), listCalls()[3].params.get('dir')]).toEqual(['src_term', 'asc']);
+    await fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
+    await waitFor(() => expect(listCalls().length).toBe(5));
+    expect(listCalls()[4].params.get('pos')).toBeNull();
+  });
+
+  it('edits the translation and the status inline with PATCH, and puts the value back on error', async () => {
+    await ready();
+    const input = screen.getByLabelText('Translation of term1') as HTMLInputElement;
+    await fireEvent.input(input, { target: { value: 'nuevo' } });
+    await fireEvent.change(input);
+    await waitFor(() => expect(calls.some((c) => c.method === 'PATCH')).toBe(true));
+    expect(calls.find((c) => c.method === 'PATCH')).toMatchObject({ path: '/api/terms/1', body: { tgt_term: 'nuevo' } });
+    await waitFor(() => expect(busyDone()).toBe(true));
+    patchStatus = 400;
+    const sel = screen.getByLabelText('Status of term1') as HTMLSelectElement;
+    await fireEvent.change(sel, { target: { value: 'admitted' } });
+    await waitFor(() => expect(messages.current?.text).toBe('An approved term needs a translation'));
+    expect(sel.value).toBe('candidate');
+  });
+
+  it('applies a status to the ticked rows and deletes them after confirmation', async () => {
+    await ready();
+    expect(screen.queryByRole('group', { name: 'Bulk actions' })).not.toBeInTheDocument();
+    await fireEvent.click(screen.getByLabelText('Select all rows shown'));
+    const bar = screen.getByRole('group', { name: 'Bulk actions' });
+    expect(within(bar).getByText('2 selected')).toBeInTheDocument();
+    await fireEvent.change(within(bar).getByLabelText('Set status…'), { target: { value: 'admitted' } });
+    await waitFor(() => expect(calls.some((c) => c.method === 'PATCH')).toBe(true));
+    expect(calls.find((c) => c.method === 'PATCH')).toMatchObject({ path: '/api/terms', body: { ids: [1, 2], status: 'admitted' } });
+    await waitFor(() => expect(messages.current?.text).toBe('2 entries updated.'));
+    await fireEvent.click(within(screen.getByRole('group', { name: 'Bulk actions' })).getByRole('button', { name: 'Delete selected' }));
+    expect(calls.some((c) => c.method === 'POST')).toBe(false);
+    await fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete selected' }));
+    await waitFor(() => expect(calls.some((c) => c.method === 'POST')).toBe(true));
+    expect(calls.find((c) => c.method === 'POST')).toMatchObject({ path: '/api/terms/delete', body: { ids: [1, 2] } });
   });
 
   it('keeps the previous rows and reports the error when a reload fails', async () => {

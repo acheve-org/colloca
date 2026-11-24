@@ -3,7 +3,7 @@
   <tbxHeader>
     <fileDesc>
       <sourceDesc>
-        <p>Colloca sample termbase: 8 entries, exported from Colloca</p>
+        <p>Colloca sample termbase: 11 entries, exported from Colloca</p>
       </sourceDesc>
     </fileDesc>
   </tbxHeader>
@@ -37,6 +37,23 @@
         <langSec xml:lang="es">
           <termSec>
             <term>plazo</term>
+            <termNote type="partOfSpeech">noun</termNote>
+          </termSec>
+        </langSec>
+        <langSec xml:lang="it">
+          <termSec>
+            <term>termine</term>
+            <termNote type="partOfSpeech">noun</termNote>
+            <termNote type="administrativeStatus">admittedTerm-admn-sts</termNote>
+          </termSec>
+          <termSec>
+            <term>scadenza</term>
+            <termNote type="partOfSpeech">noun</termNote>
+            <termNote type="administrativeStatus">supersededTerm-admn-sts</termNote>
+          </termSec>
+          <termSec>
+            <term>durata</term>
+            <termNote type="partOfSpeech">noun</termNote>
           </termSec>
         </langSec>
       </conceptEntry>
