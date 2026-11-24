@@ -287,7 +287,8 @@ def plan(conn: sqlite3.Connection, records: list[dict], *, project_id: int | Non
          default_status: str = "candidate") -> dict:
     """Classify every record as to add, duplicate or rejected. `src_lang`/`tgt_lang` fill the rows that carry none."""
     seen = {_key(*r) for r in conn.execute(
-        "SELECT project_id, src_lang, tgt_lang, src_term, tgt_term FROM terms WHERE IFNULL(project_id, 0)=?",
+        "SELECT project_id, src_lang, tgt_lang, src_term, tgt_term FROM terms "
+        "WHERE IFNULL(project_id, 0)=? AND deleted_at IS NULL",
         (project_id or 0,))}
     add, duplicates, rejected = [], [], []
     for rec in records:
@@ -331,6 +332,8 @@ def report(result: dict, *, fmt: str, src_lang: str, tgt_lang: str, applied: boo
 def apply(conn: sqlite3.Connection, result: dict, project_id: int | None) -> int:
     """Insert the rows to add in one transaction; returns how many were stored."""
     before = conn.total_changes
+    for _, e in result["add"]:
+        termbase.drop_trashed_twin(conn, project_id, e["src_lang"], e["tgt_lang"], e["src_term"], e["tgt_term"])
     conn.executemany(
         """INSERT OR IGNORE INTO terms (project_id, src_lang, tgt_lang, src_term, tgt_term, pos, status, domain,
                                         definition, notes, context, context_source, origin)

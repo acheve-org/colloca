@@ -45,7 +45,7 @@ The T-numbers are stable labels used for cross-references; the **row order is th
 | T11 | Job report: save and reopen, whole report as one Excel file | Medium | M | P2 | New |
 | T12 | Input formats: OCR for scanned PDFs, XLIFF, ODT, RTF, XLSX, SRT | Medium | L | P2 | Roadmap 12 |
 | T13 | Advanced query language: regex, lemma + part of speech, distance patterns, accent-insensitive (**done**, `docs/query-language.md`) | Medium | L | P2 | Roadmap 11 |
-| T14 | Project backup and restore, undo for deletes | Medium | M | P2 | Audit, New |
+| T14 | Project backup and restore, undo for deletes (**done**) | Medium | M | P2 | Audit, New |
 | T15 | Termbase hits and forbidden terms marked inside concordance lines, "check text" box | Medium | M | P2 | Research #6 |
 | T16 | Near-duplicate document detection (**done**) | Medium | M | P2 | Roadmap 13 |
 | T17 | Query performance for large corpora | Medium | M | P2 | Roadmap 16 |
@@ -428,6 +428,12 @@ because of the SQL compilation and index design.
 ---
 
 ### T14. Project backup and restore, undo for deletes
+
+**Status: done** (migration v10). Deleting a corpus, document or term now moves it to the Trash (`deleted_at`; retention
+`settings.trash_days`, default 30, 0 = until emptied; restore, delete forever and "empty trash" in the *Backup and Trash*
+screen and under `/api/trash`). `GET /api/backup` (whole database: portable `data.json` + consistent SQLite copy) and
+`GET /api/projects/{id}/export` (one project, no tokens); `POST /api/import` (dry run by default, conflict report,
+re-annotation job afterwards). Code: `trash.py`, `backup.py`. Project deletion is still permanent.
 
 **Priority** P2 · **Value** Medium · **Effort** M · **Source** Audit, New
 

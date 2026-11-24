@@ -39,6 +39,7 @@
       ],
     },
     { group: 'nav.group.job', items: [{ id: 'job', label: 'nav.job' }] },
+    { group: 'nav.group.data', items: [{ id: 'trash', label: 'nav.trash' }] },
   ];
 </script>
 

@@ -17,6 +17,11 @@ def _unit(unit: str) -> str:
     return UNITS[unit]
 
 
+# the aligned partner of a document exists and is not in the Trash (the link itself is kept while it is trashed)
+PARTNER_LIVE = ("EXISTS (SELECT 1 FROM documents pd JOIN corpora pc ON pc.id=pd.corpus_id "
+                "WHERE pd.id={a}.pair_doc_id AND pd.deleted_at IS NULL AND pc.deleted_at IS NULL)")
+
+
 @dataclass(frozen=True)
 class Scope:
     """A corpus, optionally narrowed to the documents matching the metadata filters.
@@ -40,7 +45,7 @@ class Scope:
 
     def where(self, alias: str = "d") -> tuple[str, list]:
         """SQL condition (on documents aliased `alias`) and its parameters."""
-        conds: list[str] = [f"{alias}.corpus_id=?"]
+        conds: list[str] = [f"{alias}.corpus_id=?", f"{alias}.deleted_at IS NULL"]
         params: list = [self.corpus_id]
         for tag in self.tags:
             conds.append(f"EXISTS (SELECT 1 FROM doc_tags g WHERE g.doc_id={alias}.id AND g.tag=?)")
@@ -62,7 +67,7 @@ class Scope:
             conds.append(f"{alias}.id IN ({','.join('?' * len(self.doc_ids))})")
             params += self.doc_ids
         if self.paired_only:
-            conds.append(f"{alias}.segmented=1 AND {alias}.pair_doc_id IS NOT NULL")
+            conds.append(f"{alias}.segmented=1 AND {PARTNER_LIVE.format(a=alias)}")
         return " AND ".join(conds), params
 
 
@@ -85,7 +90,8 @@ def n_docs(conn, scope) -> int:
 # --------------------------------------------------------------------------- reference (base) corpora
 def reference_corpus(conn, lang: str):
     """The base corpus of `lang` (a corpora row) or None."""
-    return conn.execute("SELECT * FROM corpora WHERE lang=? AND is_reference=1", (lang,)).fetchone()
+    return conn.execute("SELECT * FROM corpora WHERE lang=? AND is_reference=1 AND deleted_at IS NULL",
+                        (lang,)).fetchone()
 
 
 def counts_for(conn, scope, unit: str, items) -> dict[str, int]:

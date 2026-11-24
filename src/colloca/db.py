@@ -164,8 +164,22 @@ _V9 = """
 ALTER TABLE documents ADD COLUMN fingerprint BLOB;
 """
 
+# --- v10: the Trash (T14). Deleting a corpus, document or term sets `deleted_at` instead of removing the row;
+# every query ignores rows where it is set, and trash.py restores them or removes them for good (after the
+# retention period, or on request). `settings` holds the few user-adjustable values (trash retention).
+_V10 = """
+ALTER TABLE corpora ADD COLUMN deleted_at TEXT;
+ALTER TABLE corpora ADD COLUMN was_reference INTEGER NOT NULL DEFAULT 0;   -- a trashed base corpus gives up its slot
+ALTER TABLE documents ADD COLUMN deleted_at TEXT;
+ALTER TABLE terms ADD COLUMN deleted_at TEXT;
+CREATE TABLE settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+) WITHOUT ROWID;
+"""
+
 MIGRATIONS: list[tuple[int, str]] = [(1, _V1), (2, _V2), (3, _V3), (4, _V4), (5, _V5), (6, _V6), (7, _V7), (8, _V8),
-                                     (9, _V9)]
+                                     (9, _V9), (10, _V10)]
 SCHEMA_VERSION = MIGRATIONS[-1][0]
 
 

@@ -21,7 +21,7 @@ image small and lets you swap sizes without rebuilding: set `SPACY_SIZE` (sm|md|
 prefetches them). The compose file sets `SPACY_SIZE: lg`, so **Docker uses the large (`lg`) models by default**; this is
 the recommended setup for real work. The active model per language is shown in the status line at the top of the
 window, with a warning when a language runs on a small (`sm`) model. Data lives in the
-`colloca-data` volume; back it up with `docker run --rm -v colloca-data:/d -v $PWD:/b alpine tar czf /b/colloca-backup.tgz -C /d .`.
+`colloca-data` volume; back it up from the *Backup and Trash* screen (a zip with a consistent copy of the database; single projects can be exported and imported too), or with `docker run --rm -v colloca-data:/d -v $PWD:/b alpine tar czf /b/colloca-backup.tgz -C /d .`. Deleted corpora, documents and terms stay in the Trash for 30 days (adjustable) before they are removed.
 
 ## Workflow
 

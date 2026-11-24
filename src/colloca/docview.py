@@ -1,14 +1,17 @@
 """Read a document around one hit, without sending the whole text to the browser (the "open the document at
 this hit" view). A document is shown as blocks: sentences, or for an aligned document its segments with the
 aligned segment of the partner document beside them."""
-from . import parallel
+from . import analysis, parallel
 
 MAX_RADIUS = 50
 
 
 def _meta(conn, doc_id: int) -> dict | None:
-    row = conn.execute("""SELECT id, corpus_id, title, source, kind, author, doc_date, text_type, n_tokens,
-                                 segmented, pair_doc_id FROM documents WHERE id=?""", (doc_id,)).fetchone()
+    row = conn.execute(f"""SELECT d.id, d.corpus_id, d.title, d.source, d.kind, d.author, d.doc_date, d.text_type,
+                                  d.n_tokens, d.segmented,
+                                  CASE WHEN {analysis.PARTNER_LIVE.format(a='d')} THEN d.pair_doc_id END AS pair_doc_id
+                           FROM documents d JOIN corpora c ON c.id=d.corpus_id
+                           WHERE d.id=? AND d.deleted_at IS NULL AND c.deleted_at IS NULL""", (doc_id,)).fetchone()
     if not row:
         return None
     tags = [r[0] for r in conn.execute("SELECT tag FROM doc_tags WHERE doc_id=? ORDER BY tag", (doc_id,))]

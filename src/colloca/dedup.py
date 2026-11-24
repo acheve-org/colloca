@@ -136,7 +136,8 @@ def report(conn, corpus_id: int, threshold: float) -> dict:
     from collections import Counter
     computed = ensure_fingerprints(conn, corpus_id)
     docs = conn.execute("""SELECT id, title, source, added, n_tokens, fingerprint FROM documents
-                           WHERE corpus_id=? AND segmented=0 AND kind<>'sentences' AND fingerprint IS NOT NULL
+                           WHERE corpus_id=? AND deleted_at IS NULL AND segmented=0 AND kind<>'sentences'
+                             AND fingerprint IS NOT NULL
                            ORDER BY id""", (corpus_id,)).fetchall()
     sketches = [_arr(d["fingerprint"]) for d in docs]
     if sketches:
