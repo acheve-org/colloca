@@ -216,10 +216,12 @@ def import_pairs(corpus_id: int, partner_id: int, filename: str, data: bytes, sw
                 conn.execute("UPDATE documents SET pair_doc_id=? WHERE id=?", (da["id"], db_["id"]))
                 # inline markup of a TMX (kept for the export): segment i of this part is line i of both texts
                 base = n * PAIRS_PER_DOC
-                conn.executemany("INSERT OR REPLACE INTO segment_markup VALUES (?,?,?)", (
-                    (doc["id"], i, raw) for i in range(len(part))
-                    for doc, raw in ((da, markup[base + i][0]), (db_, markup[base + i][1]))
-                    if base + i < len(markup) and raw))
+                rows = []
+                for i in range(min(len(part), max(len(markup) - base, 0))):
+                    for doc, raw in zip((da, db_), markup[base + i], strict=True):
+                        if raw:
+                            rows.append((doc["id"], i, raw))
+                conn.executemany("INSERT OR REPLACE INTO segment_markup VALUES (?,?,?)", rows)
             done += 1
         return {"documents": done, "segments": len(pairs), "skipped_units": skipped, "skipped_duplicates": dups}
     return work

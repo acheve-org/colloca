@@ -818,4 +818,9 @@ export const it: Messages = {
   'job.confirmBody': 'Eliminare per sempre il rapporto «{title}», con il testo che contiene? L’operazione non si può annullare.',
   'job.showText': 'Mostra il testo',
   'job.textTitle': 'Testo analizzato',
+  'tmx.title': 'Esporta testi allineati (TMX)',
+  'tmx.partner': 'Traduzioni da',
+  'tmx.markup': 'conserva il markup in linea',
+  'tmx.hint': 'Una memoria di traduzione TMX 1.4b di questo corpus e delle sue traduzioni allineate; i codici di formattazione conservati dai TMX importati vengono riscritti.',
+  'tmx.go': 'Scarica TMX',
 };

@@ -132,6 +132,14 @@ and search them side by side:
   with the translated concordance, then **+ Term** adds the pair to the termbase with the example sentence.
 - TMX is parsed with `defusedxml`, so a hostile file (entity bombs, external entities) is refused.
 
+**Export as TMX.** *Sources > Export aligned texts (TMX)* (`GET /api/corpora/{id}/export-tmx`) writes this corpus and its aligned
+translations as a TMX 1.4b translation memory, so a memory built or cleaned in Colloca can go back to a CAT tool: this corpus's language is
+the source language, each unit carries its document's title, source, text type, date, author and tags as `prop`s, and the project name is in
+the header. When a TMX was imported, the inline markup of its segments (formatting codes, placeholders) is kept beside the plain text that the
+searches use, and is written back on export (switch it off for plain text). Import, export and import again gives the same segments. With
+several partner corpora choose one (`partner_corpus_id`); the document filter narrows the documents. The structure is checked by the tests
+against the content model of the TMX 1.4b DTD, but the official DTD file has not been used and no CAT tool has opened an export yet.
+
 ## Analyse a job before translating
 
 The **Job** screen takes the text you are about to translate (a DOCX, PDF, TXT or HTML file, or pasted text) and reports,

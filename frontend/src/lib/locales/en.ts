@@ -819,4 +819,9 @@ export const en: Messages = {
   'job.confirmBody': 'Delete the report “{title}” for good, with the text kept in it? This cannot be undone.',
   'job.showText': 'Show the text',
   'job.textTitle': 'Analysed text',
+  'tmx.title': 'Export aligned texts (TMX)',
+  'tmx.partner': 'Translations from',
+  'tmx.markup': 'keep inline markup',
+  'tmx.hint': 'A TMX 1.4b translation memory of this corpus and its aligned translations; formatting codes kept from imported TMX files are written back.',
+  'tmx.go': 'Download TMX',
 };

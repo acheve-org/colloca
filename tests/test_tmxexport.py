@@ -121,7 +121,7 @@ def test_inline_markup_of_an_imported_tmx_is_kept_and_written_back(client):
     assert [c.tag for c in segs[0]] == ["bpt", "ept"] and segs[0].find("bpt").text == "<b>"
     assert [c.tag for c in segs[2]] == ["ph"] and segs[2].find("ph").get("x") == "1"
     assert [c.tag for c in segs[1]] == []                       # a plain segment stays plain
-    assert "Una frase simple & sin marcas." == "".join(segs[1].itertext())
+    assert "".join(segs[1].itertext()) == "Una frase simple & sin marcas."
     # markup=false gives plain text
     plain = ET.fromstring(export(client, es, markup="false").content)
     assert all(len(tu.findall("tuv")[0].find("seg")) == 0 for tu in plain.find("body"))
@@ -156,7 +156,8 @@ def test_partner_choice_and_errors(client, pair):
                "other.tmx", partner_corpus_id=other)
     wait_for_jobs(client, es)
     assert client.get(f"/api/corpora/{es}/aligned-partners").json() == [
-        {"id": it, "name": "IT side", "lang": "it", "docs": 1}, {"id": other, "name": "second partner", "lang": "it", "docs": 1}]
+        {"id": it, "name": "IT side", "lang": "it", "docs": 1},
+        {"id": other, "name": "second partner", "lang": "it", "docs": 1}]
     amb = export(client, es)
     assert amb.status_code == 400 and "partner_corpus_id" in amb.json()["detail"]
     only = ET.fromstring(export(client, es, partner_corpus_id=other).content)

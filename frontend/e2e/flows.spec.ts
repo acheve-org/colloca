@@ -19,6 +19,13 @@ test('aligned texts: import a two-column file, then search source + target', asy
   await page.getByRole('button', { name: 'Import', exact: true }).click();
   await expect(page.getByRole('row', { name: /aligned/ })).toBeVisible({ timeout: 60_000 });
 
+  // the memory goes back out as TMX
+  const [tmx] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole('link', { name: 'Download TMX' }).click(),
+  ]);
+  expect(tmx.suggestedFilename()).toBe('Alineados.tmx');
+
   await page.getByRole('navigation').getByRole('link', { name: 'Concordance' }).click();
   await page.getByLabel('Word or phrase').fill('parque eólico');
   await page.getByLabel('Source + target').check();
