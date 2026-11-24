@@ -209,6 +209,37 @@ CC BY). Notes: 300k sentences (about 7M words) take well over half an hour to an
 start with `--max-sentences 100000`. Pick a register close to your work (news vs. web) since keyness also picks up
 register differences. Those corpora have shuffled sentences, so “Docs” columns mean nothing for the base corpus.
 
+### Recipe: a reliable base corpus per language
+
+The base corpus answers one question: is this word domain vocabulary or just ordinary language? It should therefore
+be **general, large, clean and varied**.
+
+**Which files** (Leipzig Corpora Collection, <https://wortschatz.uni-leipzig.de>, CC BY; check the current list of
+files before choosing, it changes by year):
+
+- Spanish: `spa_news_<year>_*`, `spa_web_<year>_*` and `spa_wikipedia_<year>_*`.
+- Italian: `ita_news_<year>_*`, `ita_web_<year>_*` and `ita_wikipedia_<year>_*`.
+
+**Size and mix**: about 250k sentences per language (roughly 5M words), for example 100k news + 100k web +
+50k Wikipedia. Import each file with `--max-sentences` to cap it. More than 300k sentences adds little for
+rare-word statistics and makes annotation very slow.
+
+**Rules that keep it reliable**:
+
+- **Match the register to your work.** News alone flags “formal” words as key terms in legal, technical or commercial
+  texts; mix news with web and Wikipedia.
+- **One year or period per source.** Vocabulary drifts, so do not mix very old and very new files.
+- **One file per source and type.** The 300K file contains the 100K file; importing both counts those sentences
+  twice and distorts frequencies.
+- **Never add your own documents** to the base corpus: that shrinks the contrast keyness is meant to show.
+- **Use the language variety of your target** (European Spanish for work in Spain). Otherwise regional words come
+  out as key terms.
+- **Credit the source** (CC BY) and use the `lg` models (the Docker default), so lemmatisation is the same in the
+  base and in your corpora.
+
+**Sanity check**: run Keyness of a small neutral text (a general article) against the base. It should show few or no
+key terms; many key terms mean the base is too narrow or its register is off.
+
 ## Measures
 
 | Analysis | Details |
