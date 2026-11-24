@@ -248,7 +248,8 @@ INSERT INTO languages (code, name, model_size, tesseract, added) VALUES
 # --- v15: every working corpus and the term bank belong to a project. Project-less data left by earlier versions
 # (v5 corpora.project_id NULL, v7 NULL = "no project" in terms/term_rejections) moves into a project named General,
 # created only when something needs it and reused (case-insensitively) when it already exists. Reference corpora stay
-# project-less. A NULL-project term that duplicates one already in General is dropped (the unique index forbids both).
+# project-less. A NULL-project term or rejection that duplicates one already in General is dropped (the unique index
+# forbids both): the General row wins and the duplicate's metadata (status, notes, ...) is discarded, not merged.
 _V15 = """
 INSERT INTO projects (name)
 SELECT 'General'

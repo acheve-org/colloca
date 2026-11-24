@@ -87,7 +87,7 @@ def test_v15_moves_projectless_corpora_and_general_termbase_into_general(tmp_pat
     conn = v14(tmp_path / "a.db")
     conn.execute("INSERT INTO corpora (id, name, lang) VALUES (1, 'work', 'es')")
     conn.execute("INSERT INTO corpora (id, name, lang, is_reference) VALUES (2, 'base', 'es', 1)")
-    conn.execute("INSERT INTO corpora (id, name, lang) VALUES (3, 'trashed', 'it')")
+    conn.execute("INSERT INTO corpora (id, name, lang, deleted_at) VALUES (3, 'trashed', 'it', '2026-01-01 00:00:00')")
     conn.execute("INSERT INTO terms (src_lang, tgt_lang, src_term) VALUES ('es', 'it', 'casa')")
     conn.execute("INSERT INTO term_rejections (lang, term) VALUES ('es', 'foo')")
     conn.commit()
@@ -132,3 +132,19 @@ def test_v15_is_idempotent(tmp_path):
     db.migrate(conn)
     db.migrate(conn)
     assert len(general_ids(conn)) == 1
+
+
+def test_v15_general_row_wins_over_a_projectless_duplicate(tmp_path):
+    conn = v14(tmp_path / "f.db")
+    conn.execute("INSERT INTO projects (id, name) VALUES (4, 'General')")
+    conn.execute("INSERT INTO terms (project_id, src_lang, tgt_lang, src_term, tgt_term, status) "
+                 "VALUES (4, 'es', 'it', 'casa', '', 'candidate')")
+    conn.execute("INSERT INTO terms (project_id, src_lang, tgt_lang, src_term, tgt_term, status) "
+                 "VALUES (NULL, 'es', 'it', 'Casa', '', 'approved')")
+    conn.execute("INSERT INTO term_rejections (project_id, lang, term) VALUES (4, 'es', 'foo')")
+    conn.execute("INSERT INTO term_rejections (project_id, lang, term) VALUES (NULL, 'es', 'foo')")
+    conn.commit()
+    assert db.migrate(conn) == 15
+    rows = conn.execute("SELECT project_id, src_term, status FROM terms").fetchall()
+    assert [tuple(r) for r in rows] == [(4, "casa", "candidate")]                 # General's row kept, duplicate gone
+    assert [tuple(r) for r in conn.execute("SELECT project_id, term FROM term_rejections")] == [(4, "foo")]
