@@ -31,7 +31,8 @@ def enc(tmp_path, data: bytes, passphrase=PASS) -> bytes:
 def test_round_trip_for_every_chunk_boundary(tmp_path, size):
     data = os.urandom(size)
     blob = enc(tmp_path, data)
-    assert bc.is_encrypted(blob) and data not in blob or size == 0
+    assert bc.is_encrypted(blob)
+    assert size < 16 or data not in blob                      # (a 1-byte input could match a header byte by chance)
     assert bc.decrypt_bytes(blob, PASS) == data
 
 

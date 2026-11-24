@@ -21,6 +21,9 @@ beforeEach(() => {
       if (url.startsWith('/api/trash') && (init?.method ?? 'GET') === 'GET') return json(LIST);
       if (url.startsWith('/api/projects')) return json([]);
       if (url.startsWith('/api/corpora')) return json([]);
+      if (url === '/api/import') {
+        return json({ dry_run: true, created: {}, existing: {}, rejected: 0, conflicts: [], conflict_count: 0, jobs: [] });
+      }
       return json({});
     }),
   );
