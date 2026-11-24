@@ -9,3 +9,5 @@ frontend/node_modules/
 src/colloca/static/
 frontend/test-results/
 frontend/playwright-report/
+.coverage
+.coverage.*

@@ -1,15 +1,14 @@
 # Accessibility: colour, contrast and language
 
-Colloca's colours are defined once, as tokens in `frontend/src/lib/styles/tokens.css`, for a light and a dark theme
-(Auto follows the system, or choose Light or Dark in the rail). A unit test (`frontend/tests/contrast.test.ts`) checks
-every pair listed below against WCAG 2.1 and **fails the build if any text pair drops under 4.5:1** (level AA for normal
-text). This page is generated from the same numbers: after changing a colour, run
+- Colours are tokens in `frontend/src/lib/styles/tokens.css`, for light and dark themes (Auto follows the system).
+- `frontend/tests/contrast.test.ts` checks every pair below against WCAG 2.1 and **fails the build if any text pair is under 4.5:1** (AA).
+- This page's table is generated. After changing a colour:
 
 ```bash
 cd frontend && UPDATE_DOCS=1 npx vitest run contrast
 ```
 
-and commit the updated table. The test fails if the table and `tokens.css` disagree.
+- Commit the updated table. The test fails if the table and `tokens.css` disagree.
 
 ## What each colour means
 
@@ -21,13 +20,12 @@ and commit the updated table. The test fails if the table and `tokens.css` disag
 | Forbidden translation | `--hit-forbidden-*` | **strike-through** and a ⚠ sign before the word |
 | Candidate / approved / admitted / superseded / forbidden entry | `--status-*` and badges | the **status word** is always written; admitted has a dashed border, superseded is italic, forbidden is struck through |
 
-Hit colours are a background and a text colour that are always used together, so each pair is measured against itself.
-Status colours are text on the page background and on the table surface (selected rows put the badge on a surface pill so the
-ratio holds there too).
+- Hit colours: background + text colour, always used together; each pair is measured.
+- Status colours: text on the page background and on the table surface. Selected rows put the badge on a surface pill, so the ratio holds.
 
 ## Measured contrast ratios
 
-WCAG thresholds: 4.5:1 is AA for normal text, 7:1 is AAA. Everything below is at least AA.
+Thresholds: 4.5:1 = AA (normal text), 7:1 = AAA. All pairs are at least AA.
 
 <!-- contrast-table -->
 | Pair | Tokens | Light | Dark |
@@ -60,20 +58,17 @@ WCAG thresholds: 4.5:1 is AA for normal text, 7:1 is AAA. Everything below is at
 
 ## Interface language
 
-The interface is available in English, Spanish and Italian. The first visit follows the browser language (the first of
-`navigator.languages` that Colloca supports, else English); the **Language** switch at the bottom of the left rail
-(`EN`, `ES`, `IT`; each language is named in itself) changes it at once, without reloading data, and remembers the choice in
-the browser (`localStorage`, key `colloca.lang`). The page's `lang` attribute follows the choice, so screen readers pick the right
-voice, and tables sort and numbers are written by the rules of that language (`1.234,5` in Spanish and Italian).
-
-What is **not** translated: text that comes from the server (error messages, the language-check wording of an import, job
-progress), the names of file formats, and the data itself (your documents, terms, tags). Part-of-speech tags such as `NOUN`
-are the universal tags used in the query language and stay as they are.
-
-How to work on the catalogues is in the README ("Interface language").
+- English, Spanish, Italian. First visit uses the first of `navigator.languages` that Colloca supports, else English.
+- The **Language** switch (`EN`, `ES`, `IT`, each named in itself) changes it at once; stored in `localStorage` key `colloca.lang`.
+- The page `lang` attribute follows the choice, so screen readers pick the right voice.
+- Tables sort and numbers format by that language (`1.234,5` in Spanish and Italian).
+- Not translated: server messages (errors, language-check wording, job progress), file format names, your data.
+- POS tags such as `NOUN` are universal tags used by the query language and stay as is.
+- Working on the catalogues: README, *Frontend*.
 
 ## Keyboard and screen readers
 
-Everything has a keyboard path (see the `?` overlay for the list; the keys can be changed). Tables are real tables with
-sortable header buttons; dialogs are native modal dialogs (focus stays inside, Esc closes); status messages and the
-document summary are announced through live regions.
+- Every action has a keyboard path ([shortcuts](interface.md#keyboard); remappable).
+- Tables are real tables with sortable header buttons.
+- Dialogs are native modals: focus stays inside, Esc closes.
+- Status messages and the document summary use live regions.
