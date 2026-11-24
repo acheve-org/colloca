@@ -337,6 +337,28 @@ export interface JobLeverage {
   truncated: boolean;
   bands: Record<string, { segments: number; words: number }>;
 }
+/** GET /related: statistical neighbours of a lemma, from the corpus and/or the spaCy model vectors. */
+export interface RelatedRow {
+  item: string;
+  pos: string;
+  similarity: number;
+  freq: number | null;
+}
+export interface RelatedSource {
+  trained?: boolean;
+  available?: boolean;
+  name?: string | null;
+  known?: boolean;
+  small?: boolean;
+  tokens?: number;
+  vocabulary?: number;
+  reason?: string;
+}
+export interface RelatedResult {
+  query: string;
+  sources: { corpus?: RelatedSource; model?: RelatedSource };
+  related: { corpus?: RelatedRow[]; model?: RelatedRow[] };
+}
 /** POST /segment-lookup */
 export interface LookupMatch {
   doc_id: number;

@@ -30,6 +30,7 @@
         { id: 'dispersion', label: 'nav.dispersion' },
         { id: 'keyness', label: 'nav.keyness' },
         { id: 'cloud', label: 'nav.cloud' },
+        { id: 'related', label: 'nav.related' },
         { id: 'equivalents', label: 'nav.equivalents', visible: () => corpusStore.aligned },
         { id: 'lookup', label: 'nav.lookup', visible: () => corpusStore.aligned },
       ],

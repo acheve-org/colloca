@@ -1,6 +1,6 @@
 # Colloca: remaining work, triaged by value
 
-Written 2026-11-23, after PRs #2 to #7 were merged. This file lists every task that is still open, ordered by how much
+Written 2026-11-23, after PRs #2 to #7 were merged; every task below was done by 2026-11-24 (see section 7). This file lists every task that is still open, ordered by how much
 it adds to the tool for a professional translator, with enough detail to start one without re-reading the history.
 
 Sources of the tasks:
@@ -53,7 +53,7 @@ The T-numbers are stable labels used for cross-references; the **row order is th
 | T28 | Engineering health: browser tests, split `app.js`, logging, type checking (**partly done**: browser tests, UI split) | Medium | M | P2 | Audit |
 | T19 | Term entry model: several terms per language, term-level notes, gender and number (**done**, as concept ids over the pair rows) | Medium | L | P3 | Research #11 |
 | T20 | TMX export of aligned corpora, keep TMX inline markup (**done**, not yet checked against the official DTD or a CAT tool) | Low | M | P3 | Research #10 |
-| T21 | Related-term suggestions from word embeddings | Low | L | P3 | Roadmap 14 |
+| T21 | Related-term suggestions from word embeddings (**done**, without the thesaurus source) | Low | L | P3 | Roadmap 14 |
 | T22 | Interface language (Spanish, Italian) and a semantic colour system (**done**, `docs/accessibility.md`) | Low | M | P3 | Audit, Research #12 |
 | T23 | Optional authentication and encryption at rest (**done**: password, encrypted backups, documented encrypted volume; no SQLCipher) | Low | M | P3 | Roadmap 15 |
 | T24 | PDF extraction robustness (**done**) | Low | M | P3 | Audit |
@@ -583,6 +583,10 @@ inline markup when a TMX was imported (store the raw segment in a side table or 
 
 **Priority** P3 · **Value** Low · **Effort** L · **Source** Roadmap 14
 
+**Status: done, except the thesaurus** (`related.py`, *Explore > Related terms*): vectors trained on the corpus (PPMI + randomised SVD in numpy, optionally with the base corpus) and the spaCy md/lg vectors,
+labelled statistical, POS filter, nothing added to the termbase. No new dependency (fastText was not needed). The Open Thesaurus source was not added (licence and data not checked).
+Quality was tested on synthetic corpora only; judge it on a real corpus before relying on it.
+
 **Why it matters.** Suggesting synonyms and related terms ("terms that behave like this one") can help with drafting, but it is a new dependency (embeddings or a
 thesaurus) and the quality in specialist domains is uneven.
 
@@ -783,5 +787,6 @@ These change priorities, so answers are worth getting early:
 | #6 | Aligned texts: TMX and two-column import, translated concordance, Equivalents |
 | #7 | Job analysis: coverage, gaps, key terms, termbase hits, repeated phrases, job glossary export |
 | UI redesign | New interface (Svelte/Vite, `frontend/`): left-rail layout, CAT terminology, sortable and filterable tables (T05), keyboard shortcuts, colour tokens and string catalogue (part of T22), unit and browser tests (part of T28) |
+| #12 to #43 | Milestones 1 to 5: every task of the table is done (T01 to T28, Q1, Q2). Open points are listed in each task: the official TMX DTD check (T20) and a CAT-tool check of the exports (T07, T20), the thesaurus source (T21), timings on very large corpora (T17, T18, T26), and quality checks of the PDF reader, related terms and Spanish/Italian wording on real material. |
 
 Corrections to the first audit: a light and dark theme already exists (`prefers-color-scheme`, now in `frontend/src/lib/styles/tokens.css` with a manual Auto / Light / Dark switch), so no "dark mode" task is needed.

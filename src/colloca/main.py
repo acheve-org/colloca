@@ -38,6 +38,7 @@ from . import (
     metadata,
     nlp,
     parallel,
+    related,
     segmentlookup,
     termbase,
     termexport,
@@ -647,6 +648,52 @@ def segment_lookup(corpus_id: int, body: LookupIn, sq: ScopeQuery = Depends()):
         corpus = _corpus(conn, corpus_id)
         return _run(segmentlookup.lookup, conn, sq.scope(corpus_id), corpus["lang"], body.text, body.min_percent,
                     body.limit)
+
+
+@app.get("/api/corpora/{corpus_id}/related")
+def related_terms(corpus_id: int, q: str, source: str = "corpus", pos: str | None = None,
+                  limit: int = Query(20, ge=1, le=100), with_base: bool = False, sq: ScopeQuery = Depends()):
+    """Statistical "related terms" for a lemma: the words that keep similar company. `source=corpus` trains word
+    vectors on this corpus (PPMI + SVD; `with_base=true` adds the language's base corpus); `source=model` uses the
+    vectors of the spaCy md/lg model (general language; none in sm); `both` gives the two lists. Nothing is added
+    to the termbase. The answer says what each source could do (`sources`) so a screen can explain an empty list."""
+    if source not in ("corpus", "model", "both"):
+        raise HTTPException(400, "source must be corpus, model or both")
+    lemma = " ".join(q.lower().split())
+    if not lemma:
+        raise HTTPException(400, "Type a word (lemma)")
+    with db.session() as conn:
+        corpus = _corpus(conn, corpus_id)
+        lang = corpus["lang"]
+        wanted = {p.strip().upper() for p in pos.split(",") if p.strip()} if pos else None
+        out: dict = {"query": lemma, "sources": {}, "related": {}}
+        if source in ("corpus", "both"):
+            emb = related.embedding(conn, sq.scope(corpus_id), lang, with_base)
+            if emb is None:
+                out["sources"]["corpus"] = {"trained": False, "tokens": 0, "small": True,
+                                            "reason": "There is too little text to learn from (at least a few "
+                                                      "thousand words, with words that repeat)"}
+                out["related"]["corpus"] = []
+            else:
+                known = lemma in emb.index
+                out["sources"]["corpus"] = {
+                    "trained": True, "tokens": emb.tokens, "vocabulary": len(emb.lemmas),
+                    "small": emb.tokens < related.SMALL_CORPUS, "known": known,
+                    "reason": "" if known else f"“{lemma}” is too rare in this corpus to have a vector "
+                                               f"(it needs {related.MIN_FREQ} occurrences and a place among the "
+                                               f"{related.MAX_VOCAB} most frequent content words)"}
+                out["related"]["corpus"] = emb.neighbours(lemma, limit, wanted) if known else []
+        if source in ("model", "both"):
+            info = related.available(lang)
+            found = None
+            if info["available"]:
+                found = related.model_neighbours(nlp.load_model(lang), lemma, limit)
+            out["sources"]["model"] = {**info, "known": found is not None,
+                                       "reason": "" if found is not None else (
+                                           "The spaCy model in use has no word vectors (use the md or lg model)"
+                                           if not info["available"] else f"The model does not know “{lemma}”")}
+            out["related"]["model"] = found or []
+    return out
 
 
 @app.get("/api/corpora/{corpus_id}/aligned-partners")
