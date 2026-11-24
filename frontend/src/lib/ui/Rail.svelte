@@ -34,6 +34,7 @@
     },
     { group: 'nav.group.terms', items: [
         { id: 'termbase', label: 'nav.termbase' },
+        { id: 'candidates', label: 'nav.candidates' },
         { id: 'check', label: 'nav.check' },
       ],
     },

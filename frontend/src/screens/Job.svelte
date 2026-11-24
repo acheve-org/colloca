@@ -6,12 +6,12 @@
 <script lang="ts">
   import { analysis } from '../lib/analysis.svelte';
   import { qs } from '../lib/api';
+  import { type Flagged, visible } from '../lib/candidates.svelte';
   import { corpusStore, scopeParams } from '../lib/corpus.svelte';
   import { toInt } from '../lib/explore.svelte';
   import { findRanges } from '../lib/highlight';
   import { t } from '../lib/i18n';
   import { messages } from '../lib/messages.svelte';
-  import { openTerm } from '../lib/term.svelte';
   import type { JobGap, JobKeyTerm, JobKnownTerm, JobPhrase } from '../lib/types';
   import Badge from '../lib/ui/Badge.svelte';
   import Button from '../lib/ui/Button.svelte';
@@ -22,11 +22,15 @@
   import Highlight from '../lib/ui/Highlight.svelte';
   import Toggle from '../lib/ui/Toggle.svelte';
   import Toolbar from '../lib/ui/Toolbar.svelte';
+  import ReviewActions from '../lib/ui/ReviewActions.svelte';
+  import ReviewControls from '../lib/ui/ReviewControls.svelte';
+  import ReviewStatus from '../lib/ui/ReviewStatus.svelte';
   import WordLink from '../lib/ui/WordLink.svelte';
   import ScopeFilter from './ScopeFilter.svelte';
 
   /** The key of the column holding the `+ Term` button. */
   const TERM_KEY = '_term';
+  const STATUS_KEY = '_status';
 
   // The analysis (report, running job, pasted text) lives in `analysis`, so it survives
   // leaving this screen; the options below are per visit.
@@ -89,29 +93,37 @@
   // + room for a horizontal scrollbar, which wide tables (the known terms) show.
   const tableHeight = (n: number) => `min(calc(${Math.max(n, 1) + 1} * var(--row-h) + 18px), 20rem)`;
 
+  // The tables below hide dropped terms (and, on request, those already in the termbase).
+  const gaps = $derived(report ? visible(report.gaps as Flagged[]) as JobGap[] : []);
+  const keyTerms = $derived(report ? visible(report.key_terms as Flagged[]) as JobKeyTerm[] : []);
+  const phrases = $derived(report ? visible(report.phrases as Flagged[]) as JobPhrase[] : []);
+  const statusCol = { key: STATUS_KEY, label: t('cand.col.status'), sortable: false, width: '9rem' };
+
   const lemmaCols = $derived<Column<JobGap>[]>([
     { key: 'item', label: t('job.col.lemma'), width: 'minmax(12rem, 2fr)' },
+    statusCol,
     { key: 'pos', label: t('ex.col.pos'), width: '6rem' },
     { key: 'job_freq', label: t('job.col.inText'), num: true },
     { key: 'corpus_freq', label: t('job.col.inCorpus'), num: true },
     { key: 'termbase', label: t('job.col.termbase'), width: 'minmax(8rem, 1fr)' },
-    { key: TERM_KEY, label: t('job.col.term'), sortable: false, width: '6rem' },
+    { key: TERM_KEY, label: t('job.col.term'), sortable: false, width: '13rem' },
   ]);
   const keyCols = $derived<Column<JobKeyTerm>[]>([
-    ...lemmaCols.slice(0, 4),
+    ...lemmaCols.slice(0, 5),
     ...(summary?.reference
       ? [
           { key: 'base_per_million', label: t('job.col.baseM'), num: true },
           { key: 'll', label: t('job.col.ll'), num: true },
         ]
       : []),
-    ...lemmaCols.slice(4),
+    ...lemmaCols.slice(5),
   ] as Column<JobKeyTerm>[]);
   const phraseCols = $derived<Column<JobPhrase>[]>([
     { key: 'item', label: t('job.col.phrase'), width: 'minmax(12rem, 2fr)' },
+    statusCol,
     { key: 'job_freq', label: t('job.col.inText'), num: true },
     { key: 'corpus_freq', label: t('job.col.inCorpus'), num: true },
-    { key: TERM_KEY, label: t('job.col.term'), sortable: false, width: '6rem' },
+    { key: TERM_KEY, label: t('job.col.term'), sortable: false, width: '13rem' },
   ]);
   const knownCols = $derived<Column<JobKnownTerm>[]>([
     { key: 'item', label: t('job.known.term'), width: 'minmax(10rem, 1fr)' },
@@ -128,20 +140,7 @@
   const lemmaKey = (r: JobGap) => `${r.item}\u0001${r.pos}`;
   const exampleKind = (k: JobKnownTerm): Kind =>
     k.translations.length && k.translations.every((x) => x.status === 'forbidden') ? 'forbidden' : 'term';
-  const addLemma = (r: JobGap) => openTerm({ source: r.item, pos: r.pos, origin: 'job' });
 </script>
-
-{#snippet termButton(onclick: () => void)}
-  <button
-    type="button"
-    class="term"
-    title={t('cc.addTermHint')}
-    onclick={(e) => {
-      e.stopPropagation();
-      onclick();
-    }}>{t('cc.addTerm')}</button
-  >
-{/snippet}
 
 {#snippet termbaseCell(tb: string)}
   <!-- The backend marks an entry without a target term "(candidate)": show the Candidate badge. -->
@@ -153,8 +152,18 @@
     <WordLink word={row.item} unit="lemma" />
   {:else if col.key === 'termbase'}
     {@render termbaseCell(row.termbase)}
+  {:else if col.key === STATUS_KEY}
+    <ReviewStatus {row} />
   {:else if col.key === TERM_KEY}
-    {@render termButton(() => addLemma(row))}
+    <ReviewActions
+      item={row.item}
+      pos={row.pos}
+      origin="job"
+      measure={'ll' in row && row.ll !== null ? 'log-likelihood' : 'frequency in text'}
+      score={'ll' in row && typeof row.ll === 'number' ? row.ll : row.job_freq}
+      freq={row.job_freq}
+      flags={row}
+    />
   {:else}
     {cellValue(row, col)}
   {/if}
@@ -167,8 +176,17 @@
 {#snippet phraseCell(row: JobPhrase, col: Column<JobPhrase>)}
   {#if col.key === 'item'}
     <WordLink word={row.item} unit="form" />
+  {:else if col.key === STATUS_KEY}
+    <ReviewStatus {row} />
   {:else if col.key === TERM_KEY}
-    {@render termButton(() => openTerm({ source: row.item, origin: 'job' }))}
+    <ReviewActions
+      item={row.item}
+      origin="job"
+      measure="frequency in text"
+      score={row.job_freq}
+      freq={row.job_freq}
+      flags={row}
+    />
   {:else}
     {cellValue(row, col)}
   {/if}
@@ -297,21 +315,21 @@
           />
         </div>
 
-        <h3>{t('job.gaps')} {@render csv('gaps', t('job.section.gaps'))}</h3>
-        <div class="table" style:height={tableHeight(report.gaps.length)}>
-          <DataTable columns={lemmaCols} rows={report.gaps} rowKey={lemmaKey} bind:selected={selGap} cell={lemmaCell} />
+        <h3>{t('job.gaps')} {@render csv('gaps', t('job.section.gaps'))} <ReviewControls /></h3>
+        <div class="table" style:height={tableHeight(gaps.length)}>
+          <DataTable columns={lemmaCols} rows={gaps} rowKey={lemmaKey} bind:selected={selGap} cell={lemmaCell} />
         </div>
 
         <h3>{summary.reference ? t('job.keys.ref') : t('job.keys.noref')} {@render csv('key_terms', t('job.section.keys'))}</h3>
-        <div class="table" style:height={tableHeight(report.key_terms.length)}>
-          <DataTable columns={keyCols} rows={report.key_terms} rowKey={lemmaKey} bind:selected={selKey} cell={keyCell} />
+        <div class="table" style:height={tableHeight(keyTerms.length)}>
+          <DataTable columns={keyCols} rows={keyTerms} rowKey={lemmaKey} bind:selected={selKey} cell={keyCell} />
         </div>
 
         <h3>{t('job.phrases')} {@render csv('phrases', t('job.phrases'))}</h3>
-        <div class="table" style:height={tableHeight(report.phrases.length)}>
+        <div class="table" style:height={tableHeight(phrases.length)}>
           <DataTable
             columns={phraseCols}
-            rows={report.phrases}
+            rows={phrases}
             rowKey={(r) => r.item}
             bind:selected={selPhrase}
             cell={phraseCell}
@@ -414,10 +432,5 @@
   }
   .ctx {
     color: var(--muted);
-  }
-  .term {
-    height: auto;
-    padding: 0 var(--s-2);
-    font-size: var(--fs-small);
   }
 </style>

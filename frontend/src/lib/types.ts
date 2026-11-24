@@ -75,6 +75,8 @@ export interface Job {
 /** /frequency (array) */
 export interface FrequencyRow {
   item: string;
+  in_termbase?: string;
+  dropped?: boolean;
   pos: string;
   freq: number;
   per_million: number;
@@ -134,6 +136,8 @@ export interface CheckTextResult {
 
 export interface CollocationRow {
   item: string;
+  in_termbase?: string;
+  dropped?: boolean;
   pos: string;
   cooc: number;
   freq: number;
@@ -155,6 +159,8 @@ export interface CollocationResult {
 /** /ngrams (array) */
 export interface NgramRow {
   item: string;
+  in_termbase?: string;
+  dropped?: boolean;
   freq: number;
   docs: number;
 }
@@ -162,6 +168,8 @@ export interface NgramRow {
 /** /keyness (array) */
 export interface KeynessRow {
   item: string;
+  in_termbase?: string;
+  dropped?: boolean;
   pos: string;
   freq: number;
   ref_freq: number;
@@ -256,6 +264,9 @@ export interface JobGap {
   corpus_freq: number;
   /** Approved translation, "(candidate)" or "". */
   termbase: string;
+  /** Status of the termbase entry with this term ("" = none), and whether it is on the stop list. */
+  in_termbase?: string;
+  dropped?: boolean;
 }
 export interface JobKeyTerm extends JobGap {
   base_per_million: number | null;
@@ -267,6 +278,8 @@ export interface JobPhrase {
   job_freq: number;
   corpus_freq: number;
   words: number;
+  in_termbase?: string;
+  dropped?: boolean;
 }
 export interface JobReport {
   summary: JobSummary;
