@@ -24,3 +24,9 @@ export function inProject(c: Corpus, filter = projectStore.filter): boolean {
   if (filter === 'none') return c.project_id === null || c.project_id === undefined;
   return String(c.project_id) === filter;
 }
+
+/** The project a corpus belongs to (null when it has none or the list does not know it). */
+export function projectOf(c: Corpus | null): Project | null {
+  if (!c || c.project_id === null || c.project_id === undefined) return null;
+  return projectStore.list.find((p) => p.id === c.project_id) ?? null;
+}

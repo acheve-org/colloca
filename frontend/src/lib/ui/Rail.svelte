@@ -14,12 +14,13 @@
 
   export const NAV: NavGroup[] = [
     {
-      group: 'nav.group.corpus',
+      group: 'nav.group.setup',
       items: [
-        { id: 'sources', label: 'nav.sources' },
         { id: 'languages', label: 'nav.languages' },
+        { id: 'projects', label: 'nav.projects' },
       ],
     },
+    { group: 'nav.group.corpus', items: [{ id: 'sources', label: 'nav.sources' }] },
     {
       group: 'nav.group.explore',
       items: [

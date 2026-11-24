@@ -28,7 +28,7 @@ afterEach(() => vi.unstubAllGlobals());
 describe('TermImport', () => {
   it('previews, runs a dry run, then applies the import', async () => {
     const onimported = vi.fn();
-    render(TermImport, { open: true, projects: [{ id: 7, name: 'Acme', corpora: 1 }], scope: '7', onimported });
+    render(TermImport, { open: true, projects: [{ id: 7, name: 'Acme', corpora: 1, trashed: 0 }], scope: '7', onimported });
     const input = screen.getByLabelText(/File \(/) as HTMLInputElement;
     await fireEvent.change(input, { target: { files: [new File(['Source,Translation\na,b\n'], 'g.csv')] } });
     await waitFor(() => expect(screen.getByLabelText('Meaning of column 1')).toBeTruthy());

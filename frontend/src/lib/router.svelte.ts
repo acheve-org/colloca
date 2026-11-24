@@ -1,6 +1,7 @@
 export type ScreenId =
   | 'sources'
   | 'languages'
+  | 'projects'
   | 'concordance'
   | 'collocations'
   | 'ngrams'
@@ -18,7 +19,7 @@ export type ScreenId =
   | 'trash';
 
 export const SCREENS: readonly ScreenId[] = [
-  'sources', 'languages', 'concordance', 'collocations', 'ngrams', 'frequency',
+  'sources', 'languages', 'projects', 'concordance', 'collocations', 'ngrams', 'frequency',
   'dispersion', 'keyness', 'cloud', 'equivalents', 'lookup', 'related', 'termbase', 'candidates', 'check', 'job', 'trash',
 ];
 

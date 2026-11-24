@@ -28,11 +28,13 @@
   import Trash from './screens/Trash.svelte';
   import TermDialog from './screens/TermDialog.svelte';
   import WordCloud from './screens/WordCloud.svelte';
+  import Projects from './screens/Projects.svelte';
 
   // Screen outlet: every route has its screen.
   const SCREEN_COMPONENTS: Record<ScreenId, Component> = {
     sources: Sources,
     languages: Languages,
+    projects: Projects,
     concordance: Concordance,
     frequency: Frequency,
     dispersion: Dispersion,

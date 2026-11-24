@@ -23,6 +23,12 @@ describe('router', () => {
     expect(route.screen).toBe('languages');
   });
 
+  it('parses the projects screen', async () => {
+    location.hash = '#/projects';
+    const { route } = await load();
+    expect(route.screen).toBe('projects');
+  });
+
   it('go() updates the hash and route', async () => {
     const { route, go } = await load();
     go('collocations', { q: 'x y' });
