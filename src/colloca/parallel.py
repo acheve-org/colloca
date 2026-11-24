@@ -8,6 +8,7 @@ the translation of segment N of the other. Everything the monolingual tools do k
 import csv
 import io
 import math
+import os
 import re
 from collections import Counter
 from dataclasses import replace
@@ -184,10 +185,26 @@ def segment_at(conn, doc_id: int, pos: int):
                         (doc_id, pos, pos)).fetchone()
 
 
-def segment_text(conn, doc_id: int, start: int, end: int) -> str:
-    rows = conn.execute("SELECT form, sp FROM tokens WHERE doc_id=? AND pos>=? AND pos<? ORDER BY pos",
+def segment_tokens(conn, doc_id: int, start: int, end: int) -> tuple[str, list[dict]]:
+    """Text of the token range [start, end) and, for every token, its [s, e) character offsets in that text.
+    The text is the `form` + `sp` join (stripped), so offsets index exactly what the interface displays."""
+    rows = conn.execute("SELECT pos, form, lemma, sp FROM tokens WHERE doc_id=? AND pos>=? AND pos<? ORDER BY pos",
                         (doc_id, start, end)).fetchall()
-    return "".join(r["form"] + (" " if r["sp"] else "") for r in rows).strip()
+    raw, toks = "", []
+    for r in rows:
+        toks.append({"pos": r["pos"], "form": r["form"], "lemma": r["lemma"], "s": len(raw),
+                     "e": len(raw) + len(r["form"])})
+        raw += r["form"] + (" " if r["sp"] else "")
+    lead = len(raw) - len(raw.lstrip())
+    text = raw.strip()
+    for t in toks:
+        t["s"] = min(max(t["s"] - lead, 0), len(text))
+        t["e"] = min(max(t["e"] - lead, 0), len(text))
+    return text, toks
+
+
+def segment_text(conn, doc_id: int, start: int, end: int) -> str:
+    return segment_tokens(conn, doc_id, start, end)[0]
 
 
 def _pair_of(conn, cache: dict, doc_id: int):
@@ -202,18 +219,83 @@ def _partner_span(conn, seg: int, partner_doc: int):
                         (partner_doc, seg)).fetchone()
 
 
+def _termbase_translations(conn, corpus_id: int, query: str) -> list[str]:
+    """Approved translations of `query` for this corpus: its project's termbase, then the general one.
+    Entries are read in both directions (the corpus language can be the entry's source or its target)."""
+    c = conn.execute("SELECT lang, project_id FROM corpora WHERE id=?", (corpus_id,)).fetchone()
+    if not c:
+        return []
+    q = " ".join(query.lower().split())
+    out: list[str] = []
+    for src, tgt in (("src", "tgt"), ("tgt", "src")):
+        for r in conn.execute(
+                f"""SELECT {tgt}_term AS term FROM terms
+                    WHERE status='approved' AND {src}_lang=? AND lower({src}_term)=? AND {tgt}_term<>''
+                      AND (project_id IS NULL OR project_id IS ?)
+                    ORDER BY project_id IS NULL, id""", (c["lang"], q, c["project_id"])):
+            if r["term"] not in out:
+                out.append(r["term"])
+    return out
+
+
+def _find_words(toks: list[dict], words: list[str]) -> list[tuple[int, int]]:
+    """(first, last) token indexes where the word sequence `words` occurs; each word matches a form or a lemma."""
+    n, found = len(words), []
+    for i in range(len(toks) - n + 1):
+        if all(words[k] in (toks[i + k]["form"].lower(), toks[i + k]["lemma"].lower()) for k in range(n)):
+            found.append((i, i + n - 1))
+    return found
+
+
 def bilingual_concordance(conn, scope, q, unit="lemma", width=8, limit=300, sort="doc"):
     """Concordance restricted to aligned documents; every line also carries its whole segment and the
-    aligned translation. Works from either side: run it on the target corpus to search the translations."""
+    aligned translation. Works from either side: run it on the target corpus to search the translations.
+
+    Each line also has character offsets into the displayed text: `source_marks` (the hit itself) and
+    `target_marks` (the likely equivalent: an approved termbase translation, else the best statistical
+    candidate of `equivalents`; `guess` is true for the statistical ones, `score` is their Dice)."""
     scope = replace(analysis.as_scope(scope), paired_only=True)
     res = analysis.concordance(conn, scope, q, unit, width, limit, sort)
+    n_words = len(analysis._parse_query(q))
+    approved: list[tuple[list[str], float, bool]] = []       # computed once per search, not once per line
+    guesses: list[tuple[list[str], float, bool]] = []
+    if res["lines"]:
+        for term in _termbase_translations(conn, scope.corpus_id, q):
+            approved.append((term.lower().split(), 1.0, False))
+        rows = equivalents(conn, scope, q, unit, limit=100)["rows"]
+        if rows:
+            # One guess per search. Ties on Dice (common in small memories, where every word of the
+            # segments co-occurs) go to the candidate that looks most like the query (cognates in es/it).
+            best = rows[0]["dice"]
+            q_norm = q.lower()
+            pick = max((r for r in rows if r["dice"] == best),
+                       key=lambda r: len(os.path.commonprefix([r["item"], q_norm])))
+            guesses.append(([pick["item"].lower()], pick["dice"], True))
     cache: dict = {}
     for line in res["lines"]:
         seg = segment_at(conn, line["doc_id"], line["pos"])
         partner = _pair_of(conn, cache, line["doc_id"])
         span = _partner_span(conn, seg["seg"], partner) if seg and partner else None
-        line["source"] = segment_text(conn, line["doc_id"], seg["start_pos"], seg["end_pos"]) if seg else ""
-        line["target"] = segment_text(conn, partner, span["start_pos"], span["end_pos"]) if span else ""
+        line["source"], src_toks = (segment_tokens(conn, line["doc_id"], seg["start_pos"], seg["end_pos"])
+                                    if seg else ("", []))
+        line["target"], tgt_toks = (segment_tokens(conn, partner, span["start_pos"], span["end_pos"])
+                                    if span else ("", []))
+        hit = [t for t in src_toks if line["pos"] <= t["pos"] < line["pos"] + n_words]
+        line["source_marks"] = [{"start": hit[0]["s"], "end": hit[-1]["e"]}] if hit else []
+        tmarks: list[dict] = []
+        for candidates in (approved, guesses):        # an approved translation wins; the guess is the fallback
+            taken: set[int] = set()
+            for words, score, guess in candidates:
+                for a, b in _find_words(tgt_toks, words):
+                    idx = set(range(a, b + 1))
+                    if idx & taken:
+                        continue
+                    taken |= idx
+                    tmarks.append({"start": tgt_toks[a]["s"], "end": tgt_toks[b]["e"], "score": round(score, 3),
+                                   "guess": guess})
+            if tmarks:
+                break
+        line["target_marks"] = sorted(tmarks, key=lambda m: m["start"])
     return res
 
 

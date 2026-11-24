@@ -103,3 +103,42 @@ export function mergeRanges(ranges: Range[]): Range[] {
   }
   return out;
 }
+
+/** Offsets computed by the server into a line's `source` / `target` text. */
+export interface Mark {
+  start: number;
+  end: number;
+  score?: number;
+  guess?: boolean;
+}
+export interface MarkedLine {
+  node: string;
+  source?: string;
+  target?: string;
+  source_marks?: Mark[];
+  target_marks?: Mark[];
+}
+
+/** The query in the source segment: the server's exact occurrence, else a text search for the node. */
+export function sourceRanges(l: MarkedLine): Range[] {
+  const text = l.source ?? '';
+  if (l.source_marks) return l.source_marks.map((m) => ({ start: m.start, end: m.end, kind: 'query' }));
+  return findRanges(text, [l.node], 'query');
+}
+
+/**
+ * The likely equivalent in the target: an approved termbase translation ('term', solid underline) or a
+ * statistical guess ('equiv', dotted underline). Without server marks, `likelyEquiv` words are searched.
+ */
+export function targetRanges(l: MarkedLine, likelyEquiv: string[] = []): Range[] {
+  if (l.target_marks) {
+    return l.target_marks.map((m) => ({ start: m.start, end: m.end, kind: m.guess ? 'equiv' : 'term' }));
+  }
+  return findRanges(l.target ?? '', likelyEquiv, 'equiv');
+}
+
+/** True when the target highlight is a statistical guess (to be labelled as such). */
+export function targetIsGuess(l: MarkedLine, likelyEquiv: string[] = []): boolean {
+  if (l.target_marks) return l.target_marks.some((m) => m.guess);
+  return likelyEquiv.length > 0;
+}

@@ -100,13 +100,17 @@ export interface ConcordanceResult {
 export interface BilingualLine extends ConcordanceLine {
   source: string;
   target: string;
+  /** Character offsets into `source`: the hit itself. */
+  source_marks?: { start: number; end: number }[];
+  /** Character offsets into `target`: the likely equivalent (`guess` = statistical, else a termbase term). */
+  target_marks?: { start: number; end: number; score: number; guess: boolean }[];
 }
 export interface BilingualResult {
   total: number;
   lines: BilingualLine[];
 }
 /** A concordance line from either endpoint; `source`/`target` only in bilingual results. */
-export type ConcLine = ConcordanceLine & Partial<Pick<BilingualLine, 'source' | 'target'>>;
+export type ConcLine = ConcordanceLine & Partial<Pick<BilingualLine, 'source' | 'target' | 'source_marks' | 'target_marks'>>;
 
 export interface CollocationRow {
   item: string;

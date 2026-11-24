@@ -441,7 +441,8 @@ def bilingual(corpus_id: int, q: str, unit: str = "lemma", width: int = Query(8,
         _corpus(conn, corpus_id)
         res = _run(parallel.bilingual_concordance, conn, sq.scope(corpus_id), q, unit, width, limit, sort)
     if format == "csv":
-        return _reply([{k: v for k, v in ln.items() if k not in ("pos", "doc_id")} for ln in res["lines"]],
+        return _reply([{k: v for k, v in ln.items()
+                       if k not in ("pos", "doc_id", "source_marks", "target_marks")} for ln in res["lines"]],
                       format, "bilingual")
     return res
 

@@ -18,7 +18,7 @@
   import { get } from '../lib/api';
   import { CORPUS_CHANGED, corpusStore, scopeParams } from '../lib/corpus.svelte';
   import { csvUrl } from '../lib/csv';
-  import { findRanges } from '../lib/highlight';
+  import { sourceRanges, targetIsGuess, targetRanges } from '../lib/highlight';
   import { t } from '../lib/i18n';
   import { messages } from '../lib/messages.svelte';
   import { go, route } from '../lib/router.svelte';
@@ -61,7 +61,7 @@
   let filter = $state('');
   let loading = $state(false);
   let seq = 0;
-  // Likely equivalents (T01 fills these); highlighted as "guess" in the target.
+  // Fallback words for the target highlight when the server sent no marks (it normally does).
   const likelyEquiv: string[] = [];
 
   let detailEl: HTMLElement | undefined = $state();
@@ -290,15 +290,15 @@
             {#if result?.mode === 'bilingual'}
               <dt>{t('cc.segment')}</dt>
               <dd data-side="source">
-                <Highlight text={l.source ?? ''} ranges={findRanges(l.source ?? '', [l.node], 'query')} />
+                <Highlight text={l.source ?? ''} ranges={sourceRanges(l)} />
               </dd>
               <dt>
                 {t('cc.aligned')}
-                {#if likelyEquiv.length}<Badge kind="neutral" label={t('cc.guess')} />{/if}
+                {#if targetIsGuess(l, likelyEquiv)}<Badge kind="neutral" label={t('cc.guess')} />{/if}
               </dt>
-              <dd data-side="target" title={likelyEquiv.length ? t('cc.guessHint') : undefined}>
+              <dd data-side="target" title={targetIsGuess(l, likelyEquiv) ? t('cc.guessHint') : undefined}>
                 {#if l.target}
-                  <Highlight text={l.target} ranges={findRanges(l.target, likelyEquiv, 'equiv')} />
+                  <Highlight text={l.target} ranges={targetRanges(l, likelyEquiv)} />
                 {:else}
                   <span class="muted">{t('cc.noTarget')}</span>
                 {/if}
