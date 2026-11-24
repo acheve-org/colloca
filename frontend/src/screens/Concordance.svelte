@@ -1,11 +1,21 @@
 <script module lang="ts">
   type Unit = 'lemma' | 'form';
-  type Sort = 'doc' | 'left' | 'right';
+  type Sort = 'doc' | 'left' | 'right' | 'l1' | 'l2' | 'r1' | 'r2';
 
   const UNITS: Unit[] = ['lemma', 'form'];
-  const SORTS: Sort[] = ['doc', 'left', 'right'];
-  /** Hits requested and exported (CSV link), as the old UI. The API allows up to 2000. */
-  const LIMIT = 500;
+  const SORTS: Sort[] = ['doc', 'left', 'right', 'l1', 'l2', 'r1', 'r2'];
+  /** Selectable number of hits shown and exported (CSV link). The API allows up to 2000. */
+  const LIMITS = ['100', '500', '2000'];
+  const DEFAULT_LIMIT = '500';
+
+  /** Case- and accent-insensitive text used by the filters inside the results. */
+  function fold(s: string | undefined): string {
+    return (s ?? '').normalize('NFD').replace(/\p{M}+/gu, '').toLowerCase();
+  }
+
+  function newSeed(): number {
+    return 1 + Math.floor(Math.random() * 1_000_000);
+  }
 
   function toWidth(v: string | undefined): number {
     const n = Number.parseInt(v ?? '', 10);
@@ -45,6 +55,11 @@
   let width = $state<number | null>(toWidth(initial.width));
   let sort = $state<Sort>(SORTS.includes(initial.sort as Sort) ? (initial.sort as Sort) : 'doc');
   let bilingual = $state(initial.bi === '1');
+  let caseSensitive = $state(initial.case === '1');
+  let anyOrder = $state(initial.any === '1');
+  let limit = $state(LIMITS.includes(initial.n ?? '') ? (initial.n as string) : DEFAULT_LIMIT);
+  let sampling = $state(Number.parseInt(initial.sample ?? '', 10) > 0);
+  let seed = $state(Number.parseInt(initial.sample ?? '', 10) > 0 ? Number.parseInt(initial.sample!, 10) : newSeed());
 
   interface Result {
     total: number;
@@ -59,6 +74,9 @@
   // Compared by key (lineKey), never by identity: DataTable may hand back a different object.
   let selected = $state.raw<ConcLine | null>(null);
   let filter = $state('');
+  // Filters inside the loaded results (client side): left/right context, or source/target in aligned mode.
+  let filterA = $state('');
+  let filterB = $state('');
   let loading = $state(false);
   let seq = 0;
   // Fallback words for the target highlight when the server sent no marks (it normally does).
@@ -68,11 +86,21 @@
   let tableEl: HTMLElement | undefined = $state();
 
   const hasCorpus = $derived(corpusStore.currentId !== null);
+  const shown = $derived.by(() => {
+    const a = fold(filterA.trim());
+    const b = fold(filterB.trim());
+    if (!a && !b) return lines;
+    const bi = result?.mode === 'bilingual';
+    return lines.filter(
+      (l) => fold(bi ? l.source : l.left).includes(a) && fold(bi ? l.target : l.right).includes(b),
+    );
+  });
   const docCount = $derived(new Set(lines.map((l) => l.doc_id)).size);
   const csvHref = $derived(result ? csvUrl(result.path, result.params) : '');
 
   const unitOptions = UNITS.map((u) => ({ value: u, label: t(`cc.unit.${u}`) }));
   const sortOptions = SORTS.map((s) => ({ value: s, label: t(`cc.sort.${s}`) }));
+  const limitOptions = LIMITS.map((n) => ({ value: n, label: n }));
 
   const errMsg = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
@@ -91,7 +119,18 @@
     width = w;
     const mode = bilingual && corpusStore.aligned ? 'bilingual' : 'kwic';
     const path = `/api/corpora/${id}/${mode === 'bilingual' ? 'bilingual' : 'concordance'}`;
-    const params = { q: query, unit, width: w, sort, limit: LIMIT, ...scopeParams() };
+    // Options that are off are not sent, so the request stays what it was before they existed.
+    const params = {
+      q: query,
+      unit,
+      width: w,
+      sort,
+      limit: Number(limit),
+      ...(caseSensitive ? { case_sensitive: 'true' } : {}),
+      ...(anyOrder ? { any_order: 'true' } : {}),
+      ...(sampling ? { sample: seed } : {}),
+      ...scopeParams(),
+    };
     const n = ++seq;
     loading = true; // previous rows stay visible (and selected) while loading
     messages.say(t('corpus.working'));
@@ -101,7 +140,17 @@
       lines = r.lines;
       result = { total: r.total, query, mode, path, params };
       // Persist only a search that worked, so a failing query never reaches the URL.
-      go('concordance', { q: query, unit, width: String(w), sort, bi: bilingual ? '1' : '' });
+      go('concordance', {
+        q: query,
+        unit,
+        width: String(w),
+        sort,
+        bi: bilingual ? '1' : '',
+        case: caseSensitive ? '1' : '',
+        any: anyOrder ? '1' : '',
+        n: limit === DEFAULT_LIMIT ? '' : limit,
+        sample: sampling ? String(seed) : '',
+      });
       // DataTable reconciles a kept selection by key, but it is unmounted on zero hits.
       if (selected && !r.lines.some((x) => lineKey(x) === lineKey(selected!))) selected = null;
       messages.clear();
@@ -118,12 +167,19 @@
     search();
   }
 
+  function newSample(): void {
+    seed = newSeed();
+    search();
+  }
+
   function reset(): void {
     seq++;
     lines = [];
     result = null;
     selected = null;
     filter = '';
+    filterA = '';
+    filterB = '';
     loading = false;
     messages.clearWorking();
   }
@@ -221,6 +277,21 @@
         <Field label={t('cc.sort')}>
           <Select label={t('cc.sort')} bind:value={sort} options={sortOptions} />
         </Field>
+        <Field label={t('cc.limit')}>
+          <Select label={t('cc.limit')} bind:value={limit} options={limitOptions} />
+        </Field>
+        <span class="switch" title={t('cc.caseHint')}>
+          <Toggle bind:checked={caseSensitive} label={t('cc.case')} />
+        </span>
+        <span class="switch" title={t('cc.anyOrderHint')}>
+          <Toggle bind:checked={anyOrder} label={t('cc.anyOrder')} />
+        </span>
+        <span class="switch" title={t('cc.sampleHint')}>
+          <Toggle bind:checked={sampling} label={t('cc.sample')} />
+        </span>
+        {#if sampling}
+          <Button title={t('cc.newSampleHint')} onclick={newSample}>{t('cc.newSample')}</Button>
+        {/if}
         {#if corpusStore.aligned}
           <span class="switch" title={t('cc.bilingualHint')}>
             <Toggle bind:checked={bilingual} label={t('cc.bilingual')} />
@@ -239,9 +310,26 @@
       <div class="strip">
         <span class="count">{t('cc.summary', { hits: result.total, docs: docCount })}</span>
         {#if result.total > lines.length}
-          <span class="muted">({t('cc.showing', { n: lines.length })})</span>
+          <span class="muted">({t(sampling ? 'cc.sampled' : 'cc.showing', { n: lines.length })})</span>
+        {/if}
+        {#if shown.length !== lines.length}
+          <span class="muted">({t('cc.matchingFilters', { n: shown.length })})</span>
         {/if}
         {#if result.mode === 'bilingual'}<span class="muted">{t('cc.inAligned')}</span>{/if}
+        <input
+          class="ctx-filter"
+          type="search"
+          bind:value={filterA}
+          placeholder={t(result.mode === 'bilingual' ? 'cc.filterSource' : 'cc.filterLeft')}
+          aria-label={t(result.mode === 'bilingual' ? 'cc.filterSource' : 'cc.filterLeft')}
+        />
+        <input
+          class="ctx-filter"
+          type="search"
+          bind:value={filterB}
+          placeholder={t(result.mode === 'bilingual' ? 'cc.filterTarget' : 'cc.filterRight')}
+          aria-label={t(result.mode === 'bilingual' ? 'cc.filterTarget' : 'cc.filterRight')}
+        />
         <input
           class="filter"
           type="search"
@@ -261,7 +349,7 @@
         <EmptyState title={t('cc.noHits', { q: result.query })} hint={t('cc.noHitsHint')} />
       {:else if result || loading}
         <Kwic
-          {lines}
+          lines={shown}
           mode={result?.mode ?? 'kwic'}
           query={result?.query ?? q}
           bind:selected
@@ -357,8 +445,11 @@
     color: var(--muted);
   }
   .filter {
-    width: 14rem;
+    width: 12rem;
     margin-left: var(--s-2);
+  }
+  .ctx-filter {
+    width: 9rem;
   }
   .keys {
     display: inline-flex;

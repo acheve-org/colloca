@@ -158,10 +158,24 @@ register differences. Those corpora have shuffled sentences, so “Docs” colum
 | Analysis | Details |
 |---|---|
 | Frequency | by lemma or form, per million, number/percentage of documents containing it (dispersion), POS filter |
-| Concordance | words or phrases (up to 6 words), match on lemma or exact form, sort by left/right context |
+| Concordance | words or phrases (up to 6 words), match on lemma or exact form; options below |
 | Collocations | single node lemma, window L/R inside the sentence; logDice (sort key), MI, t-score, log-likelihood |
 | N-grams | 2–6 words within a sentence; min frequency / min documents; stopword edges trimmed by default |
 | Keyness | log-likelihood + log ratio against another corpus of the same language |
+
+Concordance options (also available as API parameters):
+
+- **Case sensitive** (`case_sensitive=true`): matches the written form, so *Contrato* does not find *contrato*.
+- **Wildcard `*`** at the start and/or end of a word: `contrat*` finds *contrato*, *contratos*, *contratación*;
+  `*miento` finds *cumplimiento*. At least three letters besides `*` are required, and `*` in the middle of a word is
+  refused. `?` and `[` are ordinary characters.
+- **Any order** (`any_order=true`): all the words of the query in the same sentence, in any order; the node spans from
+  the first to the last of them.
+- **Hits** (100, 500 or 2000) and **Random sample** (`sample=<seed>`): a random selection of that many hits, the same
+  for the same seed; **New sample** draws another one. The hit count always shows the total found.
+- **Sort**: document, whole left or right context, or the 1st or 2nd word to the left or right (`l1 l2 r1 r2`).
+- **Filter boxes** above the table narrow the lines already loaded (left/right context, or source/target in aligned
+  mode) without a new search; the CSV export carries the search options, not these client-side filters.
 
 ## Development
 

@@ -434,15 +434,17 @@ def parallel_info(corpus_id: int):
 
 @app.get("/api/corpora/{corpus_id}/bilingual")
 def bilingual(corpus_id: int, q: str, unit: str = "lemma", width: int = Query(8, le=40),
-              limit: int = Query(300, le=2000), sort: str = "doc", format: str = "json",
+              limit: int = Query(300, ge=1, le=2000), sort: str = "doc", format: str = "json",
+              case_sensitive: bool = False, any_order: bool = False, sample: int | None = None,
               sq: ScopeQuery = Depends()):
     """Concordance over aligned documents, each hit with its segment and the aligned translation."""
     with db.session() as conn:
         _corpus(conn, corpus_id)
-        res = _run(parallel.bilingual_concordance, conn, sq.scope(corpus_id), q, unit, width, limit, sort)
+        res = _run(parallel.bilingual_concordance, conn, sq.scope(corpus_id), q, unit, width, limit, sort,
+                   case_sensitive, any_order, sample)
     if format == "csv":
-        return _reply([{k: v for k, v in ln.items()
-                       if k not in ("pos", "doc_id", "source_marks", "target_marks")} for ln in res["lines"]],
+        hidden = ("pos", "doc_id", "matches", "source_marks", "target_marks")
+        return _reply([{k: v for k, v in ln.items() if k not in hidden} for ln in res["lines"]],
                       format, "bilingual")
     return res
 
@@ -618,13 +620,18 @@ def frequency(corpus_id: int, unit: str = "lemma", pos: str | None = None, min_f
 
 @app.get("/api/corpora/{corpus_id}/concordance")
 def concordance(corpus_id: int, q: str, unit: str = "lemma", width: int = Query(8, le=40),
-                limit: int = Query(300, le=2000), sort: str = "doc", format: str = "json",
+                limit: int = Query(300, ge=1, le=2000), sort: str = "doc", format: str = "json",
+                case_sensitive: bool = False, any_order: bool = False, sample: int | None = None,
                 sq: ScopeQuery = Depends()):
+    """`case_sensitive` matches the written form; `*` starts or ends a word (contrat*, *miento); `any_order`
+    finds the words anywhere in one sentence; `sample=<seed>` returns a reproducible random selection of
+    `limit` hits; `sort` is doc, left, right, or l1 l2 r1 r2 (the 1st/2nd word to the left/right)."""
     with db.session() as conn:
         _corpus(conn, corpus_id)
-        res = _run(analysis.concordance, conn, sq.scope(corpus_id), q, unit, width, limit, sort)
+        res = _run(analysis.concordance, conn, sq.scope(corpus_id), q, unit, width, limit, sort,
+                   case_sensitive, any_order, sample)
     if format == "csv":
-        return _reply([{k: v for k, v in ln.items() if k != "pos"} for ln in res["lines"]],
+        return _reply([{k: v for k, v in ln.items() if k not in ("pos", "matches")} for ln in res["lines"]],
                       format, "concordance")
     return res
 
