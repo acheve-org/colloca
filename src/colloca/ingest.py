@@ -4,6 +4,8 @@ import ipaddress
 import os
 import re
 import socket
+import threading
+import time
 import unicodedata
 from collections import Counter
 from urllib.parse import urljoin, urlparse
@@ -17,6 +19,9 @@ MAX_PDF_PAGES = int(os.environ.get("MAX_PDF_PAGES", "1000"))
 MAX_TEXT_CHARS = int(os.environ.get("MAX_TEXT_MB", "10")) * 1024 * 1024       # per document, after extraction
 ALLOW_PRIVATE =os.environ.get("ALLOW_PRIVATE_URLS", "") == "1"
 USER_AGENT = "colloca/0.1 (personal terminology research)"
+URL_DELAY = float(os.environ.get("URL_DELAY_SECONDS", "1"))                  # between two requests to one host (lists)
+MAX_URL_LIST = int(os.environ.get("MAX_URL_LIST", "50"))                      # URLs in one list
+MAX_URLS_PER_HOST = int(os.environ.get("MAX_URLS_PER_HOST", "20"))            # of them, to the same host
 
 
 class IngestError(ValueError):
@@ -34,41 +39,84 @@ def _behind_proxy() -> bool:
     return any(os.environ.get(k) for k in ("HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy"))
 
 
-def _check_public(url: str) -> None:
+def _check_public(url: str) -> str | None:
+    """Refuse addresses that are not on the public internet. Returns the validated IP address the connection
+    must use (see `_download`), or None when no pinning applies: a literal IP, ALLOW_PRIVATE_URLS, or a proxy
+    that resolves the name itself."""
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https") or not parsed.hostname:
         raise IngestError("Only http(s) URLs are supported")
     if ALLOW_PRIVATE:
-        return
+        return None
     host = parsed.hostname.lower()
     blocked = IngestError("URL points to a private/internal address (blocked). "
                           "Set ALLOW_PRIVATE_URLS=1 to allow it.")
-    try:                                    # literal IP address
-        if not ipaddress.ip_address(host).is_global:
-            raise blocked
-        return
+    try:                                    # literal IP address (IngestError is a ValueError: parse only in the try)
+        literal = ipaddress.ip_address(host)
     except ValueError:
-        pass
+        literal = None
+    if literal is not None:
+        if not literal.is_global:
+            raise blocked
+        return None
     if host == "localhost" or host.endswith((".localhost", ".local", ".internal", ".lan")):
         raise blocked
     try:
-        infos = socket.getaddrinfo(host, parsed.port or 443, proto=socket.IPPROTO_TCP)
+        infos = socket.getaddrinfo(host, parsed.port or (80 if parsed.scheme == "http" else 443),
+                                   proto=socket.IPPROTO_TCP)
     except socket.gaierror as exc:
         if _behind_proxy():                 # the proxy resolves names, not this machine
-            return
+            return None
         raise IngestError(f"Cannot resolve host: {host}") from exc
-    for info in infos:
-        if not ipaddress.ip_address(info[4][0]).is_global:
-            raise blocked
+    addresses = [str(info[4][0]) for info in infos]
+    if not addresses or any(not ipaddress.ip_address(a).is_global for a in addresses):
+        raise blocked
+    return None if _behind_proxy() else addresses[0]
 
 
-def _download(url: str) -> tuple[bytes, str]:
-    """Fetch with redirect-by-redirect SSRF checks and a size cap."""
+# Set by tests to answer requests without a network (an httpx transport).
+_transport: httpx.BaseTransport | None = None
+
+_last_request: dict[str, float] = {}
+_gate = threading.Lock()
+
+
+def _be_polite(host: str) -> None:
+    """Wait until URL_DELAY seconds have passed since the last request to `host` (list imports only)."""
+    if URL_DELAY <= 0:
+        return
+    with _gate:
+        wait = _last_request.get(host, 0.0) + URL_DELAY - time.monotonic()
+        if wait > 0:
+            time.sleep(wait)
+        _last_request[host] = time.monotonic()
+
+
+def _pinned(url: str, ip: str) -> tuple[str, dict, dict]:
+    """The request for `url` aimed at the already validated `ip`: the URL carries the address, the Host header
+    and the TLS server name keep the host, so certificates are still checked against the host name."""
+    parsed = urlparse(url)
+    host = parsed.hostname or ""
+    literal = f"[{ip}]" if ":" in ip else ip
+    netloc = literal + (f":{parsed.port}" if parsed.port else "")
+    host_header = host + (f":{parsed.port}" if parsed.port else "")
+    return parsed._replace(netloc=netloc).geturl(), {"Host": host_header}, {"sni_hostname": host}
+
+
+def _download(url: str, polite: bool = False) -> tuple[bytes, str]:
+    """Fetch with redirect-by-redirect SSRF checks and a size cap.
+
+    Each hop resolves the host once, checks the answer, and then connects to that very address (DNS rebinding:
+    a name that answers differently the second time cannot redirect the connection to an internal address)."""
     headers = {"User-Agent": USER_AGENT, "Accept-Language": "es,it;q=0.9,en;q=0.5"}
-    with httpx.Client(timeout=20, follow_redirects=False, headers=headers) as client:
+    with httpx.Client(timeout=20, follow_redirects=False, headers=headers, transport=_transport,
+                      trust_env=_transport is None) as client:
         for _ in range(6):
-            _check_public(url)
-            with client.stream("GET", url) as resp:
+            ip = _check_public(url)
+            if polite:
+                _be_polite((urlparse(url).hostname or "").lower())
+            target, extra, ext = (_pinned(url, ip) if ip else (url, {}, {}))
+            with client.stream("GET", target, headers=extra, extensions=ext) as resp:
                 if resp.is_redirect:
                     url = urljoin(url, resp.headers.get("location", ""))
                     continue
@@ -82,6 +130,33 @@ def _download(url: str) -> tuple[bytes, str]:
                     chunks.append(chunk)
                 return b"".join(chunks), resp.headers.get("content-type", "").lower()
     raise IngestError("Too many redirects")
+
+
+def parse_url_list(raw: list[str]) -> tuple[list[str], list[dict]]:
+    """The distinct usable http(s) URLs of a pasted list (in order), and the rejected lines with the reason."""
+    urls: list[str] = []
+    bad: list[dict] = []
+    seen: set[str] = set()
+    per_host: dict[str, int] = {}
+    for line in raw:
+        url = line.strip()
+        if not url or url.startswith("#"):
+            continue
+        parsed = urlparse(url)
+        if parsed.scheme not in ("http", "https") or not parsed.hostname:
+            bad.append({"url": url, "error": "Not an http(s) address"})
+        elif url in seen:
+            bad.append({"url": url, "error": "Listed twice"})
+        elif len(urls) >= MAX_URL_LIST:
+            bad.append({"url": url, "error": f"More than {MAX_URL_LIST} addresses in one list (set MAX_URL_LIST)"})
+        elif per_host.get(parsed.hostname.lower(), 0) >= MAX_URLS_PER_HOST:
+            bad.append({"url": url, "error": f"More than {MAX_URLS_PER_HOST} addresses of {parsed.hostname} in one "
+                                              "list (set MAX_URLS_PER_HOST); add the rest in another list"})
+        else:
+            seen.add(url)
+            per_host[parsed.hostname.lower()] = per_host.get(parsed.hostname.lower(), 0) + 1
+            urls.append(url)
+    return urls, bad
 
 
 # --------------------------------------------------------------------------- formats
@@ -163,8 +238,8 @@ def decode_text(data: bytes) -> str:
 
 
 # --------------------------------------------------------------------------- entry points
-def fetch_url(url: str) -> dict:
-    data, ctype = _download(url)
+def fetch_url(url: str, polite: bool = False) -> dict:
+    data, ctype = _download(url, polite)
     if "pdf" in ctype or data[:5] == b"%PDF-":
         text, title = extract_pdf(data), ""
     elif "html" in ctype or "xml" in ctype or b"<html" in data[:2048].lower():

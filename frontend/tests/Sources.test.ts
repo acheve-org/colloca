@@ -59,6 +59,12 @@ beforeEach(() => {
     if (p === '/api/preview-url' && previewGate) await previewGate;
     if (p === '/api/preview-url') return res(200, { url: 'https://example.org/final', title: 'Fetched title', text: 'one two three' });
     if (p === '/api/corpora/1/upload') return res(uploadReply.status, uploadReply.body);
+    if (p === '/api/corpora/1/urls') {
+      return res(202, [
+        { url: 'ftp://x.example/', ok: false, error: 'Not an http(s) address' },
+        { url: 'https://a.example/1', ok: true, job_id: 31 },
+      ]);
+    }
     if (p === '/api/corpora/1/upload-pairs') return res(202, [{ file: 'tm.tmx', ok: true, job_id: 11, partner_corpus_id: 2 }]);
     if (p === '/api/jobs/5/resolve') return res(202, { job_id: 20 });
     if (p === '/api/corpora/1/near-duplicates') {
@@ -112,6 +118,28 @@ describe('Sources', () => {
     const headers = screen.getAllByRole('columnheader').map((h) => h.textContent?.trim());
     expect(headers).toEqual(expect.arrayContaining(['Title', 'Type', 'Date', 'Tags', 'Words', 'Checks']));
     expect(within(bodyRows()[0]).getByText('legal')).toBeInTheDocument();
+  });
+
+  it('a list of addresses is sent as one request, with the metadata, and rejected lines are reported', async () => {
+    await ready();
+    await fireEvent.input(screen.getByLabelText('Tags'), { target: { value: 'law' } });
+    await fireEvent.input(screen.getByLabelText('Addresses, one per line'), {
+      target: { value: 'ftp://x.example/\n\n  https://a.example/1  \n' },
+    });
+    await fireEvent.click(screen.getByRole('button', { name: 'Add all' }));
+    await waitFor(() => expect(calls.some((c) => c.path === '/api/corpora/1/urls')).toBe(true));
+    const c = calls.find((x) => x.path === '/api/corpora/1/urls')!;
+    expect(c.method).toBe('POST');
+    expect(c.body).toMatchObject({ urls: ['ftp://x.example/', 'https://a.example/1'], tags: 'law', force_language: false });
+    await waitFor(() => expect(messages.current?.text).toBe('1 queued; rejected: ftp://x.example/ (Not an http(s) address)'));
+    expect((screen.getByLabelText('Addresses, one per line') as HTMLTextAreaElement).value).toBe('');
+  });
+
+  it('an empty list sends nothing', async () => {
+    await ready();
+    await fireEvent.click(screen.getByRole('button', { name: 'Add all' }));
+    await waitFor(() => expect(messages.current?.text).toBe('Type or paste at least one address.'));
+    expect(calls.some((c) => c.path === '/api/corpora/1/urls')).toBe(false);
   });
 
   it('URL preview shows an editable title and text and "Add to corpus" posts them', async () => {

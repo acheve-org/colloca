@@ -796,4 +796,9 @@ export const en: Messages = {
   'dp.plotNone': 'no hits in “{title}”',
   'dp.capped': 'Only the first {n} hits of a document are marked.',
   'dp.run': 'Plot',
+  'src.urls.title': 'Add several addresses',
+  'src.urls.label': 'Addresses, one per line',
+  'src.urls.go': 'Add all',
+  'src.urls.needed': 'Type or paste at least one address.',
+  'src.urls.hint': 'No preview: each page is fetched and added as it is, with a pause between requests to the same site. Lines starting with # are ignored.',
 };
