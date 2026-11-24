@@ -5,12 +5,24 @@ from collections.abc import Callable, Iterator
 
 import spacy
 
-from . import languages
+from . import langcatalog, languages
 
 SUPPORTED = languages.REGISTRY   # live {code: name} of the registered languages
-_SIZES = [os.environ.get("SPACY_SIZE", "md"), "md", "sm", "lg"]
 _models: dict[str, spacy.language.Language] = {}
 _lock = threading.Lock()
+
+
+def size_order(lang: str) -> list[str]:
+    """Model sizes to try for a language: its own setting, then SPACY_SIZE, then any other."""
+    own = languages.get(lang)
+    return list(dict.fromkeys([s for s in (own.model_size if own else None, os.environ.get("SPACY_SIZE", "md"),
+                                           "md", "sm", "lg") if s]))
+
+
+def evict(lang: str) -> None:
+    """Forget the loaded model of a language (its size changed or it was uninstalled)."""
+    with _lock:
+        _models.pop(lang, None)
 
 
 def load_model(lang: str):
@@ -19,8 +31,8 @@ def load_model(lang: str):
     with _lock:
         if lang in _models:
             return _models[lang]
-        for size in dict.fromkeys(_SIZES):
-            name = f"{lang}_core_news_{size}"
+        for size in size_order(lang):
+            name = langcatalog.package(lang, size) if lang in langcatalog.CATALOG else f"{lang}_core_news_{size}"
             try:
                 nlp = spacy.load(name, exclude=["ner"])
                 nlp.max_length = 2_000_000
@@ -29,7 +41,7 @@ def load_model(lang: str):
             except OSError:
                 continue
         raise RuntimeError(f"No spaCy model installed for '{lang}' (expected {lang}_core_news_*). "
-                           "In Docker: docker compose run --rm colloca download-models")
+                           "Install it in the Languages screen.")
 
 
 def status() -> dict[str, dict]:
@@ -41,8 +53,8 @@ def status() -> dict[str, dict]:
     out: dict[str, dict] = {}
     for lang in SUPPORTED:
         info: dict = {"name": None, "version": None, "size": None, "small": False}
-        for size in dict.fromkeys(_SIZES):
-            name = f"{lang}_core_news_{size}"
+        for size in size_order(lang):
+            name = langcatalog.package(lang, size) if lang in langcatalog.CATALOG else f"{lang}_core_news_{size}"
             if name in installed:
                 info = {"name": name, "version": spacy.util.get_package_version(name), "size": size,
                         "small": size == "sm"}
