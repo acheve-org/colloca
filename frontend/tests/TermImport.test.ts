@@ -1,7 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import TermImport from '../src/screens/TermImport.svelte';
-import { termStore } from '../src/lib/term.svelte';
 
 const res = (status: number, body: unknown) => ({ ok: status < 400, status, statusText: 'x', json: async () => body });
 let sent: { path: string; form: FormData }[];
@@ -13,10 +12,10 @@ const report = (applied: boolean) => ({
 
 beforeEach(() => {
   sent = [];
-  termStore.langs = { es: 'Spanish', it: 'Italian' };
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
     const path = new URL(url, 'http://x').pathname;
     sent.push({ path, form: init?.body as FormData });
+    if (path === '/api/languages') return res(200, { es: 'Spanish', it: 'Italian' });
     if (path.endsWith('/preview')) {
       return res(200, { kind: 'sheet', rows: [['Source', 'Translation'], ['a', 'b']], columns: 2, total_rows: 1,
         header: true, mapping: { src_term: 0, tgt_term: 1 } });
@@ -34,6 +33,7 @@ describe('TermImport', () => {
     await fireEvent.change(input, { target: { files: [new File(['Source,Translation\na,b\n'], 'g.csv')] } });
     await waitFor(() => expect(screen.getByLabelText('Meaning of column 1')).toBeTruthy());
     expect((screen.getByLabelText('Meaning of column 2') as HTMLSelectElement).value).toBe('tgt_term');
+    await waitFor(() => expect((screen.getByLabelText('Source language') as HTMLSelectElement).value).toBe('es'));
     const apply = screen.getByRole('button', { name: 'Import' }) as HTMLButtonElement;
     expect(apply.disabled).toBe(true);                       // nothing is stored before the check
     await fireEvent.click(screen.getByRole('button', { name: 'Check file' }));

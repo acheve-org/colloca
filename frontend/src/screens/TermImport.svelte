@@ -44,10 +44,9 @@
 </script>
 
 <script lang="ts">
-  import { upload } from '../lib/api';
+  import { get, upload } from '../lib/api';
   import { t } from '../lib/i18n';
   import { messages } from '../lib/messages.svelte';
-  import { termStore } from '../lib/term.svelte';
   import type { Project } from '../lib/types';
   import Button from '../lib/ui/Button.svelte';
   import Dialog from '../lib/ui/Dialog.svelte';
@@ -74,10 +73,11 @@
   let srcLang = $state('es');
   let tgtLang = $state('it');
   let defaultStatus = $state('candidate');
+  let langs = $state.raw<Record<string, string>>({});
 
   const errMsg = (err: unknown) => (err instanceof Error ? err.message : String(err));
   const langOptions = $derived(
-    Object.entries(termStore.langs).map(([value, label]) => ({ value, label })),
+    Object.entries(langs).map(([value, label]) => ({ value, label })),
   );
   const projectOptions = $derived([
     { value: 'none', label: t('tb.scope.none') },
@@ -97,7 +97,16 @@
   }
 
   $effect(() => {
-    if (open) reset();
+    if (!open) return;
+    reset();
+    get<Record<string, string>>('/api/languages')
+      .then((l) => {
+        langs = l;
+        const codes = Object.keys(l);
+        srcLang = codes[0] ?? '';
+        tgtLang = codes[1] ?? '';
+      })
+      .catch((err) => messages.say(errMsg(err), 'err'));
   });
 
   // Any change of the settings makes an earlier dry run stale.
