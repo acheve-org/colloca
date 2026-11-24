@@ -3,7 +3,7 @@
   <tbxHeader>
     <fileDesc>
       <sourceDesc>
-        <p>Colloca sample termbase: 11 entries, exported from Colloca</p>
+        <p>Colloca sample termbase: 14 entries, exported from Colloca</p>
       </sourceDesc>
     </fileDesc>
   </tbxHeader>
@@ -129,6 +129,38 @@
             <term>etc</term>
             <termNote type="partOfSpeech">other</termNote>
             <termNote type="administrativeStatus">preferredTerm-admn-sts</termNote>
+          </termSec>
+        </langSec>
+      </conceptEntry>
+      <conceptEntry id="c8">
+        <descrip type="subjectField">housing</descrip>
+        <langSec xml:lang="es">
+          <descrip type="definition">Lugar donde se vive.</descrip>
+          <termSec>
+            <term>vivienda</term>
+            <termNote type="partOfSpeech">noun</termNote>
+            <termNote type="grammaticalGender">feminine</termNote>
+            <note>Uso general.</note>
+          </termSec>
+          <termSec>
+            <term>domicilio</term>
+            <termNote type="partOfSpeech">noun</termNote>
+            <termNote type="grammaticalGender">masculine</termNote>
+          </termSec>
+        </langSec>
+        <langSec xml:lang="it">
+          <termSec>
+            <term>abitazione</term>
+            <termNote type="partOfSpeech">noun</termNote>
+            <termNote type="grammaticalGender">feminine</termNote>
+            <termNote type="administrativeStatus">preferredTerm-admn-sts</termNote>
+            <note>Più formale di casa.</note>
+          </termSec>
+          <termSec>
+            <term>casa</term>
+            <termNote type="partOfSpeech">noun</termNote>
+            <termNote type="grammaticalGender">feminine</termNote>
+            <termNote type="administrativeStatus">admittedTerm-admn-sts</termNote>
           </termSec>
         </langSec>
       </conceptEntry>

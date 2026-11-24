@@ -3,7 +3,7 @@
   <martifHeader>
     <fileDesc>
       <sourceDesc>
-        <p>Colloca sample termbase: 11 entries, exported from Colloca</p>
+        <p>Colloca sample termbase: 14 entries, exported from Colloca</p>
       </sourceDesc>
     </fileDesc>
     <encodingDesc>
@@ -132,6 +132,38 @@
             <term>etc</term>
             <termNote type="partOfSpeech">other</termNote>
             <termNote type="administrativeStatus">preferredTerm-admn-sts</termNote>
+          </tig>
+        </langSet>
+      </termEntry>
+      <termEntry id="c8">
+        <descrip type="subjectField">housing</descrip>
+        <langSet xml:lang="es">
+          <descrip type="definition">Lugar donde se vive.</descrip>
+          <tig>
+            <term>vivienda</term>
+            <termNote type="partOfSpeech">noun</termNote>
+            <termNote type="grammaticalGender">feminine</termNote>
+            <note>Uso general.</note>
+          </tig>
+          <tig>
+            <term>domicilio</term>
+            <termNote type="partOfSpeech">noun</termNote>
+            <termNote type="grammaticalGender">masculine</termNote>
+          </tig>
+        </langSet>
+        <langSet xml:lang="it">
+          <tig>
+            <term>abitazione</term>
+            <termNote type="partOfSpeech">noun</termNote>
+            <termNote type="grammaticalGender">feminine</termNote>
+            <termNote type="administrativeStatus">preferredTerm-admn-sts</termNote>
+            <note>Più formale di casa.</note>
+          </tig>
+          <tig>
+            <term>casa</term>
+            <termNote type="partOfSpeech">noun</termNote>
+            <termNote type="grammaticalGender">feminine</termNote>
+            <termNote type="administrativeStatus">admittedTerm-admn-sts</termNote>
           </tig>
         </langSet>
       </termEntry>

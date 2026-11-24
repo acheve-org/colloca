@@ -3,7 +3,9 @@
 TBX comes in two flavours because CAT tools differ in what they read:
   version 3  ISO 30042:2019 structure (tbx / conceptEntry / langSec / termSec), as in current TBX-Basic;
   version 2  ISO 30042:2008 structure (martif / termEntry / langSet / tig), the one most CAT tools read.
-Both use TBX-Basic data categories only. One concept groups all rows sharing the same source term.
+Both use TBX-Basic data categories only. One concept groups the rows that share a concept id (by default all rows
+with the same source term): its source terms and its translations become the terms of the two language sections.
+TBX-Basic has a gender category (grammaticalGender) but none for number, so number is written to CSV and Excel only.
 """
 import csv
 import io
@@ -20,6 +22,9 @@ COLUMNS = [
     ("tgt_lang", "Target language"), ("pos", "Part of speech"), ("status", "Status"), ("domain", "Domain"),
     ("definition", "Definition"), ("notes", "Notes"), ("context", "Example"),
     ("context_source", "Example source"), ("project", "Project"),
+    ("src_gender", "Source gender"), ("src_number", "Source number"), ("src_note", "Source note"),
+    ("tgt_gender", "Translation gender"), ("tgt_number", "Translation number"), ("tgt_note", "Translation note"),
+    ("concept_id", "Concept"),
 ]
 _FORMULA_START = ("=", "+", "-", "@", "\t", "\r")
 _XML_LANG = "{http://www.w3.org/XML/1998/namespace}lang"
@@ -58,7 +63,8 @@ def to_xlsx(rows: list[dict]) -> bytes:
         for cell in ws[ws.max_row]:
             if isinstance(cell.value, str):
                 cell.data_type = "s"     # always text: a term like "=1+1" must never become a formula
-    for column, width in zip("ABCDEFGHIJKL", (28, 28, 9, 9, 13, 11, 18, 40, 40, 50, 24, 18), strict=True):
+    widths = (28, 28, 9, 9, 13, 11, 18, 40, 40, 50, 24, 18, 12, 12, 30, 12, 12, 30, 9)
+    for column, width in zip("ABCDEFGHIJKLMNOPQRS", widths, strict=True):
         ws.column_dimensions[column].width = width
     ws.freeze_panes = "A2"
     out = io.BytesIO()
@@ -68,12 +74,31 @@ def to_xlsx(rows: list[dict]) -> bytes:
 
 # --------------------------------------------------------------------------- TBX
 def _concepts(rows: list[dict]) -> list[list[dict]]:
-    """Rows grouped per concept (project, language pair and source term, case-insensitive)."""
+    """Rows grouped per concept: the rows sharing a concept id, or (rows without one) a project, language pair
+    and source term, case-insensitively."""
     groups: dict[tuple, list[dict]] = {}
     for r in rows:
-        key = (r.get("project_id"), r["src_lang"], r["tgt_lang"], r["src_term"].lower())
+        cid = r.get("concept_id")
+        key = ("c", cid, r.get("project_id")) if cid else \
+            ("t", r.get("project_id"), r["src_lang"], r["tgt_lang"], r["src_term"].lower())
         groups.setdefault(key, []).append(r)
     return list(groups.values())
+
+
+def _unique(rows: list[dict], key: str) -> list[dict]:
+    """One row for each distinct (case-insensitive, non-empty) value of `key`, in order. A term that appears in
+    several rows (a source term with two translations) keeps what any of its rows says: the first non-empty value
+    of every field wins, so a note or a gender entered on one row is not lost."""
+    merged: dict[str, dict] = {}
+    for r in rows:
+        value = (r.get(key) or "").strip()
+        if not value:
+            continue
+        have = merged.setdefault(value.lower(), dict(r))
+        for k, v in r.items():
+            if v and not have.get(k):
+                have[k] = v
+    return list(merged.values())
 
 
 def to_tbx(rows: list[dict], version: int = 3, title: str = "Colloca termbase") -> bytes:
@@ -114,16 +139,22 @@ def to_tbx(rows: list[dict], version: int = 3, title: str = "Colloca termbase") 
         definition = next((r["definition"] for r in group if r.get("definition")), "")
         if definition:
             el(source, "descrip", definition, type="definition")
-        src_sec = el(source, names["term"])
-        el(src_sec, "term", first["src_term"])
-        pos = next((r["pos"] for r in group if r.get("pos")), "")
-        pos = _TBX_POS.get(pos, pos)
-        if pos:
-            el(src_sec, "termNote", pos, type="partOfSpeech")
-        context = next((r for r in group if r.get("context")), None)
-        if context:
-            el(src_sec, "descrip", context["context"], type="context")
-        translated = [r for r in group if r.get("tgt_term")]
+        for n_src, r in enumerate(_unique(group, "src_term")):       # every source term of the concept
+            src_sec = el(source, names["term"])
+            el(src_sec, "term", r["src_term"])
+            pos = r.get("pos") or (next((g["pos"] for g in group if g.get("pos")), "") if n_src == 0 else "")
+            pos = _TBX_POS.get(pos, pos)
+            if pos:
+                el(src_sec, "termNote", pos, type="partOfSpeech")
+            if r.get("src_gender"):
+                el(src_sec, "termNote", r["src_gender"], type="grammaticalGender")
+            context = r if r.get("context") else (next((g for g in group if g.get("context")), None)
+                                                  if n_src == 0 else None)
+            if context:
+                el(src_sec, "descrip", context["context"], type="context")
+            if r.get("src_note"):
+                el(src_sec, "note", r["src_note"])
+        translated = _unique([g for g in group if g.get("tgt_term")], "tgt_term")
         if translated:
             target = el(concept, names["lang"], **{_XML_LANG: first["tgt_lang"]})
             for r in translated:
@@ -131,10 +162,13 @@ def to_tbx(rows: list[dict], version: int = 3, title: str = "Colloca termbase") 
                 el(sec, "term", r["tgt_term"])
                 if r.get("pos"):
                     el(sec, "termNote", _TBX_POS.get(r["pos"], r["pos"]), type="partOfSpeech")
+                if r.get("tgt_gender"):
+                    el(sec, "termNote", r["tgt_gender"], type="grammaticalGender")
                 if r["status"] in _ADMIN_STATUS:
                     el(sec, "termNote", _ADMIN_STATUS[r["status"]], type="administrativeStatus")
-                if r.get("notes"):
-                    el(sec, "note", r["notes"])
+                notes = [x for x in (r.get("notes"), r.get("tgt_note")) if x]
+                if notes:
+                    el(sec, "note", "\n".join(notes))
     ET.indent(root)
     return ET.tostring(root, encoding="utf-8", xml_declaration=True)
 

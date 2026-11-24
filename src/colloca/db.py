@@ -207,8 +207,29 @@ CREATE TABLE segment_markup (
 ) WITHOUT ROWID;
 """
 
+# --- v13: concepts and term-level data (T19). Rows stay (source term, translation) pairs, so searches, the Job
+# matching and the exports keep working unchanged; `concept_id` says which rows are about the same thing: the rows
+# of one concept are its synonyms in each language (several source terms, several translations). Existing rows
+# become one concept per project, language pair and lower-case source term, which is how the TBX export already
+# grouped them. Gender and number belong to the term (one set for the source term, one for the translation), as
+# do the usage notes.
+_V13 = """
+ALTER TABLE terms ADD COLUMN concept_id INTEGER;
+ALTER TABLE terms ADD COLUMN src_gender TEXT NOT NULL DEFAULT '';
+ALTER TABLE terms ADD COLUMN src_number TEXT NOT NULL DEFAULT '';
+ALTER TABLE terms ADD COLUMN tgt_gender TEXT NOT NULL DEFAULT '';
+ALTER TABLE terms ADD COLUMN tgt_number TEXT NOT NULL DEFAULT '';
+ALTER TABLE terms ADD COLUMN src_note TEXT NOT NULL DEFAULT '';
+ALTER TABLE terms ADD COLUMN tgt_note TEXT NOT NULL DEFAULT '';
+UPDATE terms SET concept_id = (
+    SELECT MIN(t2.id) FROM terms t2
+    WHERE IFNULL(t2.project_id, 0) = IFNULL(terms.project_id, 0) AND t2.src_lang = terms.src_lang
+      AND t2.tgt_lang = terms.tgt_lang AND lower(t2.src_term) = lower(terms.src_term));
+CREATE INDEX idx_terms_concept ON terms (concept_id);
+"""
+
 MIGRATIONS: list[tuple[int, str]] = [(1, _V1), (2, _V2), (3, _V3), (4, _V4), (5, _V5), (6, _V6), (7, _V7), (8, _V8),
-                                     (9, _V9), (10, _V10), (11, _V11), (12, _V12)]
+                                     (9, _V9), (10, _V10), (11, _V11), (12, _V12), (13, _V13)]
 SCHEMA_VERSION = MIGRATIONS[-1][0]
 
 

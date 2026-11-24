@@ -7,7 +7,7 @@
   import { registerShortcut } from '../lib/shortcuts.svelte';
   import { corpusStore } from '../lib/corpus.svelte';
   import { t } from '../lib/i18n';
-  import { findExamples, saveTerm, TERM_POS, termStore, useExample } from '../lib/term.svelte';
+  import { findExamples, GENDERS, NUMBERS, saveTerm, TERM_POS, termStore, useExample } from '../lib/term.svelte';
   import Button from '../lib/ui/Button.svelte';
   import Dialog from '../lib/ui/Dialog.svelte';
   import Field from '../lib/ui/Field.svelte';
@@ -23,6 +23,14 @@
     })),
   );
   const posOptions = $derived([{ value: '', label: t('term.pos.none') }, ...TERM_POS.map((p) => ({ value: p, label: p }))]);
+  const genderOptions = $derived([
+    { value: '', label: t('term.pos.none') },
+    ...GENDERS.map((g) => ({ value: g, label: t(`term.gender.${g}`) })),
+  ]);
+  const numberOptions = $derived([
+    { value: '', label: t('term.pos.none') },
+    ...NUMBERS.map((n) => ({ value: n, label: t(`term.number.${n}`) })),
+  ]);
 
   const langLine = $derived.by(() => {
     const c = termStore.ctx;
@@ -83,6 +91,30 @@
         </datalist>
       </Field>
     </div>
+    <details class="termdata" open={!!(d.src_gender || d.src_number || d.src_note || d.tgt_gender || d.tgt_number || d.tgt_note)}>
+      <summary>{t('term.details')}</summary>
+      <p class="hint">{t('term.detailsHint')}</p>
+      <div class="row">
+        <Field label={t('term.srcGender')}>
+          <Select label={t('term.srcGender')} bind:value={termStore.draft.src_gender} options={genderOptions} />
+        </Field>
+        <Field label={t('term.srcNumber')}>
+          <Select label={t('term.srcNumber')} bind:value={termStore.draft.src_number} options={numberOptions} />
+        </Field>
+        <Field label={t('term.tgtGender')}>
+          <Select label={t('term.tgtGender')} bind:value={termStore.draft.tgt_gender} options={genderOptions} />
+        </Field>
+        <Field label={t('term.tgtNumber')}>
+          <Select label={t('term.tgtNumber')} bind:value={termStore.draft.tgt_number} options={numberOptions} />
+        </Field>
+      </div>
+      <Field label={t('term.srcNote')}>
+        <textarea bind:value={termStore.draft.src_note} rows="2"></textarea>
+      </Field>
+      <Field label={t('term.tgtNote')}>
+        <textarea bind:value={termStore.draft.tgt_note} rows="2"></textarea>
+      </Field>
+    </details>
     <Field label={t('term.definition')}>
       <textarea bind:value={termStore.draft.definition} rows="2"></textarea>
     </Field>
@@ -127,6 +159,20 @@
 </Dialog>
 
 <style>
+  .termdata {
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: var(--s-1) var(--s-2);
+  }
+  .termdata summary {
+    cursor: pointer;
+    font-weight: 600;
+  }
+  .termdata .hint {
+    margin: var(--s-1) 0;
+    color: var(--muted);
+    font-size: var(--fs-small);
+  }
   .term {
     display: flex;
     flex-direction: column;

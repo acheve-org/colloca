@@ -10,8 +10,16 @@ POS_VALUES = ("noun", "verb", "adjective", "adverb", "properNoun", "other")   # 
 ORIGINS = ("manual", "frequency", "keyness", "collocation", "ngram", "concordance", "equivalent", "job")
 UPOS_TO_TBX = {"NOUN": "noun", "VERB": "verb", "AUX": "verb", "ADJ": "adjective", "ADV": "adverb",
                "PROPN": "properNoun"}
+GENDERS = ("masculine", "feminine", "neuter", "other")                  # TBX-Basic grammaticalGender values
+NUMBERS = ("singular", "plural", "dual", "mass", "other")                # no TBX-Basic category: CSV and Excel only
+_GENDER_WORDS = {"m": "masculine", "masc": "masculine", "masculino": "masculine", "maschile": "masculine",
+                 "f": "feminine", "fem": "feminine", "femenino": "feminine", "femminile": "feminine",
+                 "n": "neuter", "neutro": "neuter", "mf": "other", "m/f": "other", "otro": "other", "altro": "other"}
+_NUMBER_WORDS = {"sg": "singular", "sing": "singular", "singolare": "singular", "pl": "plural", "plur": "plural",
+                 "plurale": "plural", "dualnumber": "dual", "massa": "mass", "masa": "mass", "otro": "other",
+                 "altro": "other"}
 LIMITS = {"src_term": 200, "tgt_term": 200, "domain": 80, "definition": 2000, "notes": 2000,
-          "context": 1000, "context_source": 300}
+          "context": 1000, "context_source": 300, "src_note": 2000, "tgt_note": 2000}
 _CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")    # characters XML 1.0 cannot carry
 
 
@@ -27,6 +35,26 @@ def _text(value, field: str, *, multiline: bool = False) -> str:
     return value
 
 
+def assign_concept(conn, project_id: int | None, src_lang: str, tgt_lang: str, src_term: str,
+                   explicit: int | None = None) -> int:
+    """The concept a new row belongs to. `explicit` joins an existing concept of the same project and language pair
+    (a synonym of it); otherwise the row joins the concept of the rows with the same source term (any case), or
+    starts a new one."""
+    if explicit is not None:
+        row = conn.execute("""SELECT 1 FROM terms WHERE concept_id=? AND IFNULL(project_id, 0)=? AND src_lang=?
+                              AND tgt_lang=? AND deleted_at IS NULL""",
+                           (explicit, project_id or 0, src_lang, tgt_lang)).fetchone()
+        if not row:
+            raise TermError("That concept does not exist in this project and language pair")
+        return explicit
+    row = conn.execute("""SELECT concept_id FROM terms WHERE IFNULL(project_id, 0)=? AND src_lang=? AND tgt_lang=?
+                          AND lower(src_term)=lower(?) AND concept_id IS NOT NULL AND deleted_at IS NULL
+                          ORDER BY id LIMIT 1""", (project_id or 0, src_lang, tgt_lang, src_term)).fetchone()
+    if row:
+        return row[0]
+    return conn.execute("SELECT COALESCE(MAX(concept_id), 0) + 1 FROM terms").fetchone()[0]
+
+
 def other_lang(lang: str) -> str:
     """The default target language: the first supported language that is not the source."""
     return next(code for code in nlp.SUPPORTED if code != lang)
@@ -38,9 +66,18 @@ def clean(fields: dict, *, partial: bool = False) -> dict:
     for name in ("src_term", "tgt_term", "domain", "context_source"):
         if name in fields:
             out[name] = _text(fields[name], name)
-    for name in ("definition", "notes", "context"):
+    for name in ("definition", "notes", "context", "src_note", "tgt_note"):
         if name in fields:
             out[name] = _text(fields[name], name, multiline=True)
+    for side in ("src", "tgt"):
+        for name, values, words in ((f"{side}_gender", GENDERS, _GENDER_WORDS),
+                                    (f"{side}_number", NUMBERS, _NUMBER_WORDS)):
+            if name in fields:
+                word = str(fields[name] or "").strip().lower()
+                value = next((v for v in values if v.lower() == word), words.get(word, "" if not word else None))
+                if value is None:
+                    raise TermError(f"{name.replace('_', ' ').capitalize()} must be one of {', '.join(values)}")
+                out[name] = value
     if "pos" in fields:
         pos = str(fields["pos"] or "").strip()
         pos = UPOS_TO_TBX.get(pos.upper(), pos)

@@ -95,14 +95,15 @@ def build_payload(conn: sqlite3.Connection, project_id: int | None = None) -> di
                        "author": d["author"], "tags": d["tags"], "lang_check": d["lang_check"], "added": d["added"],
                        "segmented": bool(d["segmented"]), "pair_ref": d["pair_doc_id"]} for d in docs],
         "terms": [{"project_ref": t["project_id"], **{k: t[k] for k in _TERM_FIELDS}, "created": t["created"],
-                   "updated": t["updated"]} for t in terms],
+                   "updated": t["updated"], "concept_ref": t["concept_id"]} for t in terms],
         "rejections": [{"project_ref": r["project_id"], "lang": r["lang"], "term": r["term"]} for r in rejections],
         "unexported_links": external,
     }
 
 
 _TERM_FIELDS = ("src_lang", "tgt_lang", "src_term", "tgt_term", "pos", "status", "domain", "definition", "notes",
-                "context", "context_source", "origin")
+                "context", "context_source", "origin", "src_gender", "src_number", "src_note", "tgt_gender",
+                "tgt_number", "tgt_note")
 
 
 def _manifest(payload: dict, with_db: bool) -> dict:
@@ -364,7 +365,8 @@ def import_payload(conn: sqlite3.Connection, payload: dict, *, project_id: int |
             conn.execute("UPDATE documents SET pair_doc_id=? WHERE id=?", (a, b))
             rep.created["links"] += 1
 
-    # termbase
+    # termbase (the concepts of the file become concepts here: rows that were synonyms stay synonyms)
+    concepts: dict[Any, int] = {}
     for t in terms:
         try:
             fields = {k: t.get(k, "") for k in _TERM_FIELDS}
@@ -393,14 +395,25 @@ def import_payload(conn: sqlite3.Connection, payload: dict, *, project_id: int |
             continue
         if twin:
             conn.execute("DELETE FROM terms WHERE id=?", (twin["id"],))
+        ref = _ref(t.get("concept_ref")) if t.get("concept_ref") is not None else None
+        try:
+            concept = termbase.assign_concept(conn, pid, entry["src_lang"], entry["tgt_lang"], entry["src_term"],
+                                              concepts.get(ref) if ref is not None else None)
+        except termbase.TermError:
+            concept = termbase.assign_concept(conn, pid, entry["src_lang"], entry["tgt_lang"], entry["src_term"])
+        if ref is not None:
+            concepts.setdefault(ref, concept)
         conn.execute(
             """INSERT INTO terms (project_id,src_lang,tgt_lang,src_term,tgt_term,pos,status,domain,definition,notes,
-                                  context,context_source,origin)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                                  context,context_source,origin,concept_id,src_gender,src_number,tgt_gender,
+                                  tgt_number,src_note,tgt_note)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (pid, entry["src_lang"], entry["tgt_lang"], entry["src_term"], entry["tgt_term"], entry.get("pos", ""),
              entry.get("status", "candidate"), entry.get("domain", ""), entry.get("definition", ""),
              entry.get("notes", ""), entry.get("context", ""), entry.get("context_source", ""),
-             entry.get("origin", "manual")))
+             entry.get("origin", "manual"), concept, entry.get("src_gender", ""), entry.get("src_number", ""),
+             entry.get("tgt_gender", ""), entry.get("tgt_number", ""), entry.get("src_note", ""),
+             entry.get("tgt_note", "")))
         rep.created["terms"] += 1
 
     for r in rejections:
