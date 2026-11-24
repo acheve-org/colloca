@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/svelte';
+import { render, screen } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ContextBlock from '../src/lib/ui/ContextBlock.svelte';
@@ -31,44 +31,25 @@ afterEach(() => {
 });
 
 describe('ContextBlock', () => {
-  it('shows corpus, project, language badge and a Change link', () => {
+  it('shows project, then corpus with its language code, and a Change link', () => {
     render(ContextBlock);
     expect(screen.getByText('Working in')).toBeInTheDocument();
-    expect(screen.getByText('A1', { selector: 'strong' })).toBeInTheDocument();
     expect(screen.getByText('Acme', { selector: '.project' })).toBeInTheDocument();
+    expect(screen.getByText('A1', { selector: '.corpus' })).toBeInTheDocument();
     expect(screen.getByText('ES')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Change' })).toHaveAttribute('href', '#/projects');
   });
 
-  it('quick switch groups working corpora by project and never lists reference corpora', () => {
+  it('has no corpus dropdown', () => {
     render(ContextBlock);
-    const sel = screen.getByRole('combobox', { name: 'Corpus' });
-    const groups = within(sel).getAllByRole('group').map((g) => g.getAttribute('label'));
-    expect(groups).toEqual(['Acme', 'Bolt', 'No project']);
-    expect(within(sel).queryByRole('option', { name: /RefCorpus/ })).toBeNull();
-    expect(within(sel).getAllByRole('option')).toHaveLength(4);
+    expect(screen.queryByRole('combobox')).toBeNull();
   });
 
-  it('omits the "No project" group when every corpus has a project', () => {
-    corpusStore.list = [corpus(1, 'A1', 7)];
+  it('a corpus without a project shows "No project"', async () => {
+    await corpusStore.select(4);
     render(ContextBlock);
-    expect(within(screen.getByRole('combobox')).getAllByRole('group')).toHaveLength(1);
-  });
-
-  it('a corpus whose project is unknown lands in the "No project" group', () => {
-    corpusStore.list = [corpus(1, 'A1', 7), corpus(9, 'Orphan', 999)];
-    render(ContextBlock);
-    const groups = within(screen.getByRole('combobox')).getAllByRole('group');
-    expect(groups.map((g) => g.getAttribute('label'))).toEqual(['Acme', 'No project']);
-    expect(within(groups[1]).getByRole('option', { name: 'Orphan' })).toBeInTheDocument();
-  });
-
-  it('selecting a corpus calls corpusStore.select', async () => {
-    const spy = vi.spyOn(corpusStore, 'select').mockResolvedValue();
-    render(ContextBlock);
-    await fireEvent.change(screen.getByRole('combobox', { name: 'Corpus' }), { target: { value: '3' } });
-    expect(spy).toHaveBeenCalledWith(3);
-    spy.mockRestore();
+    expect(screen.getByText('No project', { selector: '.project' })).toBeInTheDocument();
+    expect(screen.getByText('Loose', { selector: '.corpus' })).toBeInTheDocument();
   });
 
   it('shows the empty state once the working corpus is gone', async () => {
@@ -76,10 +57,7 @@ describe('ContextBlock', () => {
     await corpusStore.select(null);
     await tick();
     expect(screen.getByText('No corpus selected')).toBeInTheDocument();
-    expect(screen.queryByText('A1', { selector: 'strong' })).toBeNull();
+    expect(screen.queryByText('A1', { selector: '.corpus' })).toBeNull();
     expect(screen.getByRole('link', { name: 'Change' })).toBeInTheDocument();
-    const choose = screen.getByRole('option', { name: 'Choose a corpus' }) as HTMLOptionElement;
-    expect(choose.disabled).toBe(true);
-    expect(choose.selected).toBe(true);
   });
 });

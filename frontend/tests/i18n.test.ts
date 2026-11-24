@@ -13,7 +13,7 @@ const placeholders = (s: string) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1
 
 // Values that are legitimately the same as the English ones: product and format names, statistics, cognates, symbols.
 const SAME = new Set([
-  'app.name', 'theme.auto', 'nav.group.corpus', 'trash.corpus', 'corpus.switcher', 'shortcuts.global', 'filter.docs',
+  'app.name', 'theme.auto', 'nav.group.corpus', 'trash.corpus', 'shortcuts.global', 'filter.docs',
   'ex.col.docs', 'ex.col.logdice', 'ex.col.tscore', 'ex.col.logRatio', 'ex.col.dice', 'term.langs', 'imp.langs',
   'cand.measure', 'cc.csv', 'tb.csv', 'tb.tbx', 'tb.xlsx', 'job.csv', 'job.csvOf', 'job.glossary.csv', 'job.glossary.tbx',
   'job.glossary.xlsx', 'base.leipzig', 'proj.corpora1', 'bk.k.corpora', 'trash.corpora', 'proj.corpora', 'cc.unit.lemma',

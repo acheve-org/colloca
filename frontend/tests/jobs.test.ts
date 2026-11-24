@@ -21,8 +21,6 @@ beforeEach(() => {
   responses = [];
   messages.clear();
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
-    // the model indicator in StatusLine reads /api/status; it is not a jobs request
-    if (url === '/api/status') return { ok: false, status: 404, statusText: 'x', json: async () => ({}) };
     fetches.push(url);
     if (fail) return { ok: false, status: 500, statusText: 'x', json: async () => ({ detail: fail }) };
     const body = responses.length > 1 ? responses.shift()! : (responses[0] ?? []);

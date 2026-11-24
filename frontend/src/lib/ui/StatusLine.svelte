@@ -2,7 +2,6 @@
   import { jobs } from '../jobs.svelte';
   import { messages } from '../messages.svelte';
   import { t } from '../i18n';
-  import ModelStatus from './ModelStatus.svelte';
 </script>
 
 <div class="line">
@@ -15,7 +14,6 @@
       <span>{jobs.running === 1 ? t('jobs.running1') : t('jobs.running', { n: jobs.running })}</span>
     </div>
   {/if}
-  <ModelStatus />
 </div>
 
 <style>

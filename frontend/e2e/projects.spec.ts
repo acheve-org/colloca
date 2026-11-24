@@ -1,9 +1,9 @@
 import { expect, test } from '@playwright/test';
 import { escapeRegExp, newCorpus, newProject, unique } from './helpers';
 
-const context = (page: import('@playwright/test').Page) => page.getByRole('navigation', { name: 'Working context' });
+const context = (page: import('@playwright/test').Page) => page.getByRole('group', { name: 'Working in' });
 
-test('a project and a corpus made on the Projects page show as language › project › corpus in the context bar', async ({ page }) => {
+test('a project and a corpus made on the Projects page show as project, corpus and language in the rail', async ({ page }) => {
   await page.goto('/#/projects');
   const name = unique('Client');
   await page.getByLabel('New project', { exact: true }).fill(name);
@@ -16,7 +16,9 @@ test('a project and a corpus made on the Projects page show as language › proj
   await newCorpus(page, corpus, 'es', name);
   const bar = context(page);
   await expect(bar).toBeVisible();
-  await expect(bar).toHaveText(new RegExp(`^\\s*Spanish\\s*›\\s*${escapeRegExp(name)}\\s*›\\s*${escapeRegExp(corpus)}\\s*$`));
+  await expect(bar).toContainText(name);
+  await expect(bar).toContainText(corpus);
+  await expect(bar).toContainText('ES');
 });
 
 test('switching: opening a corpus of another project changes the context', async ({ page }) => {
@@ -39,36 +41,15 @@ test('switching: opening a corpus of another project changes the context', async
 
   await page.getByRole('navigation').getByRole('link', { name: 'Sources' }).click();
   await expect(context(page).getByText(ca)).toBeVisible();
-  await expect(context(page).getByRole('link', { name: a })).toBeVisible();
+  await expect(context(page).getByText(a, { exact: true })).toBeVisible();
 
   await page.getByRole('navigation').getByRole('link', { name: 'Projects' }).click();
   await page.getByRole('button', { name: new RegExp(`^${escapeRegExp(b)}`) }).click();
   await page.getByRole('button', { name: `Open ${cb}` }).click();
   await page.getByRole('navigation').getByRole('link', { name: 'Sources' }).click();
   await expect(context(page).getByText(cb)).toBeVisible();
-  await expect(context(page).getByRole('link', { name: b })).toBeVisible();
+  await expect(context(page).getByText(b, { exact: true })).toBeVisible();
   await expect(context(page).getByText(ca)).toHaveCount(0);
-});
-
-test('quick switch: the rail selector changes the working corpus', async ({ page }) => {
-  const p = unique('Proj Q');
-  const c1 = unique('Quick 1');
-  const c2 = unique('Quick 2');
-  const id = (await (await page.request.post('/api/projects', { data: { name: p } })).json()).id;
-  for (const name of [c1, c2]) {
-    expect((await page.request.post('/api/corpora', { data: { name, lang: 'es', project_id: id } })).ok()).toBeTruthy();
-  }
-  await page.goto('/#/sources');
-  await page.reload();
-  const quick = page.getByLabel('Corpus', { exact: true });
-  // Start from the other corpus so each step below is a real switch.
-  await quick.selectOption({ label: c2 });
-  await expect(context(page).getByText(c2)).toBeVisible();
-  await quick.selectOption({ label: c1 });
-  await expect(context(page).getByText(c1)).toBeVisible();
-  await quick.selectOption({ label: c2 });
-  await expect(context(page).getByText(c2)).toBeVisible();
-  await expect(context(page).getByText(c1)).toHaveCount(0);
 });
 
 test('delete guard: a project with a corpus asks where the corpora go', async ({ page }) => {
