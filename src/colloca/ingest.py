@@ -360,6 +360,28 @@ def fetch_url(url: str, polite: bool = False) -> dict:
     return {"url": url, "title": title or urlparse(url).netloc, "text": text}
 
 
+MIN_ARTICLE_CHARS = 300
+_BOILERPLATE = re.compile(
+    r"enable javascript|javascript (is )?(required|disabled)|accept (all )?cookies|we use cookies|"
+    r"subscribe to (read|continue)|sign in to (read|continue)|"
+    r"aceptar (las |todas las )?cookies|(activa|habilita|activar|habilitar) javascript|suscr[ií]bete para|"
+    r"accetta (i|tutti i) cookie|abilita javascript|abbonati per|"
+    r"cookies? (policy|consent)|política de cookies", re.IGNORECASE)
+
+
+def extraction_warnings(page: dict, url: str) -> list[str]:
+    """Reasons to doubt that a fetched page is an article (the document is imported anyway)."""
+    text, title = page["text"], page["title"].strip()
+    out = []
+    if len(text) < MIN_ARTICLE_CHARS:
+        out.append(f"Very short text ({len(text)} characters): the page may not be an article.")
+    if _BOILERPLATE.search(text[:500]):
+        out.append("The text starts with cookie, JavaScript or paywall boilerplate: check the extraction.")
+    if title.lower() == (urlparse(url).hostname or "").lower():
+        out.append("The page has no title of its own (landing page or index?).")
+    return out
+
+
 READ_EXTENSIONS = (".docx", ".pdf", ".odt", ".rtf", ".xlsx", ".csv", ".tsv", ".xlf", ".xliff", ".srt", ".vtt",
                    ".txt", ".md", ".html", ".htm")
 
