@@ -2,10 +2,11 @@
 import math
 import random
 import sqlite3
+import time
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 
-from . import metadata
+from . import cql, metadata
 
 UNITS = {"lemma": "lemma", "form": "norm"}  # public name -> column (whitelist)
 
@@ -165,8 +166,13 @@ MIN_WILDCARD_LITERALS = 3
 MAX_ANY_ORDER_ROWS = 50_000
 
 
-def _parse_query(q: str, case_sensitive: bool = False, wild: bool = False) -> list[str]:
-    """The words of a query. `*` (only with `wild`) may start and/or end a word: `contrat*`, `*miento`."""
+def _parse_query(q: str, case_sensitive: bool = False, wild: bool = False, advanced: bool = False,
+                 unit: str = "lemma", accent_insensitive: bool = False):
+    """The words of a query. `*` (only with `wild`) may start and/or end a word: `contrat*`, `*miento`.
+    With `advanced` the query is read by the token-level grammar of `cql` and a `cql.Query` is returned instead
+    of a list of words."""
+    if advanced:
+        return cql.parse(q, "lemma" if _unit(unit) == "lemma" else "form", case_sensitive, accent_insensitive)
     terms = (q if case_sensitive else q.lower()).split()
     if not terms or len(terms) > 6:
         raise ValueError("Query must have 1-6 words")
@@ -181,14 +187,19 @@ def _parse_query(q: str, case_sensitive: bool = False, wild: bool = False) -> li
     return terms
 
 
-def _glob(term: str) -> str:
-    """Escape GLOB's own special characters (? [) in the literal part of a word; `*` stays a wildcard."""
-    return term.replace("[", "[[]").replace("?", "[?]")
+_glob = cql.glob_escape
 
 
-def _term_cond(alias: str, col: str, term: str, case_sensitive: bool, wild: bool) -> tuple[str, list]:
+def _term_cond(alias: str, col: str, term: str, case_sensitive: bool, wild: bool,
+               accent: bool = False) -> tuple[str, list]:
     """SQL condition and parameters matching one word on `alias`.`col`. Case-sensitive matching compares the
-    written `form`; the lower-cased column is still tested first so its index narrows the search."""
+    written `form`; the lower-cased column is still tested first so its index narrows the search.
+    `accent` compares the accent-stripped column (expression index of migration v8) with the stripped term."""
+    if accent:
+        value = cql.strip_accents(term)
+        if wild and "*" in term:
+            return f"colloca_ascii({alias}.{col}) GLOB ?", [_glob(value)]
+        return f"colloca_ascii({alias}.{col})=?", [value]
     if case_sensitive:
         lowered = term.lower()
         if wild and "*" in term:
@@ -199,7 +210,7 @@ def _term_cond(alias: str, col: str, term: str, case_sensitive: bool, wild: bool
     return f"{alias}.{col}=?", [term]
 
 
-def _find_hits(conn, scope, terms, col, case_sensitive=False, any_order=False, wild=False):
+def _find_hits(conn, scope, terms, col, case_sensitive=False, any_order=False, wild=False, accent=False):
     """Hits of the word sequence `terms` (matching on lemma or form): dicts with doc_id, pos (first token),
     sent, span (tokens from the first to the last matched word) and ps (positions of the matched words).
     With `any_order` the words may come in any
@@ -214,7 +225,7 @@ def _find_hits(conn, scope, terms, col, case_sensitive=False, any_order=False, w
                              + "".join(f"AND t{i}.pos<>t{j}.pos " for j in range(i)))
             else:
                 joins.append(f"JOIN tokens t{i} ON t{i}.doc_id=t0.doc_id AND t{i}.pos=t0.pos+{i}")
-        cond, p = _term_cond(f"t{i}", col, term, case_sensitive, wild)
+        cond, p = _term_cond(f"t{i}", col, term, case_sensitive, wild, accent)
         conds.append(cond)
         params += p
     select = "t0.doc_id, t0.sent, " + ", ".join(f"t{i}.pos AS p{i}" for i in range(len(terms)))
@@ -238,6 +249,88 @@ def _find_hits(conn, scope, terms, col, case_sensitive=False, any_order=False, w
     return out
 
 
+class _Deadline:
+    """Stops the SQL running on `conn` after `seconds` (SQLite calls the handler every few thousand VM steps)."""
+
+    def __init__(self, conn, seconds: float):
+        self.conn, self.end, self.hit = conn, time.monotonic() + seconds, False
+
+    def _check(self):
+        if time.monotonic() > self.end:
+            self.hit = True
+            return 1
+        return 0
+
+    def __enter__(self):
+        self.conn.set_progress_handler(self._check, cql.PROGRESS_STEPS)
+        return self
+
+    def __exit__(self, *exc):
+        self.conn.set_progress_handler(None, 0)
+
+
+def _hits_advanced(conn, scope, query: cql.Query):
+    """Hits of an advanced query (see cql): same dicts as `_find_hits`, plus nothing else. `hit_cap` tells the caller
+    when MAX_ROWS rows were reached, so the result is a prefix."""
+    w, scope_params = scope.where()
+    sql, params, _ = cql.compile_sql(query, w, list(scope_params))
+    out, seen = [], set()
+    with _Deadline(conn, cql.TIMEOUT_SECONDS) as dl:
+        try:
+            rows = conn.execute(sql, params).fetchall()
+        except sqlite3.OperationalError as exc:
+            if dl.hit or "interrupted" in str(exc):
+                raise ValueError(f"The query ran for more than {cql.TIMEOUT_SECONDS:g} seconds and was stopped; "
+                                 "make it more specific (a rarer word, a narrower gap, a smaller scope)") from exc
+            raise
+    capped = len(rows) > cql.MAX_ROWS
+    n = len(query.tokens)
+    for r in rows[:cql.MAX_ROWS]:
+        ps = [r[f"p{i}"] for i in range(n)]
+        key = (r["doc_id"], tuple(ps))
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append({"doc_id": r["doc_id"], "pos": ps[0], "sent": r["sent"], "span": ps[-1] - ps[0] + 1, "ps": ps})
+    out.sort(key=lambda h: (h["doc_id"], h["pos"], h["span"]))
+    return out, capped
+
+
+def search(conn, scope, q, unit="lemma", case_sensitive=False, any_order=False, advanced=False,
+           accent_insensitive=False):
+    """Everything a concordance-style query can ask: returns (hits, capped, parsed) where `parsed` is the query
+    in words (advanced only). Used by the concordance, the bilingual concordance and the equivalents."""
+    scope = as_scope(scope)
+    if accent_insensitive and case_sensitive:
+        raise ValueError("Case-sensitive and accent-insensitive cannot be combined")
+    if advanced:
+        if any_order:
+            raise ValueError("Any order cannot be combined with the advanced syntax; use gaps, as in tomar +3 NOUN")
+        query = _parse_query(q, case_sensitive, advanced=True, unit=unit, accent_insensitive=accent_insensitive)
+        hits, capped = _hits_advanced(conn, scope, query)
+        return hits, capped, cql.describe(query)
+    terms = _parse_query(q, case_sensitive, wild=True)
+    with _Deadline(conn, cql.TIMEOUT_SECONDS) as dl:
+        try:
+            hits = _find_hits(conn, scope, terms, _unit(unit), case_sensitive, any_order, wild=True,
+                              accent=accent_insensitive)
+        except sqlite3.OperationalError as exc:
+            if dl.hit or "interrupted" in str(exc):
+                raise ValueError(f"The query ran for more than {cql.TIMEOUT_SECONDS:g} seconds and was stopped; "
+                                 "make it more specific") from exc
+            raise
+    return hits, False, None
+
+
+def explain(q: str, unit="lemma", case_sensitive=False, advanced=False, accent_insensitive=False) -> str:
+    """The query in words, or a ValueError (QueryError carries `position`) saying what is wrong."""
+    if advanced:
+        return cql.describe(_parse_query(q, case_sensitive, advanced=True, unit=unit,
+                                         accent_insensitive=accent_insensitive))
+    terms = _parse_query(q, case_sensitive, wild=True)
+    return ", then ".join(f'"{t}"' for t in terms)
+
+
 def _join(rows) -> str:
     return "".join(r["form"] + (" " if r["sp"] else "") for r in rows).strip()
 
@@ -252,16 +345,17 @@ def _sort_key(sort: str):
 
 
 def concordance(conn, scope, q, unit="lemma", width=8, limit=300, sort="doc",
-                case_sensitive=False, any_order=False, sample=None):
+                case_sensitive=False, any_order=False, sample=None, advanced=False, accent_insensitive=False):
     """KWIC lines. `case_sensitive` matches the written form exactly, `*` is a wildcard at the start or end of
     a word, `any_order` finds the words anywhere in one sentence, and `sample` (a seed) returns a reproducible
-    random selection of `limit` hits instead of the first ones. `total` is always the number of hits found."""
+    random selection of `limit` hits instead of the first ones. `total` is always the number of hits found.
+    `advanced` reads `q` with the token-level grammar of `cql` (regex, part of speech, gaps, `|`) and adds the
+    query in words as `parsed`; `accent_insensitive` makes `cafe` find `café` in either syntax."""
     scope = as_scope(scope)
     if sort not in SORTS:
         raise ValueError(f"sort must be one of {', '.join(SORTS)}")
-    col = _unit(unit)
-    terms = _parse_query(q, case_sensitive, wild=True)
-    hits = _find_hits(conn, scope, terms, col, case_sensitive, any_order, wild=True)
+    _unit(unit)
+    hits, capped, parsed = search(conn, scope, q, unit, case_sensitive, any_order, advanced, accent_insensitive)
     total = len(hits)
     if sample is not None and total > limit:
         keep = sorted(random.Random(sample).sample(range(total), limit))   # context is fetched for these only
@@ -286,7 +380,10 @@ def concordance(conn, scope, q, unit="lemma", width=8, limit=300, sort="doc",
     lines = lines[:limit]
     for ln in lines:
         ln.pop("_l"), ln.pop("_r")
-    return {"total": total, "lines": lines}
+    res = {"total": total, "lines": lines}
+    if advanced:
+        res["parsed"], res["capped"] = parsed, capped
+    return res
 
 
 def examples(conn, scope, q, unit="lemma", limit=5):

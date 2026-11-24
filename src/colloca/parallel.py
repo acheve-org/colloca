@@ -261,7 +261,8 @@ def _runs(toks: list[dict]) -> list[dict]:
 
 
 def bilingual_concordance(conn, scope, q, unit="lemma", width=8, limit=300, sort="doc",
-                          case_sensitive=False, any_order=False, sample=None):
+                          case_sensitive=False, any_order=False, sample=None, advanced=False,
+                          accent_insensitive=False):
     """Concordance restricted to aligned documents; every line also carries its whole segment and the
     aligned translation. Works from either side: run it on the target corpus to search the translations.
 
@@ -269,14 +270,15 @@ def bilingual_concordance(conn, scope, q, unit="lemma", width=8, limit=300, sort
     `target_marks` (the likely equivalent: an approved termbase translation, else the best statistical
     candidate of `equivalents`; `guess` is true for the statistical ones, `score` is their Dice)."""
     scope = replace(analysis.as_scope(scope), paired_only=True)
-    res = analysis.concordance(conn, scope, q, unit, width, limit, sort, case_sensitive, any_order, sample)
+    res = analysis.concordance(conn, scope, q, unit, width, limit, sort, case_sensitive, any_order, sample,
+                               advanced, accent_insensitive)
     approved: list[tuple[list[str], float, bool]] = []       # computed once per search, not once per line
     guesses: list[tuple[list[str], float, bool]] = []
     if res["lines"]:
-        for term in _termbase_translations(conn, scope.corpus_id, q):
+        for term in ([] if advanced else _termbase_translations(conn, scope.corpus_id, q)):
             approved.append((term.lower().split(), 1.0, False))
         rows = equivalents(conn, scope, q, unit, limit=100, case_sensitive=case_sensitive,
-                           any_order=any_order)["rows"]
+                           any_order=any_order, advanced=advanced, accent_insensitive=accent_insensitive)["rows"]
         if rows:
             # One guess per search. Ties on Dice (common in small memories, where every word of the
             # segments co-occurs) go to the candidate that looks most like the query (cognates in es/it).
@@ -323,13 +325,12 @@ def bilingual_concordance(conn, scope, q, unit="lemma", width=8, limit=300, sort
 
 
 def equivalents(conn, scope, q, unit="lemma", min_freq=2, exclude_stop=True, pos=None, limit=100,
-                case_sensitive=False, any_order=False):
+                case_sensitive=False, any_order=False, advanced=False, accent_insensitive=False):
     """Candidate translation equivalents of a source word or phrase: the target-language lemmas that keep
     turning up in the aligned segments of its occurrences, scored by Dice against how often each lemma
     occurs in the target segments overall (so everyday words that occur everywhere do not win)."""
     scope = replace(analysis.as_scope(scope), paired_only=True)
-    terms = analysis._parse_query(q, case_sensitive, wild=True)
-    hits = analysis._find_hits(conn, scope, terms, analysis._unit(unit), case_sensitive, any_order, wild=True)
+    hits, _, _ = analysis.search(conn, scope, q, unit, case_sensitive, any_order, advanced, accent_insensitive)
     cache: dict = {}
     segments: set[tuple[int, int]] = set()          # (source doc, segment) containing the term
     for h in hits:
