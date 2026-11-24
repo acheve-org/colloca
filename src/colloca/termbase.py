@@ -1,7 +1,7 @@
 """Termbase: validation and queries for the (source term, translation) entries of a project."""
 import re
 
-from . import nlp
+from . import nlp, trash
 
 # approved = the preferred term, admitted = an acceptable alternative, superseded = obsolete, forbidden = do not use
 STATUSES = ("candidate", "approved", "admitted", "superseded", "forbidden")
@@ -95,7 +95,7 @@ def list_terms(conn, project: str = "", src_lang: str = "", tgt_lang: str = "",
                domain: str = "", pos: str = "", modified_since: str = "") -> list[dict]:
     """Entries of a project, filtered and sorted in SQL so a large termbase is cut after sorting, not before.
     `domain` matches exactly (case-insensitive), `pos` exactly, `modified_since` is an ISO date (YYYY-MM-DD)."""
-    where, params = [project_where(project)[0]], project_where(project)[1]
+    where, params = [project_where(project)[0], "t.deleted_at IS NULL"], project_where(project)[1]
     if src_lang:
         where.append("t.src_lang=?")
         params.append(src_lang)
@@ -154,7 +154,15 @@ def bulk_update(conn, ids: list[int], *, status: str | None = None, domain: str 
 
 
 def bulk_delete(conn, ids: list[int]) -> int:
+    """Move entries to the Trash (see trash.py)."""
     if not ids:
         raise TermError("No entries selected")
-    cur = conn.execute(f"DELETE FROM terms WHERE id IN ({','.join('?' * len(ids))})", ids)
-    return cur.rowcount
+    return trash.trash_terms(conn, ids)
+
+
+def drop_trashed_twin(conn, project_id: int | None, src_lang: str, tgt_lang: str, src_term: str, tgt_term: str,
+                      keep_id: int | None = None) -> None:
+    """A trashed entry still occupies its place in the unique index; a live entry with the same key replaces it."""
+    conn.execute("""DELETE FROM terms WHERE deleted_at IS NOT NULL AND IFNULL(project_id,0)=? AND src_lang=?
+                    AND tgt_lang=? AND lower(src_term)=lower(?) AND lower(tgt_term)=lower(?) AND id IS NOT ?""",
+                 (project_id or 0, src_lang, tgt_lang, src_term, tgt_term, keep_id))

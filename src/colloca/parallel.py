@@ -157,7 +157,7 @@ def import_pairs(corpus_id: int, partner_id: int, filename: str, data: bytes, sw
 
     def work(job) -> dict:
         with db.session() as conn:
-            langs = [conn.execute("SELECT lang FROM corpora WHERE id=?", (i,)).fetchone()
+            langs = [conn.execute("SELECT lang FROM corpora WHERE id=? AND deleted_at IS NULL", (i,)).fetchone()
                      for i in (corpus_id, partner_id)]
         if not all(langs):
             raise importer.ImportRejected(404, "Corpus no longer exists", "gone")
@@ -174,8 +174,8 @@ def import_pairs(corpus_id: int, partner_id: int, filename: str, data: bytes, sw
                 job.set_progress((n + (side + f) / 2) / len(parts))
 
             with db.session() as conn:
-                a = conn.execute("SELECT * FROM corpora WHERE id=?", (corpus_id,)).fetchone()
-                b = conn.execute("SELECT * FROM corpora WHERE id=?", (partner_id,)).fetchone()
+                a = conn.execute("SELECT * FROM corpora WHERE id=? AND deleted_at IS NULL", (corpus_id,)).fetchone()
+                b = conn.execute("SELECT * FROM corpora WHERE id=? AND deleted_at IS NULL", (partner_id,)).fetchone()
                 if not a or not b:
                     raise importer.ImportRejected(404, "Corpus no longer exists", "gone")
                 try:
@@ -228,7 +228,8 @@ def segment_text(conn, doc_id: int, start: int, end: int) -> str:
 
 def _pair_of(conn, cache: dict, doc_id: int):
     if doc_id not in cache:
-        row = conn.execute("SELECT pair_doc_id FROM documents WHERE id=?", (doc_id,)).fetchone()
+        live = analysis.PARTNER_LIVE.format(a="d")
+        row = conn.execute(f"SELECT d.pair_doc_id FROM documents d WHERE d.id=? AND {live}", (doc_id,)).fetchone()
         cache[doc_id] = row["pair_doc_id"] if row else None
     return cache[doc_id]
 
@@ -250,7 +251,7 @@ def _termbase_translations(conn, corpus_id: int, query: str) -> list[str]:
         for r in conn.execute(
                 f"""SELECT {tgt}_term AS term FROM terms
                     WHERE status='approved' AND {src}_lang=? AND lower({src}_term)=? AND {tgt}_term<>''
-                      AND (project_id IS NULL OR project_id IS ?)
+                      AND (project_id IS NULL OR project_id IS ?) AND deleted_at IS NULL
                     ORDER BY project_id IS NULL, id""", (c["lang"], q, c["project_id"])):
             if r["term"] not in out:
                 out.append(r["term"])
@@ -374,13 +375,14 @@ def equivalents(conn, scope, q, unit="lemma", min_freq=2, exclude_stop=True, pos
         co.update(seen)
     cands = [lemma for lemma, c in co.items() if c >= min_freq]
     totals: dict[str, int] = {}
+    live = analysis.PARTNER_LIVE.format(a="d")
     w, params = scope.where()
     for i in range(0, len(cands), 500):
         chunk = cands[i:i + 500]
         for r in conn.execute(
                 f"""SELECT t.lemma AS lemma, COUNT(DISTINCT t.doc_id || ':' || s.seg) AS n
                     FROM tokens t JOIN segments s ON s.doc_id=t.doc_id AND t.pos>=s.start_pos AND t.pos<s.end_pos
-                    WHERE t.doc_id IN (SELECT d.pair_doc_id FROM documents d WHERE {w})
+                    WHERE t.doc_id IN (SELECT d.pair_doc_id FROM documents d WHERE {w} AND {live})
                       AND t.alpha=1 AND t.lemma IN ({",".join("?" * len(chunk))})
                     GROUP BY t.lemma""", [*params, *chunk]):
             totals[r["lemma"]] = r["n"]

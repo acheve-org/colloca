@@ -21,7 +21,8 @@ def _terms_in_scope(conn, corpus) -> list[dict]:
     source term, produced by the same tokenizer and lemmatizer as the text, so inflected entries match."""
     where = "t.project_id IS NULL" if corpus["project_id"] is None else "t.project_id=?"
     params = [] if corpus["project_id"] is None else [corpus["project_id"]]
-    rows = [dict(r) for r in conn.execute(f"SELECT t.* FROM terms t WHERE {where} AND t.src_lang=? ORDER BY t.id",
+    rows = [dict(r) for r in conn.execute(f"SELECT t.* FROM terms t WHERE {where} AND t.src_lang=? "
+                                          "AND t.deleted_at IS NULL ORDER BY t.id",
                                           [*params, corpus["lang"]])]
     rows = [r for r in rows if r["src_term"].split()]
     if not rows:

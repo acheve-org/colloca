@@ -16,7 +16,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field
 from typing import ClassVar
 
-from . import db, dedup, ingest, langcheck, metadata, nlp
+from . import db, dedup, ingest, langcheck, metadata, nlp, trash
 
 log = logging.getLogger("colloca.importer")
 
@@ -52,9 +52,12 @@ def add_document(conn, corpus, title: str, text: str, source: str, kind: str, me
         raise ImportRejected(413, f"Text is larger than {ingest.MAX_TEXT_CHARS // 1024 // 1024} MB "
                                   "(raise MAX_TEXT_MB or split the document)", "too_large")
     digest = hashlib.sha256(" ".join(text.split()).lower().encode()).hexdigest()
-    if conn.execute("SELECT 1 FROM documents WHERE corpus_id=? AND text_hash=?",
-                    (corpus["id"], digest)).fetchone():
-        raise ImportRejected(409, "An identical document is already in this corpus", "duplicate")
+    twin = conn.execute("SELECT deleted_at FROM documents WHERE corpus_id=? AND text_hash=?",
+                        (corpus["id"], digest)).fetchone()
+    if twin:
+        raise ImportRejected(409, "An identical document is already in this corpus"
+                             + (" (in the Trash: restore it from there)" if twin["deleted_at"] else ""),
+                             "duplicate")
     fingerprint = dedup.sketch(text)
     replaced = None if dedup.exempt(kind, segmented) else _near_duplicates(
         conn, corpus, text, fingerprint, similar, dedup.THRESHOLD if threshold is None else threshold)
@@ -74,7 +77,7 @@ def add_document(conn, corpus, title: str, text: str, source: str, kind: str, me
         raise ImportRejected(500, "A segment produced no tokens, so the alignment would be off", "alignment")
     n_alpha = sum(t[6] for t in tokens)
     if replaced:
-        conn.execute("DELETE FROM documents WHERE id=?", (replaced["id"],))
+        trash.trash_documents(conn, [replaced["id"]])      # recoverable from the Trash
     cur = conn.execute(
         """INSERT INTO documents (corpus_id,title,source,kind,text,text_hash,n_tokens,pipeline,lang_check,
                                   text_type,doc_date,author,segmented,fingerprint)
@@ -103,8 +106,8 @@ def _near_duplicates(conn, corpus, text: str, fingerprint: bytes, policy: str, t
     `near_duplicate` for policy "warn", and returns None when nothing is close or the policy is "import"."""
     dedup.ensure_fingerprints(conn, corpus["id"])
     known = [(r["id"], r["fingerprint"]) for r in conn.execute(
-        "SELECT id, fingerprint FROM documents WHERE corpus_id=? AND segmented=0 AND kind<>'sentences' "
-        "AND fingerprint IS NOT NULL", (corpus["id"],))]
+        "SELECT id, fingerprint FROM documents WHERE corpus_id=? AND deleted_at IS NULL AND segmented=0 "
+        "AND kind<>'sentences' AND fingerprint IS NOT NULL", (corpus["id"],))]
     found = dedup.find_similar(fingerprint, known, threshold)
     if not found:
         return None
@@ -187,7 +190,7 @@ def import_sentence_chunks(corpus_id: int, chunks: Iterable[list[str]], title: s
             if progress and total_chunks:
                 progress((i + fraction) / total_chunks)
         with db.session() as conn:
-            corpus = conn.execute("SELECT * FROM corpora WHERE id=?", (corpus_id,)).fetchone()
+            corpus = conn.execute("SELECT * FROM corpora WHERE id=? AND deleted_at IS NULL", (corpus_id,)).fetchone()
             if not corpus:
                 raise ImportRejected(404, "Corpus no longer exists", "gone")
             try:
@@ -314,7 +317,7 @@ def import_text(corpus_id: int, title: str, text: str, source: str, kind: str, m
                 force_language: bool, similar: str = "warn") -> Callable[[Job], dict]:
     def work(job: Job) -> dict:
         with db.session() as conn:
-            corpus = conn.execute("SELECT * FROM corpora WHERE id=?", (corpus_id,)).fetchone()
+            corpus = conn.execute("SELECT * FROM corpora WHERE id=? AND deleted_at IS NULL", (corpus_id,)).fetchone()
             if not corpus:
                 raise ImportRejected(404, "Corpus no longer exists", "gone")
             return add_document(conn, corpus, title, text, source, kind, meta, force_language,
@@ -333,7 +336,7 @@ def import_file(corpus_id: int, filename: str, data: bytes, meta: dict,
             return import_sentence_chunks(corpus_id, chunk_sentences(lines), filename, filename,
                                           force_language, count_chunks(len(lines)), job.set_progress)
         with db.session() as conn:
-            row = conn.execute("SELECT lang FROM corpora WHERE id=?", (corpus_id,)).fetchone()
+            row = conn.execute("SELECT lang FROM corpora WHERE id=? AND deleted_at IS NULL", (corpus_id,)).fetchone()
         if not row:
             raise ImportRejected(404, "Corpus no longer exists", "gone")
         parsed = ingest.read_file(filename, data, row["lang"], columns, lambda f: job.set_progress(f * 0.3))
@@ -346,12 +349,13 @@ def import_file(corpus_id: int, filename: str, data: bytes, meta: dict,
 def reannotate_corpus(corpus_id: int, only_stale: bool) -> Callable[[Job], dict]:
     def work(job: Job) -> dict:
         with db.session() as conn:
-            corpus = conn.execute("SELECT lang FROM corpora WHERE id=?", (corpus_id,)).fetchone()
+            corpus = conn.execute("SELECT lang FROM corpora WHERE id=? AND deleted_at IS NULL", (corpus_id,)).fetchone()
             if not corpus:
                 raise ImportRejected(404, "Corpus no longer exists", "gone")
             current = nlp.pipeline_name(corpus["lang"])
             docs = [(r["id"], r["title"]) for r in conn.execute(
-                "SELECT id, title, pipeline FROM documents WHERE corpus_id=? ORDER BY id", (corpus_id,))
+                "SELECT id, title, pipeline FROM documents WHERE corpus_id=? AND deleted_at IS NULL ORDER BY id",
+                (corpus_id,))
                 if not only_stale or is_stale(r["pipeline"], current)]
         updated, failed = 0, []
         for i, (doc_id, title) in enumerate(docs):

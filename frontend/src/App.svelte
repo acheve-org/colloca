@@ -22,6 +22,7 @@
   import Sources from './screens/Sources.svelte';
   import Candidates from './screens/Candidates.svelte';
   import Termbase from './screens/Termbase.svelte';
+  import Trash from './screens/Trash.svelte';
   import TermDialog from './screens/TermDialog.svelte';
   import WordCloud from './screens/WordCloud.svelte';
 
@@ -40,6 +41,7 @@
     candidates: Candidates,
     check: CheckText,
     job: Job,
+    trash: Trash,
   };
   const Screen = $derived(SCREEN_COMPONENTS[route.screen]);
 

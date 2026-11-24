@@ -40,7 +40,8 @@ def _index(conn, project_id: int | None, lang: str) -> tuple[dict, int]:
     matched in a text of `lang`, plus the longest key. Rebuilt only when the termbase changed."""
     rows = [dict(r) for r in conn.execute(
         """SELECT id, src_term, tgt_term, status, src_lang, tgt_lang FROM terms
-           WHERE (project_id IS NULL OR project_id IS ?) AND (src_lang=? OR tgt_lang=?) ORDER BY id""",
+           WHERE (project_id IS NULL OR project_id IS ?) AND (src_lang=? OR tgt_lang=?) AND deleted_at IS NULL
+           ORDER BY id""",
         (project_id, lang, lang))]
     fingerprint = hash(tuple(tuple(r.values()) for r in rows))
     cached = _INDEX.get((project_id, lang))

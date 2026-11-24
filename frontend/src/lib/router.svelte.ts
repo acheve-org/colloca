@@ -11,11 +11,12 @@ export type ScreenId =
   | 'termbase'
   | 'candidates'
   | 'check'
-  | 'job';
+  | 'job'
+  | 'trash';
 
 export const SCREENS: readonly ScreenId[] = [
   'sources', 'base', 'concordance', 'collocations', 'ngrams', 'frequency',
-  'keyness', 'cloud', 'equivalents', 'termbase', 'candidates', 'check', 'job',
+  'keyness', 'cloud', 'equivalents', 'termbase', 'candidates', 'check', 'job', 'trash',
 ];
 
 function parse(hash: string): { screen: ScreenId; params: Record<string, string> } {

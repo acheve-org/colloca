@@ -32,13 +32,14 @@ def _version(conn, project_id, lang) -> tuple:
     return tuple(conn.execute(
         f"""SELECT COUNT(*), IFNULL(MAX(id), 0), IFNULL(MAX(updated), ''),
                    IFNULL(SUM(length(src_term) + length(status)), 0)
-            FROM terms WHERE {where} AND src_lang=?""", [*params, lang]).fetchone())
+            FROM terms WHERE {where} AND src_lang=? AND deleted_at IS NULL""", [*params, lang]).fetchone())
 
 
 def _build(conn, project_id, lang) -> dict[str, str]:
     where, params = ("project_id IS NULL", []) if project_id is None else ("project_id=?", [project_id])
     rows = [dict(r) for r in conn.execute(
-        f"SELECT src_term, status FROM terms WHERE {where} AND src_lang=? ORDER BY id", [*params, lang])]
+        f"SELECT src_term, status FROM terms WHERE {where} AND src_lang=? AND deleted_at IS NULL ORDER BY id",
+        [*params, lang])]
     rows = [r for r in rows if r["src_term"].split()]
     if not rows:
         return {}

@@ -12,14 +12,16 @@ from typing import Literal
 
 import spacy
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from starlette.background import BackgroundTask
 from starlette.concurrency import run_in_threadpool
 
 from . import (
     align,
     analysis,
+    backup,
     candidates,
     db,
     dedup,
@@ -35,6 +37,7 @@ from . import (
     termexport,
     termhits,
     termimport,
+    trash,
 )
 
 
@@ -42,6 +45,8 @@ from . import (
 async def lifespan(_app):
     logsetup.configure()
     db.init_db()
+    with db.session() as conn:
+        trash.purge_expired(conn)
     yield
 
 
@@ -72,7 +77,7 @@ STATIC = os.environ.get("COLLOCA_STATIC_DIR") or os.path.join(os.path.dirname(__
 
 # --------------------------------------------------------------------------- helpers
 def _corpus(conn, corpus_id: int):
-    row = conn.execute("SELECT * FROM corpora WHERE id=?", (corpus_id,)).fetchone()
+    row = conn.execute("SELECT * FROM corpora WHERE id=? AND deleted_at IS NULL", (corpus_id,)).fetchone()
     if not row:
         raise HTTPException(404, "Corpus not found")
     return row
@@ -170,7 +175,7 @@ def list_projects():
     with db.session() as conn:
         rows = conn.execute(
             """SELECT p.*, COUNT(c.id) AS corpora FROM projects p
-               LEFT JOIN corpora c ON c.project_id=p.id AND c.is_reference=0
+               LEFT JOIN corpora c ON c.project_id=p.id AND c.is_reference=0 AND c.deleted_at IS NULL
                GROUP BY p.id ORDER BY p.name COLLATE NOCASE""").fetchall()
         return [dict(r) for r in rows]
 
@@ -234,8 +239,8 @@ def status():
 
 
 _CORPUS_STATS = """SELECT c.*, COUNT(d.id) AS docs, COALESCE(SUM(d.n_tokens),0) AS tokens
-                   FROM corpora c LEFT JOIN documents d ON d.corpus_id=c.id
-                   WHERE c.is_reference=? GROUP BY c.id ORDER BY c.id"""
+                   FROM corpora c LEFT JOIN documents d ON d.corpus_id=c.id AND d.deleted_at IS NULL
+                   WHERE c.is_reference=? AND c.deleted_at IS NULL GROUP BY c.id ORDER BY c.id"""
 
 
 @app.get("/api/corpora")
@@ -305,10 +310,10 @@ def update_corpus(corpus_id: int, body: CorpusPatch):
 
 @app.delete("/api/corpora/{corpus_id}", status_code=204)
 def delete_corpus(corpus_id: int):
+    """Moves the corpus (with its documents) to the Trash; DELETE /api/trash removes it for good."""
     with db.session() as conn:
         _corpus(conn, corpus_id)
-        conn.execute("DELETE FROM corpora WHERE id=?", (corpus_id,))
-    importer.forget_jobs(corpus_id)
+        trash.trash_corpus(conn, corpus_id)
 
 
 # --------------------------------------------------------------------------- documents
@@ -357,7 +362,7 @@ def preview_url(body: UrlIn):
 def _tags_by_doc(conn, corpus_id: int) -> dict[int, list[str]]:
     out: dict[int, list[str]] = {}
     for r in conn.execute("""SELECT g.doc_id, g.tag FROM doc_tags g JOIN documents d ON d.id=g.doc_id
-                             WHERE d.corpus_id=? ORDER BY g.tag""", (corpus_id,)):
+                             WHERE d.corpus_id=? AND d.deleted_at IS NULL ORDER BY g.tag""", (corpus_id,)):
         out.setdefault(r["doc_id"], []).append(r["tag"])
     return out
 
@@ -367,9 +372,10 @@ def list_documents(corpus_id: int):
     with db.session() as conn:
         corpus = _corpus(conn, corpus_id)
         rows = conn.execute(
-            """SELECT id,title,source,kind,text_type,doc_date,author,n_tokens,pipeline,lang_check,added,
-                      segmented,pair_doc_id,LENGTH(text) AS chars
-               FROM documents WHERE corpus_id=? ORDER BY id""", (corpus_id,)).fetchall()
+            f"""SELECT id,title,source,kind,text_type,doc_date,author,n_tokens,pipeline,lang_check,added,
+                      segmented,LENGTH(text) AS chars,
+                      CASE WHEN {analysis.PARTNER_LIVE.format(a='documents')} THEN pair_doc_id END AS pair_doc_id
+               FROM documents WHERE corpus_id=? AND deleted_at IS NULL ORDER BY id""", (corpus_id,)).fetchall()
         tags = _tags_by_doc(conn, corpus_id)
     try:
         current = nlp.pipeline_name(corpus["lang"])
@@ -550,13 +556,15 @@ def parallel_info(corpus_id: int):
     """Aligned documents of this corpus and the corpora holding their translations."""
     with db.session() as conn:
         _corpus(conn, corpus_id)
-        row = conn.execute("""SELECT COUNT(*) AS docs, COALESCE(SUM(s.n),0) AS segments FROM documents d
+        row = conn.execute(f"""SELECT COUNT(*) AS docs, COALESCE(SUM(s.n),0) AS segments FROM documents d
                               LEFT JOIN (SELECT doc_id, COUNT(*) AS n FROM segments GROUP BY doc_id) s ON s.doc_id=d.id
-                              WHERE d.corpus_id=? AND d.segmented=1 AND d.pair_doc_id IS NOT NULL""",
+                              WHERE d.corpus_id=? AND d.deleted_at IS NULL AND d.segmented=1
+                                AND {analysis.PARTNER_LIVE.format(a='d')}""",
                            (corpus_id,)).fetchone()
         partners = conn.execute("""SELECT DISTINCT c.id, c.name, c.lang FROM documents d
                                    JOIN documents p ON p.id=d.pair_doc_id JOIN corpora c ON c.id=p.corpus_id
-                                   WHERE d.corpus_id=? ORDER BY c.name""", (corpus_id,)).fetchall()
+                                   WHERE d.corpus_id=? AND d.deleted_at IS NULL AND p.deleted_at IS NULL
+                                     AND c.deleted_at IS NULL ORDER BY c.name""", (corpus_id,)).fetchall()
         return {"documents": row["docs"], "segments": row["segments"], "partners": [dict(r) for r in partners]}
 
 
@@ -707,7 +715,8 @@ def reannotate(corpus_id: int, only_stale: bool = True):
 @app.get("/api/documents/{doc_id}")
 def get_document(doc_id: int):
     with db.session() as conn:
-        row = conn.execute("SELECT * FROM documents WHERE id=?", (doc_id,)).fetchone()
+        row = conn.execute("""SELECT d.* FROM documents d JOIN corpora c ON c.id=d.corpus_id
+                              WHERE d.id=? AND d.deleted_at IS NULL AND c.deleted_at IS NULL""", (doc_id,)).fetchone()
         if not row:
             raise HTTPException(404, "Document not found")
         tags = [r[0] for r in conn.execute("SELECT tag FROM doc_tags WHERE doc_id=? ORDER BY tag", (doc_id,))]
@@ -736,7 +745,8 @@ def update_document(doc_id: int, body: DocPatch):
     """Edit a document's title and metadata (only the fields you send are changed)."""
     sent = body.model_fields_set
     with db.session() as conn:
-        row = conn.execute("SELECT * FROM documents WHERE id=?", (doc_id,)).fetchone()
+        row = conn.execute("""SELECT d.* FROM documents d JOIN corpora c ON c.id=d.corpus_id
+                              WHERE d.id=? AND d.deleted_at IS NULL AND c.deleted_at IS NULL""", (doc_id,)).fetchone()
         if not row:
             raise HTTPException(404, "Document not found")
         if "title" in sent and body.title:
@@ -754,8 +764,9 @@ def update_document(doc_id: int, body: DocPatch):
 
 @app.delete("/api/documents/{doc_id}", status_code=204)
 def delete_document(doc_id: int):
+    """Moves the document to the Trash (its metadata and aligned-partner link are kept for a restore)."""
     with db.session() as conn:
-        conn.execute("DELETE FROM documents WHERE id=?", (doc_id,))
+        trash.trash_documents(conn, [doc_id])
 
 
 @app.get("/api/corpora/{corpus_id}/facets")
@@ -764,11 +775,13 @@ def facets(corpus_id: int):
     with db.session() as conn:
         _corpus(conn, corpus_id)
         tags = conn.execute("""SELECT g.tag AS tag, COUNT(*) AS docs FROM doc_tags g JOIN documents d ON d.id=g.doc_id
-                               WHERE d.corpus_id=? GROUP BY g.tag ORDER BY docs DESC, tag""", (corpus_id,))
-        types = conn.execute("""SELECT text_type, COUNT(*) AS docs FROM documents WHERE corpus_id=? AND text_type<>''
+                               WHERE d.corpus_id=? AND d.deleted_at IS NULL
+                               GROUP BY g.tag ORDER BY docs DESC, tag""", (corpus_id,))
+        types = conn.execute("""SELECT text_type, COUNT(*) AS docs FROM documents
+                                WHERE corpus_id=? AND deleted_at IS NULL AND text_type<>''
                                 GROUP BY text_type ORDER BY docs DESC, text_type""", (corpus_id,))
         dates = conn.execute("""SELECT MIN(doc_date), MAX(doc_date) FROM documents
-                                WHERE corpus_id=? AND doc_date<>''""", (corpus_id,)).fetchone()
+                                WHERE corpus_id=? AND deleted_at IS NULL AND doc_date<>''""", (corpus_id,)).fetchone()
         return {"tags": [dict(r) for r in tags], "text_types": [dict(r) for r in types],
                 "date_min": dates[0] or "", "date_max": dates[1] or ""}
 
@@ -990,6 +1003,8 @@ def create_term(body: TermIn):
     with db.session() as conn:
         if body.project_id is not None:
             _project(conn, body.project_id)
+        termbase.drop_trashed_twin(conn, body.project_id, entry["src_lang"], entry["tgt_lang"], entry["src_term"],
+                                   entry["tgt_term"])
         try:
             cur = conn.execute(
                 """INSERT INTO terms (project_id,src_lang,tgt_lang,src_term,tgt_term,pos,status,domain,definition,
@@ -1037,7 +1052,7 @@ def bulk_delete_terms(body: TermIds):
 def update_term(term_id: int, body: TermPatch):
     sent = {k: getattr(body, k) for k in body.model_fields_set}
     with db.session() as conn:
-        row = conn.execute("SELECT * FROM terms WHERE id=?", (term_id,)).fetchone()
+        row = conn.execute("SELECT * FROM terms WHERE id=? AND deleted_at IS NULL", (term_id,)).fetchone()
         if not row:
             raise HTTPException(404, "Term not found")
         try:
@@ -1049,6 +1064,9 @@ def update_term(term_id: int, body: TermPatch):
             raise _term_error(exc) from exc
         if changes:
             cols = ", ".join(f"{k}=?" for k in changes)
+            merged = {**dict(row), **changes}
+            termbase.drop_trashed_twin(conn, row["project_id"], merged["src_lang"], merged["tgt_lang"],
+                                       merged["src_term"], merged["tgt_term"], keep_id=term_id)
             try:
                 conn.execute(f"UPDATE terms SET {cols}, updated=CURRENT_TIMESTAMP WHERE id=?",
                              [*changes.values(), term_id])
@@ -1059,8 +1077,9 @@ def update_term(term_id: int, body: TermPatch):
 
 @app.delete("/api/terms/{term_id}", status_code=204)
 def delete_term(term_id: int):
+    """Moves the entry to the Trash."""
     with db.session() as conn:
-        conn.execute("DELETE FROM terms WHERE id=?", (term_id,))
+        trash.trash_terms(conn, [term_id])
 
 
 _EXPORTS = {"csv": ("text/csv; charset=utf-8", "csv"), "xlsx": (
@@ -1175,6 +1194,126 @@ class _StaticApp:
             await HTMLResponse(_UI_MISSING, status_code=503)(scope, receive, send)
             return
         await StaticFiles(directory=STATIC, html=True)(scope, receive, send)
+
+
+# --------------------------------------------------------------------------- Trash
+@app.get("/api/trash")
+def list_trash():
+    """Everything that was deleted and can still be restored (corpora, documents, terms) and the retention."""
+    with db.session() as conn:
+        trash.purge_expired(conn)
+        return trash.listing(conn)
+
+
+class TrashItems(BaseModel):
+    kind: Literal["corpus", "document", "term"]
+    ids: list[int] = Field(max_length=20000)
+
+
+class TrashSettings(BaseModel):
+    retention_days: int = Field(ge=0, le=trash.MAX_DAYS)
+
+
+@app.put("/api/trash/settings")
+def trash_settings(body: TrashSettings):
+    """How long deleted items stay in the Trash (days; 0 = until emptied by hand)."""
+    with db.session() as conn:
+        return {"retention_days": trash.set_retention_days(conn, body.retention_days)}
+
+
+@app.post("/api/trash/restore")
+def restore_from_trash(body: TrashItems):
+    try:
+        with db.session() as conn:
+            return {"restored": trash.restore(conn, body.kind, body.ids)}
+    except trash.TrashError as exc:
+        raise HTTPException(exc.status, str(exc)) from exc
+
+
+@app.post("/api/trash/delete")
+def delete_from_trash(body: TrashItems):
+    """Permanently removes the chosen items (they must already be in the Trash). This cannot be undone."""
+    try:
+        with db.session() as conn:
+            gone = trash.trashed_corpus_ids(conn, body.ids) if body.kind == "corpus" else []
+            removed = trash.delete_forever(conn, body.kind, body.ids)
+    except trash.TrashError as exc:
+        raise HTTPException(exc.status, str(exc)) from exc
+    for corpus_id in gone:
+        importer.forget_jobs(corpus_id)
+    return {"deleted": removed}
+
+
+@app.delete("/api/trash")
+def empty_trash(confirm: bool = False):
+    """Permanently removes everything in the Trash; needs `confirm=true`."""
+    if not confirm:
+        raise HTTPException(400, "Emptying the Trash cannot be undone: pass confirm=true")
+    with db.session() as conn:
+        gone = [r[0] for r in conn.execute("SELECT id FROM corpora WHERE deleted_at IS NOT NULL")]
+        removed = trash.empty(conn)
+    for corpus_id in gone:
+        importer.forget_jobs(corpus_id)
+    return {"deleted": removed}
+
+
+# --------------------------------------------------------------------------- backup and restore
+def _zip_response(path: str, name: str) -> FileResponse:
+    return FileResponse(path, media_type="application/zip", filename=name, background=BackgroundTask(os.unlink, path))
+
+
+@app.get("/api/backup")
+def backup_database(include_sqlite: bool = True):
+    """The whole database as one zip: portable data.json (+ a consistent SQLite copy with tokens). Trash excluded."""
+    with db.session() as conn:
+        path = backup.write_zip(conn, None, with_db=include_sqlite)
+    return _zip_response(path, f"colloca-backup-{time.strftime('%Y%m%d-%H%M%S')}.zip")
+
+
+@app.get("/api/projects/{project_id}/export")
+def export_project(project_id: int):
+    """One project (its corpora, documents, aligned links and termbase) as a zip, without tokens."""
+    with db.session() as conn:
+        project = _project(conn, project_id)
+        path = backup.write_zip(conn, project_id)
+    safe = "".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in project["name"])[:40] or "project"
+    return _zip_response(path, f"colloca-project-{safe}-{time.strftime('%Y%m%d')}.zip")
+
+
+@app.post("/api/import")
+async def import_backup(file: UploadFile = File(...), dry_run: bool = Form(True), project_id: int | None = Form(None),
+                        annotate: bool = Form(True)):
+    """Import an export zip (or its data.json). A dry run (the default) returns the same conflict report
+    without writing anything. With `annotate`, the re-annotation job starts for every corpus that received
+    documents, which rebuilds tokens and aligned segments. `project_id` puts everything into that project."""
+    data = await file.read(backup.MAX_BACKUP_BYTES + 1)
+    try:
+        payload = backup.read_backup(data)
+        del data
+        conn = db.connect()
+        try:
+            if project_id is not None:
+                _project(conn, project_id)
+            report = backup.import_payload(conn, payload, project_id=project_id)
+            if dry_run:
+                conn.rollback()
+            else:
+                conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+    except backup.BackupError as exc:
+        raise HTTPException(exc.status, str(exc)) from exc
+    out = report.as_dict(dry_run)
+    out["jobs"] = []
+    if not dry_run and annotate:
+        for corpus_id in report.corpus_ids:
+            job = importer.submit(corpus_id, "reannotate", "Annotate imported documents",
+                                  importer.reannotate_corpus(corpus_id, True))
+            out["jobs"].append({"corpus_id": corpus_id, "job_id": job.id})
+    return out
 
 
 def _static_app() -> _StaticApp:
