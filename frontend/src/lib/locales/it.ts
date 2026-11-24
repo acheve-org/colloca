@@ -823,4 +823,12 @@ export const it: Messages = {
   'tmx.markup': 'conserva il markup in linea',
   'tmx.hint': 'Una memoria di traduzione TMX 1.4b di questo corpus e delle sue traduzioni allineate; i codici di formattazione conservati dai TMX importati vengono riscritti.',
   'tmx.go': 'Scarica TMX',
+  'src.preview.title': 'Anteprima prima di aggiungere',
+  'src.preview.file': 'Anteprima del file',
+  'src.preview.fileHint': 'Legge il file scelto e ne mostra il testo (e, per un PDF, la qualità) prima di aggiungerlo',
+  'src.preview.one': 'Scegli esattamente un file per l’anteprima.',
+  'src.quality.good': 'Qualità del testo: buona',
+  'src.quality.fair': 'Qualità del testo: discreta',
+  'src.quality.poor': 'Qualità del testo: scarsa',
+  'src.quality.score': '{n} / 100',
 };

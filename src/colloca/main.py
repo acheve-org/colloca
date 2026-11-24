@@ -392,6 +392,25 @@ def add_urls(corpus_id: int, body: UrlListIn):
     return results
 
 
+@app.post("/api/preview-file")
+async def preview_file(file: UploadFile = File(...), corpus_id: int | None = None, columns: str = ""):
+    """Read an uploaded file without saving it, like the URL preview: the text, the reader's warnings and, for a
+    PDF, the quality of the extracted text (`quality`: score, level, issues), so it can be checked and trimmed
+    before it is added. `corpus_id` gives the language for OCR and for an XLIFF side."""
+    lang = None
+    if corpus_id is not None:
+        with db.session() as conn:
+            lang = _corpus(conn, corpus_id)["lang"]
+    data = await file.read(ingest.MAX_UPLOAD_BYTES + 1)
+    if len(data) > ingest.MAX_UPLOAD_BYTES:
+        raise HTTPException(413, f"File is larger than {ingest.MAX_UPLOAD_BYTES // 1024 // 1024} MB")
+    try:
+        parsed = await run_in_threadpool(ingest.read_file, file.filename or "file", data, lang, columns)
+    except ingest.IngestError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return {"source": file.filename or "file", **parsed}
+
+
 def _tags_by_doc(conn, corpus_id: int) -> dict[int, list[str]]:
     out: dict[int, list[str]] = {}
     for r in conn.execute("""SELECT g.doc_id, g.tag FROM doc_tags g JOIN documents d ON d.id=g.doc_id

@@ -5,10 +5,19 @@
     job_id?: number;
     error?: string;
   }
+  interface Quality {
+    score: number;
+    level: 'good' | 'fair' | 'poor';
+    issues: { code: string; message: string }[];
+  }
   interface Preview {
     source: string;
     title: string;
     text: string;
+    kind: 'url' | 'file';
+    /** Only for a PDF: how reliable the extracted text looks. */
+    quality?: Quality;
+    warnings: string[];
   }
   interface Meta {
     tags: string;
@@ -361,9 +370,31 @@
         messages.say(t('src.url.needed'), 'err');
         return;
       }
-      const r = await post<{ url: string; title: string; text: string }>('/api/preview-url', { url: u });
+      const r = await post<{ url: string; title: string; text: string; quality?: Quality; warnings?: string[] }>(
+        '/api/preview-url',
+        { url: u },
+      );
       if (!still(id)) return;
-      preview = { source: r.url, title: r.title, text: r.text };
+      preview = { source: r.url, title: r.title, text: r.text, kind: 'url', quality: r.quality, warnings: r.warnings ?? [] };
+      messages.clear();
+    });
+
+  /** Read the one chosen file without adding it, so the text (and, for a PDF, its quality) can be checked first. */
+  const previewFile = () =>
+    act('preview', async (id) => {
+      if (files.length !== 1) {
+        messages.say(t('src.preview.one'), 'err');
+        return;
+      }
+      const fd = new FormData();
+      fd.append('file', files[0]);
+      const r = await upload<{ source: string; title: string; text: string; quality?: Quality; warnings?: string[] }>(
+        '/api/preview-file',
+        fd,
+        { corpus_id: id, columns: textColumns.trim() },
+      );
+      if (!still(id)) return;
+      preview = { source: r.source, title: r.title, text: r.text, kind: 'file', quality: r.quality, warnings: r.warnings ?? [] };
       messages.clear();
     });
 
@@ -373,7 +404,7 @@
       if (!p) return;
       await post(
         `/api/corpora/${id}/documents`,
-        { title: p.title, text: p.text, source: p.source, kind: 'url', ...metaParams() },
+        { title: p.title, text: p.text, source: p.source, kind: p.kind, ...metaParams() },
         { background: true, force_language: force },
       );
       if (!still(id)) return;
@@ -673,20 +704,6 @@
             <input class="grow" type="text" inputmode="url" bind:value={url} placeholder="https://…" aria-label={t('src.url.address')} />
             <Button type="submit" disabled={busy !== null}>{t('src.url.fetch')}</Button>
           </form>
-          {#if preview}
-            <Field label={t('src.url.pvTitle')}>
-              <input bind:value={preview.title} />
-            </Field>
-            <Field label={t('src.url.pvText')}>
-              <textarea rows="10" bind:value={preview.text}></textarea>
-            </Field>
-            <div class="row">
-              <span class="muted grow">{previewWords === 1 ? t('src.word1') : t('src.words', { n: fmt(previewWords) })}</span>
-              <Button onclick={() => (preview = null)}>{t('src.url.discard')}</Button>
-              <Button variant="primary" disabled={busy !== null || !preview.text.trim()} onclick={addPreview}>{t('src.url.add')}</Button>
-            </div>
-            <p class="hint">{t('src.url.hint')}</p>
-          {/if}
 
           <h3 class="sub">{t('src.urls.title')}</h3>
           <Field label={t('src.urls.label')}>
@@ -714,6 +731,7 @@
           </label>
           <div class="row">
             <span class="hint grow">{t('src.upload.hint')}</span>
+            <Button disabled={busy !== null || files.length !== 1} title={t('src.preview.fileHint')} onclick={previewFile}>{t('src.preview.file')}</Button>
             <Button variant="primary" disabled={busy !== null} onclick={uploadFiles}>{t('src.upload.go')}</Button>
           </div>
 
@@ -752,6 +770,39 @@
           </div>
         </section>
       </div>
+
+      {#if preview}
+        <section class="card preview" aria-labelledby="{uid}-pv">
+          <h3 id="{uid}-pv">{t('src.preview.title')}: {preview.source}</h3>
+          {#if preview.quality}
+            <p class="quality" role={preview.quality.level === 'good' ? undefined : 'alert'}>
+              <Badge
+                kind={preview.quality.level === 'good' ? 'approved' : preview.quality.level === 'fair' ? 'candidate' : 'forbidden'}
+                label={t(`src.quality.${preview.quality.level}`)}
+              />
+              {t('src.quality.score', { n: preview.quality.score })}
+            </p>
+            {#if preview.quality.issues.length}
+              <ul class="issues">
+                {#each preview.quality.issues as i (i.code)}<li>{i.message}</li>{/each}
+              </ul>
+            {/if}
+          {/if}
+          {#each preview.warnings.filter((w) => !preview?.quality || !w.includes('may be unreliable')) as w (w)}<p class="hint">{w}</p>{/each}
+          <Field label={t('src.url.pvTitle')}>
+            <input bind:value={preview.title} />
+          </Field>
+          <Field label={t('src.url.pvText')}>
+            <textarea rows="10" bind:value={preview.text}></textarea>
+          </Field>
+          <div class="row">
+            <span class="muted grow">{previewWords === 1 ? t('src.word1') : t('src.words', { n: fmt(previewWords) })}</span>
+            <Button onclick={() => (preview = null)}>{t('src.url.discard')}</Button>
+            <Button variant="primary" disabled={busy !== null || !preview.text.trim()} onclick={addPreview}>{t('src.url.add')}</Button>
+          </div>
+          <p class="hint">{t('src.url.hint')}</p>
+        </section>
+      {/if}
     </div>
 
     <div class="strip">
@@ -1034,6 +1085,21 @@
   }
   .card :global(.field) {
     display: flex;
+  }
+  .card.preview {
+    margin: 0 var(--s-3) var(--s-3);
+  }
+  .quality {
+    display: flex;
+    align-items: center;
+    gap: var(--s-2);
+    margin: 0;
+  }
+  .issues {
+    margin: 0;
+    padding-left: 1.2rem;
+    color: var(--muted);
+    font-size: var(--fs-small);
   }
   .card .sub {
     margin-top: var(--s-2);

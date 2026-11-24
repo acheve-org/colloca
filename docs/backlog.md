@@ -56,7 +56,7 @@ The T-numbers are stable labels used for cross-references; the **row order is th
 | T21 | Related-term suggestions from word embeddings | Low | L | P3 | Roadmap 14 |
 | T22 | Interface language (Spanish, Italian) and a semantic colour system (**done**, `docs/accessibility.md`) | Low | M | P3 | Audit, Research #12 |
 | T23 | Optional authentication and encryption at rest | Low | M | P3 | Roadmap 15 |
-| T24 | PDF extraction robustness | Low | M | P3 | Audit |
+| T24 | PDF extraction robustness (**done**) | Low | M | P3 | Audit |
 | T25 | URL fetching: DNS-rebinding hardening, import a list of URLs (**done**) | Low | S | P3 | Audit |
 | T26 | Virtual scrolling for very large tables (**done**) | Low | M | P3 | Audit |
 | T27 | Dispersion plot for a word across documents (**done**) | Low | S | P3 | Research #14 |
@@ -626,6 +626,10 @@ reverse-proxy setups; optional SQLCipher or a documented encrypted volume for th
 ### T24. PDF extraction robustness
 
 **Priority** P3 · **Value** Low · **Effort** M · **Source** Audit
+
+**Status: done** (`pdftext.py`): reading order from run positions (columns, full-width headings, table rows), a quality score with reasons, a file preview
+(`POST /api/preview-file`) and the quality in URL previews and upload warnings. Positions only, so it is a heuristic (see the README for limits); tested on
+hand-made PDFs with known layouts, not on a collection of real documents.
 
 **Why it matters.** The PDF cleaner removes repeated headers and footers and joins soft-wrapped lines by heuristics. It can damage two-column layouts and tables, and
 nothing tells the user a result is poor.
