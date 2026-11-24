@@ -532,6 +532,7 @@ export const it: Messages = {
   'model.small': 'modello piccolo',
   'model.missing': 'nessun modello installato',
   'model.smallWarning': 'I modelli piccoli sbagliano di più lemmi e categorie grammaticali. Usa md o lg per una qualità migliore (vedi il README).',
+  'activity.working': 'Elaborazione…',
   'jobs.label': 'Attività in background',
   'jobs.done': 'completata',
   'jobs.queued': 'in coda',
