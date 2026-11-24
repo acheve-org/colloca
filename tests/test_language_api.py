@@ -64,7 +64,7 @@ def test_delete_with_corpus_is_409_and_with_none_is_204(client, calls):
     assert r.status_code == 409 and "1" in r.json()["detail"]
     client.delete(f"/api/corpora/{cid}")                          # to the Trash
     assert client.delete("/api/languages/fr").status_code == 409  # trashed corpora still count
-    client.delete("/api/trash")
+    client.delete("/api/trash?confirm=true")
     assert client.delete("/api/languages/fr?uninstall_model=true").status_code == 204
     assert calls["uninstall"] == ["fr"] and "fr" not in client.get("/api/languages").json()
     assert client.delete("/api/languages/fr").status_code == 404
