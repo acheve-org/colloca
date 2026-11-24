@@ -657,9 +657,11 @@ def ngrams(corpus_id: int, n: int = 3, unit: str = "form", min_freq: int = 2, mi
 @app.get("/api/corpora/{corpus_id}/keyness")
 def keyness(corpus_id: int, ref: int | None = None, unit: str = "lemma", min_freq: int = 3,
             exclude_stop: bool = True, pos: str | None = None,
+            both_directions: bool = False,
             limit: int = Query(300, le=3000), format: str = "json", sq: ScopeQuery = Depends()):
     """Compare (the selected documents of) this corpus with `ref`, or, when omitted, with the language's
-    base corpus. The filter narrows the studied corpus only, never the reference."""
+    base corpus. The filter narrows the studied corpus only, never the reference. `both_directions` also
+    lists the words found only in the reference (under-used), each row tagged with `direction`."""
     with db.session() as conn:
         c = _corpus(conn, corpus_id)
         if ref is None:
@@ -669,7 +671,7 @@ def keyness(corpus_id: int, ref: int | None = None, unit: str = "lemma", min_fre
         elif _corpus(conn, ref)["lang"] != c["lang"]:
             raise HTTPException(400, "Reference corpus must have the same language")
         rows = _run(analysis.keyness, conn, sq.scope(corpus_id), ref, unit, min_freq, exclude_stop,
-                    _pos_list(pos), limit)
+                    _pos_list(pos), limit, both_directions)
     return _reply(rows, format, "keyness")
 
 

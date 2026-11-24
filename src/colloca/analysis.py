@@ -369,8 +369,12 @@ def keyness_ll(a: float, b: float, c1: float, c2: float) -> float:
 
 
 def keyness(conn, scope, ref_id, unit="lemma", min_freq=3, exclude_stop=True,
-            pos=None, limit=300):
-    """Log-likelihood keyness of this corpus against a reference corpus."""
+            pos=None, limit=300, both_directions=False):
+    """Log-likelihood keyness of this corpus against a reference corpus.
+
+    With `both_directions`, words that occur only in the reference (a = 0, at least `min_freq` times there)
+    are scored too, with a negative LL; every row then carries `direction` ("over" / "under") and rows are
+    ordered by |LL|, so the strongest over- and under-used words come first."""
     scope = as_scope(scope)
     t = frequency(conn, scope, unit, pos, 1, exclude_stop, True, 10**9)
     r = frequency(conn, ref_id, unit, pos, 1, exclude_stop, True, 10**9)
@@ -389,5 +393,21 @@ def keyness(conn, scope, ref_id, unit="lemma", min_freq=3, exclude_stop=True,
             "log_ratio": round(math.log2((a / c1) / ((b or 0.5) / c2)), 2),
             "ll": round(ll if over else -ll, 1), "docs": x["docs"],
         })
-    out.sort(key=lambda r: -r["ll"])
+        if both_directions:
+            out[-1]["direction"] = "over" if over else "under"
+    if both_directions:
+        seen = {x["item"] for x in t}
+        for x in r:
+            b = x["freq"]
+            if x["item"] in seen or b < min_freq:
+                continue
+            out.append({
+                "item": x["item"], "pos": x["pos"], "freq": 0, "ref_freq": b,
+                "per_million": 0.0, "ref_per_million": round(b * 1e6 / c2, 1),
+                "log_ratio": round(math.log2((0.5 / c1) / (b / c2)), 2),
+                "ll": round(-keyness_ll(0, b, c1, c2), 1), "docs": 0, "direction": "under",
+            })
+        out.sort(key=lambda r: -abs(r["ll"]))
+    else:
+        out.sort(key=lambda r: -r["ll"])
     return out[:limit]

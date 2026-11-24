@@ -146,6 +146,8 @@ export interface KeynessRow {
   log_ratio: number;
   ll: number;
   docs: number;
+  /** Only when the request had both_directions. */
+  direction?: 'over' | 'under';
 }
 
 export interface EquivalentRow {
