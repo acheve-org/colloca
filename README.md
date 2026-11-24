@@ -34,7 +34,9 @@ window, with a warning when a language runs on a small (`sm`) model. Data lives 
    `MAX_URLS_PER_HOST` (20) per site. API: `POST /api/corpora/{id}/urls`.
    Or upload files (formats below). Exact duplicates are rejected.
 3. Explore with the screens of the left rail. Click any word in a table to jump to its concordance. Every table
-   sorts by a click on its header, has a *Filter in results* box, and a CSV export.
+   sorts by a click on its header, has a *Filter in results* box, and a CSV export. Long tables (over 400 rows) render only the rows
+   on screen, so a 2,000-line concordance or a 3,000-row n-gram list stays fast; sorting, filtering and the keyboard
+   still act on all rows.
 4. **Keyness**: compares your corpus with the language's **base corpus** (below) by default, or with any other
    corpus of the same language you pick. The *Show* choice adds **under-used** words (negative LL), including
    words that occur only in the reference corpus.

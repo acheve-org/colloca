@@ -88,8 +88,8 @@ describe('DataTable', () => {
     render(DataTable<R>, { columns, rows, rowKey, filter: 'palabra1', sort: { key: 'word', dir: 'asc' } });
     const dt = performance.now() - t0;
     expect(dt).toBeLessThan(2000); // generous: CI runners are slow; this only guards against pathological slowdowns
+    expect(grid()).toHaveAttribute('aria-rowcount', '1112'); // 1111 matches + the header; only a window is in the DOM
     const w = texts(0) as string[];
-    expect(w.length).toBe(1111);
     expect([...w].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))).toEqual(w);
     await fireEvent.click(header('Count'));
     expect(texts(1)[0]).toBe('1');
@@ -240,5 +240,83 @@ describe('DataTable', () => {
     expect(onselect).not.toHaveBeenCalled();
     await fireEvent.keyDown(grid(), { key: 'ArrowDown', ctrlKey: true });
     expect(onselect).not.toHaveBeenCalled();
+  });
+});
+
+describe('DataTable virtual scrolling', () => {
+  const big = (n: number): R[] => Array.from({ length: n }, (_, i) => ({ id: i, word: `w${String(i).padStart(5, '0')}`, n: i }));
+  const dt = () => document.querySelector('.dt') as HTMLElement;
+  const spacers = () => [...document.querySelectorAll<HTMLElement>('.spacer')].map((e) => parseFloat(e.style.height));
+  const indexes = () => bodyRows().map((r) => Number(r.getAttribute('data-index')));
+
+  it('keeps small tables whole: every row is in the DOM below the threshold', () => {
+    render(DataTable<R>, { columns, rows: big(300), rowKey });
+    expect(bodyRows()).toHaveLength(300);
+    expect(document.querySelector('.spacer')).toBeNull();
+    expect(grid()).not.toHaveAttribute('data-virtual');
+  });
+
+  it('renders only a window of a large table and says how many rows there are', () => {
+    render(DataTable<R>, { columns, rows: big(20000), rowKey });
+    expect(bodyRows().length).toBeLessThan(80);
+    expect(grid()).toHaveAttribute('aria-rowcount', '20001');
+    expect(grid()).toHaveAttribute('data-virtual');
+    expect(indexes()[0]).toBe(0);
+    expect(bodyRows()[0]).toHaveAttribute('aria-rowindex', '2');
+    // the spacer below stands for the rows that are not rendered
+    const [below] = spacers();
+    expect(below).toBe((20000 - bodyRows().length) * 28);
+  });
+
+  it('follows the scroll position, with spacers above and below', async () => {
+    render(DataTable<R>, { columns, rows: big(20000), rowKey });
+    dt().scrollTop = 28 * 5000;
+    await fireEvent.scroll(dt());
+    const ix = indexes();
+    expect(ix[0]).toBeGreaterThan(4900);
+    expect(ix[0]).toBeLessThan(5000);
+    expect(ix).toContain(5000);
+    expect(texts(0)).toContain('w05000');
+    const [top, bottom] = spacers();
+    expect(top).toBe(ix[0] * 28);
+    expect(top + bottom + ix.length * 28).toBe(20000 * 28);
+  });
+
+  it('keyboard navigation reaches rows that are not rendered yet (End, Home, PageDown)', async () => {
+    const onselect = vi.fn();
+    const rows = big(20000);
+    render(DataTable<R>, { columns, rows, rowKey, onselect });
+    await fireEvent.keyDown(grid(), { key: 'End' });
+    expect(onselect).toHaveBeenLastCalledWith(rows[19999]);
+    expect(texts(0)).toContain('w19999');
+    expect(document.querySelector('.body.selected')).not.toBeNull();
+    await fireEvent.keyDown(grid(), { key: 'Home' });
+    expect(onselect).toHaveBeenLastCalledWith(rows[0]);
+    expect(texts(0)[0]).toBe('w00000');
+    await fireEvent.keyDown(grid(), { key: 'PageDown' });
+    expect(onselect).toHaveBeenLastCalledWith(rows[10]);
+  });
+
+  it('sorting and filtering keep working on the whole data, not on the window', async () => {
+    render(DataTable<R>, { columns, rows: big(5000), rowKey });
+    await fireEvent.click(header('Count'));
+    await fireEvent.click(header('Count'));
+    expect(texts(0)[0]).toBe('w04999'); // descending: the last row of the data comes first
+  });
+
+  it('a filter that leaves few rows drops back to the plain table', () => {
+    render(DataTable<R>, { columns, rows: big(5000), rowKey, filter: 'w0004' });
+    expect(bodyRows()).toHaveLength(10);
+    expect(grid()).not.toHaveAttribute('data-virtual');
+    expect(document.querySelector('.spacer')).toBeNull();
+  });
+
+  it('clicking a row in the window selects it and the click handler gets the original row', async () => {
+    const onselect = vi.fn();
+    const rows = big(5000);
+    render(DataTable<R>, { columns, rows, rowKey, onselect });
+    await fireEvent.click(bodyRows()[3]);
+    expect(onselect).toHaveBeenLastCalledWith(rows[3]);
+    expect(bodyRows()[3]).toHaveAttribute('aria-selected', 'true');
   });
 });
