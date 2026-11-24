@@ -220,8 +220,6 @@
       </ul>
       {#if firstRun}
         <EmptyState title={t('setup.project.title')} hint={t('setup.project.hint')} />
-      {:else if projectStore.loaded && !projectStore.list.length && !loose.length}
-        <p class="muted">{t('proj.none')}</p>
       {/if}
       <form class="new" onsubmit={addProject}>
         <input

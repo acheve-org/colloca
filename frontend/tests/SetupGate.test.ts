@@ -24,8 +24,10 @@ beforeEach(async () => {
   corpusStore.list = [];
   corpusStore.currentId = null;
   corpusStore.loaded = true;
+  corpusStore.failed = false;
   projectStore.list = [];
   projectStore.loaded = true;
+  projectStore.failed = false;
   await setLanguages({ es: 'Spanish' });
   go('concordance');
 });
@@ -78,9 +80,34 @@ describe('SetupGate', () => {
     projectStore.loaded = true;
     await tick();
     expect(screen.getByText('Start your first project')).toBeInTheDocument();
+  });
+
+  it('after the first settle a corpus switch (loaded false for a moment) keeps the screen mounted', async () => {
+    projectStore.list = [{ id: 7, name: 'Acme', corpora: 1, trashed: 0 }];
+    corpusStore.list = [corpus(1)];
+    corpusStore.currentId = 1;
+    render(GateHost);
+    const node = screen.getByText('child');
     corpusStore.loaded = false;
     await tick();
-    expect(container.textContent).toBe('');
+    expect(screen.getByText('child')).toBe(node);
+    corpusStore.loaded = true;
+    await tick();
+    expect(screen.getByText('child')).toBe(node);
+  });
+
+  it.each([
+    ['corpora', () => { corpusStore.failed = true; }],
+    ['projects', () => { projectStore.failed = true; }],
+    ['languages', async () => {
+      vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 500, statusText: 'x', json: async () => ({}) })));
+      await loadLanguageNames().catch(() => {});
+    }],
+  ])('a failed %s load shows the screen, not a first-run claim', async (_n, fail) => {
+    await fail();
+    expect(setupStep()).toBeNull();
+    render(GateHost);
+    expect(screen.getByText('child')).toBeInTheDocument();
   });
 
   it.each(['languages', 'projects', 'trash'] as const)('never gates %s', (id) => {
@@ -131,6 +158,14 @@ describe('initial redirect', () => {
     location.hash = '';
     redirectOnce()();
     expect(route.screen).toBe('languages');
+  });
+
+  it('does not redirect when a load failed', async () => {
+    const { redirectOnce } = await import('../src/lib/setup.svelte');
+    projectStore.failed = true;
+    location.hash = '';
+    expect(redirectOnce()()).toBe(false);
+    expect(route.screen).not.toBe('projects');
   });
 
   it('waits while the stores are loading', async () => {

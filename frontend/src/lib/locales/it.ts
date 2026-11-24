@@ -723,7 +723,6 @@ export const it: Messages = {
   'base.leipzig': 'Leipzig Corpora Collection',
   'base.filesHint2':
     'vanno bene così come sono; controlla la licenza). Qui si possono caricare file fino a 25 MB; per quelli più grandi usa colloca-import-reference (vedi il README). Le frasi di questi corpora sono mescolate, quindi le colonne «Doc» non significano nulla per il corpus di base.',
-  'proj.none': 'Ancora nessun progetto.',
   'proj.nameOf': 'Nome del progetto {name}',
   'proj.rename': 'Rinomina',
   'proj.renameOf': 'Rinomina {name}',

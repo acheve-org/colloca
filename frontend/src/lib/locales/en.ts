@@ -724,7 +724,6 @@ export const en: Messages = {
   'base.leipzig': 'Leipzig Corpora Collection',
   'base.filesHint2':
     'files work as they are, check their licence). Files up to 25 MB can be uploaded here; for larger ones use colloca-import-reference (see the README). Sentences are shuffled in those corpora, so the “Docs” columns are meaningless for the base corpus.',
-  'proj.none': 'No projects yet.',
   'proj.nameOf': 'Name of project {name}',
   'proj.rename': 'Rename',
   'proj.renameOf': 'Rename {name}',

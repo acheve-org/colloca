@@ -10,8 +10,18 @@
   // Where the user sets things up (and the Trash, which works without a corpus).
   const FREE = ['languages', 'projects', 'trash'];
 
-  const step = $derived(FREE.includes(route.screen) || !setupReady() ? null : setupStep());
-  const hold = $derived(!FREE.includes(route.screen) && !setupReady());
+  // Hold only until the first time everything has loaded: a later corpus switch (loaded toggles
+  // false for a moment) must not unmount the screen. Plain variable on purpose, not state.
+  let settled = false;
+  const hold = $derived.by(() => {
+    if (settled) return false;
+    if (setupReady()) {
+      settled = true;
+      return false;
+    }
+    return !FREE.includes(route.screen);
+  });
+  const step = $derived(FREE.includes(route.screen) || hold ? null : setupStep());
 </script>
 
 {#if hold}
