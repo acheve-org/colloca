@@ -846,4 +846,11 @@ export const it: Messages = {
   'src.quality.fair': 'Qualità del testo: discreta',
   'src.quality.poor': 'Qualità del testo: scarsa',
   'src.quality.score': '{n} / 100',
+  'auth.logout': 'Esci',
+  'bk.passphrase': 'Passphrase per cifrare l’esportazione',
+  'bk.passphrasePlaceholder': 'passphrase (facoltativa)',
+  'bk.passphraseHint': 'Con una passphrase il file viene cifrato (AES-256); senza, nessuno può recuperare il backup, quindi conservala con cura. Vuota = uno zip normale.',
+  'bk.passShort': 'La passphrase deve avere almeno 8 caratteri.',
+  'bk.encrypted': 'Backup cifrato salvato: {name}',
+  'bk.importPassphrase': 'Passphrase (file cifrati)',
 };

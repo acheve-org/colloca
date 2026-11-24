@@ -432,6 +432,38 @@ mise run ui:e2e               # builds the UI and runs the Playwright end-to-end
   routing and the interface strings (`i18n.ts`, English only for now) in `frontend/src/lib/`, colour and spacing
   tokens in `frontend/src/lib/styles/`. Tests in `frontend/tests/` (Vitest) and `frontend/e2e/` (Playwright).
 
+## Password and encryption
+
+By default Colloca has **no login**: it is meant to run on your own machine, and `docker-compose.yml` publishes it on
+`127.0.0.1` only, which is the whole protection. If you share it on a network, or just want a lock, set a password:
+
+```bash
+COLLOCA_PASSWORD='a long passphrase' uv run uvicorn colloca.main:app      # or in docker-compose.yml: environment
+```
+
+With it set, every page and every API call needs a **session**: the login page (`/login`, English, Spanish or Italian by the browser
+language, no script) gives a cookie that is `HttpOnly`, `SameSite=Strict`, signed with a key derived from the password and valid for
+`COLLOCA_SESSION_HOURS` (12); changing the password ends every session, restarting does not. Scripts send the same password as
+`Authorization: Bearer <password>`. *Log out* is in the left rail. Only `/login`, `/logout`, `/api/auth/status` and `/healthz` (for a
+proxy or container health check) answer without a session. Failed logins are limited per address (`COLLOCA_LOGIN_ATTEMPTS` 5 per
+`COLLOCA_LOGIN_WINDOW` 300 s, then HTTP 429 with `Retry-After`) and each costs half a second.
+
+**Behind a reverse proxy** (nginx, Caddy, Traefik) terminate HTTPS there; without HTTPS the password and the cookie travel in clear text.
+Set `COLLOCA_TRUST_PROXY=1` only when the proxy sets `X-Forwarded-For` / `X-Forwarded-Proto` itself: then the rate limit counts the real
+client and the cookie gets the `Secure` flag. The proxy should not be reachable except through itself.
+
+**Encrypted backups.** *Backup and Trash* has a passphrase field: with it, *Back up the whole database* and *Export project* produce a
+`.zip.enc` file (AES-256-GCM in authenticated 1 MiB chunks, key from the passphrase with scrypt; `POST /api/backup/encrypted`, so the
+passphrase is never in a URL). Import it with the same passphrase. A wrong passphrase, a damaged, cut-off or reordered file is refused.
+There is **no recovery** if the passphrase is lost.
+
+**Encryption at rest.** The database file is not encrypted by Colloca (no SQLCipher). If the disk may be lost or shared, keep the data
+directory (`COLLOCA_DATA_DIR`, the `colloca-data` volume) on an encrypted volume: FileVault on a Mac, BitLocker, LUKS or an
+encrypted Docker volume on Linux. What this adds up to: the password keeps casual visitors on a network out of the application; the
+encrypted volume protects a stolen disk; encrypted backups protect files you move around. It does not protect against someone who can run
+code on the machine or read its memory, against a shared-password leak (there are no user accounts, no roles and no audit log), or
+against traffic sniffing without HTTPS.
+
 ## Safeguards
 
 - **Glossary import**: Termbase → Import glossary reads `.xlsx`, `.csv`/`.tsv` (map the columns, header row or not) and `.tbx` (2008 and 2019 structures; XML entities are refused). A check run lists what would be added, skipped as duplicates and rejected, with the reason per row; nothing is stored until you confirm. Status defaults to `candidate` unless the file carries one. Tested with files made from Colloca's own export and `docs/samples`; real CAT-tool exports have not been tried.
@@ -466,7 +498,7 @@ mise run ui:e2e               # builds the UI and runs the Playwright end-to-end
 - Extraction is heuristic: always review the preview. URL fetching respects no robots.txt (you choose the URLs);
   it blocks private/internal addresses (`ALLOW_PRIVATE_URLS=1` to override); the name is resolved once per request
   and the connection goes to that checked address (certificates are still verified against the host name), so a DNS
-  answer that changes between the check and the connection cannot reach an internal address. No authentication: bind to localhost only.
+  answer that changes between the check and the connection cannot reach an internal address. No authentication unless you set `COLLOCA_PASSWORD` (see *Password and encryption*): otherwise bind to localhost only.
 - Small spaCy models make lemma/POS errors; use `lg` (the Docker default) for better quality. A document in the
   wrong language is only caught when the check is confident (see Safeguards).
 - No synonym/related-term module yet (planned: thesaurus + embeddings, labelled as "related terms").

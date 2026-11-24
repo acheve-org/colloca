@@ -22,8 +22,16 @@ export function withQuery(path: string, params?: Record<string, unknown>): strin
   return q ? `${path}${path.includes('?') ? '&' : '?'}${q}` : path;
 }
 
+/** Where to go when the server says the session is over (only used when a password protects Colloca). */
+export function toLogin(): void {
+  if (typeof window === 'undefined' || window.location.pathname === '/login') return;
+  const here = window.location.pathname + window.location.search + window.location.hash;
+  window.location.assign(`/login?next=${encodeURIComponent(here)}`);
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, init);
+  if (res.status === 401) toLogin();
   if (!res.ok) {
     let detail = res.statusText;
     try {

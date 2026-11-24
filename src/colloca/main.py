@@ -1,18 +1,20 @@
 """FastAPI application: JSON API + static single-page UI."""
+import asyncio
 import csv
 import io
 import json
 import logging
 import os
 import sqlite3
+import tempfile
 import time
 from contextlib import asynccontextmanager
 from dataclasses import asdict
 from typing import Literal
 
 import spacy
-from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from starlette.background import BackgroundTask
@@ -21,7 +23,9 @@ from starlette.concurrency import run_in_threadpool
 from . import (
     align,
     analysis,
+    auth,
     backup,
+    backupcrypt,
     candidates,
     db,
     dedup,
@@ -71,6 +75,82 @@ async def log_requests(request, call_next):
     elif logsetup.slow_ms() and ms >= logsetup.slow_ms():
         logging.getLogger("colloca.http").warning("Slow: %s %s took %.0f ms", request.method, request.url.path, ms)
     return response
+
+
+@app.middleware("http")
+async def require_login(request, call_next):
+    """With COLLOCA_PASSWORD set, nothing but the login page answers without a session (see auth.py)."""
+    path = request.url.path
+    if auth.enabled() and path not in auth.PUBLIC and not auth.authenticated(request.headers, request.cookies):
+        if path.startswith("/api/"):
+            return JSONResponse({"detail": "Authentication required"}, status_code=401,
+                                headers={"WWW-Authenticate": "Bearer"})
+        return RedirectResponse(auth.login_redirect(path, request.url.query), status_code=303)
+    return await call_next(request)
+
+
+def _client_address(request) -> str:
+    """The address failed logins are counted against (the first X-Forwarded-For hop only if COLLOCA_TRUST_PROXY=1)."""
+    if os.environ.get("COLLOCA_TRUST_PROXY") == "1":
+        forwarded = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+        if forwarded:
+            return forwarded
+    return request.client.host if request.client else "unknown"
+
+
+def _secure(request) -> bool:
+    proto = request.headers.get("x-forwarded-proto", "") if os.environ.get("COLLOCA_TRUST_PROXY") == "1" else ""
+    return request.url.scheme == "https" or proto == "https"
+
+
+@app.get("/api/auth/status")
+def auth_status(request: Request):
+    """Whether a password is required and whether this request is signed in (public)."""
+    return {"required": auth.enabled(), "authenticated": auth.authenticated(request.headers, request.cookies)}
+
+
+@app.get("/login", include_in_schema=False)
+def login_form(request: Request, next: str = "/"):
+    target = auth.safe_next(next)
+    if not auth.enabled() or auth.authenticated(request.headers, request.cookies):
+        return RedirectResponse(target, status_code=303)
+    return HTMLResponse(auth.login_page(auth.language(request.headers.get("accept-language", "")), target))
+
+
+@app.post("/login", include_in_schema=False)
+async def login(request: Request, password: str = Form(""), next: str = Form("/")):
+    target = auth.safe_next(next)
+    lang = auth.language(request.headers.get("accept-language", ""))
+    if not auth.enabled():
+        return RedirectResponse(target, status_code=303)
+    who = _client_address(request)
+    wait = auth.retry_after(who)
+    if wait:
+        return HTMLResponse(auth.login_page(lang, target, "limited", wait), status_code=429,
+                            headers={"Retry-After": str(wait)})
+    if not auth.check_password(password):
+        auth.record_failure(who)
+        logging.getLogger("colloca.auth").warning("Failed login from %s", who)
+        await asyncio.sleep(0.5)                       # slows a guessing script a little more
+        return HTMLResponse(auth.login_page(lang, target, "wrong"), status_code=401)
+    auth.clear_failures(who)
+    value, life = auth.make_cookie()
+    response = RedirectResponse(target, status_code=303)
+    response.set_cookie(auth.COOKIE, value, max_age=life, httponly=True, samesite="strict", secure=_secure(request))
+    return response
+
+
+@app.post("/logout", include_in_schema=False)
+def logout():
+    response = RedirectResponse("/login", status_code=303)
+    response.delete_cookie(auth.COOKIE)
+    return response
+
+
+@app.get("/healthz", include_in_schema=False)
+def healthz():
+    """For a reverse proxy or container health check; answers without a login and reveals nothing."""
+    return {"ok": True}
 
 
 # COLLOCA_STATIC_DIR serves a UI build from elsewhere (end-to-end tests); the default is the packaged one.
@@ -1486,6 +1566,35 @@ def backup_database(include_sqlite: bool = True):
     return _zip_response(path, f"colloca-backup-{time.strftime('%Y%m%d-%H%M%S')}.zip")
 
 
+class EncryptedBackupIn(BaseModel):
+    passphrase: str = Field(min_length=backupcrypt.MIN_PASSPHRASE, max_length=500)
+    include_sqlite: bool = True
+    project_id: int | None = None      # one project (no tokens) instead of the whole database
+
+
+@app.post("/api/backup/encrypted")
+def backup_encrypted(body: EncryptedBackupIn):
+    """The same zip as GET /api/backup (or one project's export), encrypted with a passphrase (AES-256-GCM, see
+    backupcrypt.py). A POST, so the passphrase is never in a URL or a log line. Import it with the same
+    passphrase; there is no way to recover a backup whose passphrase is lost."""
+    with db.session() as conn:
+        if body.project_id is not None:
+            _project(conn, body.project_id)
+        plain = backup.write_zip(conn, body.project_id, with_db=body.include_sqlite and body.project_id is None)
+    fd, path = tempfile.mkstemp(suffix=".enc", prefix="colloca-export-")
+    os.close(fd)
+    try:
+        backupcrypt.encrypt_file(plain, path, body.passphrase)
+    except Exception:
+        os.unlink(path)
+        raise
+    finally:
+        os.unlink(plain)
+    name = f"colloca-{'project' if body.project_id is not None else 'backup'}-{time.strftime('%Y%m%d-%H%M%S')}.zip.enc"
+    return FileResponse(path, media_type="application/octet-stream", filename=name,
+                        background=BackgroundTask(os.unlink, path))
+
+
 @app.get("/api/projects/{project_id}/export")
 def export_project(project_id: int):
     """One project (its corpora, documents, aligned links and termbase) as a zip, without tokens."""
@@ -1498,12 +1607,20 @@ def export_project(project_id: int):
 
 @app.post("/api/import")
 async def import_backup(file: UploadFile = File(...), dry_run: bool = Form(True), project_id: int | None = Form(None),
-                        annotate: bool = Form(True)):
+                        annotate: bool = Form(True), passphrase: str = Form("")):
     """Import an export zip (or its data.json). A dry run (the default) returns the same conflict report
     without writing anything. With `annotate`, the re-annotation job starts for every corpus that received
-    documents, which rebuilds tokens and aligned segments. `project_id` puts everything into that project."""
+    documents, which rebuilds tokens and aligned segments. `project_id` puts everything into that project.
+    An encrypted export (POST /api/backup/encrypted) needs its `passphrase`."""
     data = await file.read(backup.MAX_BACKUP_BYTES + 1)
     try:
+        if backupcrypt.is_encrypted(data):
+            if not passphrase:
+                raise backup.BackupError("This file is encrypted: enter its passphrase", 400)
+            try:
+                data = await run_in_threadpool(backupcrypt.decrypt_bytes, data, passphrase, backup.MAX_BACKUP_BYTES)
+            except backupcrypt.CryptError as exc:
+                raise backup.BackupError(str(exc), 400) from exc
         payload = backup.read_backup(data)
         del data
         conn = db.connect()

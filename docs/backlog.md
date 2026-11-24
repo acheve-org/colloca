@@ -55,7 +55,7 @@ The T-numbers are stable labels used for cross-references; the **row order is th
 | T20 | TMX export of aligned corpora, keep TMX inline markup (**done**, not yet checked against the official DTD or a CAT tool) | Low | M | P3 | Research #10 |
 | T21 | Related-term suggestions from word embeddings | Low | L | P3 | Roadmap 14 |
 | T22 | Interface language (Spanish, Italian) and a semantic colour system (**done**, `docs/accessibility.md`) | Low | M | P3 | Audit, Research #12 |
-| T23 | Optional authentication and encryption at rest | Low | M | P3 | Roadmap 15 |
+| T23 | Optional authentication and encryption at rest (**done**: password, encrypted backups, documented encrypted volume; no SQLCipher) | Low | M | P3 | Roadmap 15 |
 | T24 | PDF extraction robustness (**done**) | Low | M | P3 | Audit |
 | T25 | URL fetching: DNS-rebinding hardening, import a list of URLs (**done**) | Low | S | P3 | Audit |
 | T26 | Virtual scrolling for very large tables (**done**) | Low | M | P3 | Audit |
@@ -612,6 +612,10 @@ candidate, and keep them accessible in both themes with a non-colour cue; check 
 ### T23. Optional authentication and encryption at rest
 
 **Priority** P3 · **Value** Low · **Effort** M · **Source** Roadmap 15
+
+**Status: done** (`auth.py`, `backupcrypt.py`): `COLLOCA_PASSWORD` protects every page and API call (login page, signed cookie, bearer token for scripts, rate limit,
+logout), `/healthz` stays public, unset behaves as before; passphrase-encrypted backups (AES-256-GCM, scrypt); encryption at rest is a documented encrypted volume,
+SQLCipher was not added (it needs a native library and a different SQLite driver and could not be tested here). The README states the threat model.
 
 **Why it matters.** There is no authentication; the compose file binds to localhost, which is the whole protection. It only matters if the tool is shared on a
 network or the disk is not encrypted. Client material often falls under an NDA.

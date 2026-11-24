@@ -846,4 +846,11 @@ export const es: Messages = {
   'src.quality.fair': 'Calidad del texto: regular',
   'src.quality.poor': 'Calidad del texto: mala',
   'src.quality.score': '{n} / 100',
+  'auth.logout': 'Cerrar sesión',
+  'bk.passphrase': 'Frase de contraseña para cifrar la exportación',
+  'bk.passphrasePlaceholder': 'frase de contraseña (opcional)',
+  'bk.passphraseHint': 'Con una frase de contraseña el archivo se cifra (AES-256); sin ella nadie puede recuperar la copia, así que guárdala bien. Vacío = un zip normal.',
+  'bk.passShort': 'La frase de contraseña necesita al menos 8 caracteres.',
+  'bk.encrypted': 'Copia cifrada guardada: {name}',
+  'bk.importPassphrase': 'Frase de contraseña (archivos cifrados)',
 };
