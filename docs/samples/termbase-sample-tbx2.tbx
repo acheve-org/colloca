@@ -1,0 +1,123 @@
+<?xml version='1.0' encoding='utf-8'?>
+<martif xml:lang="es" type="TBX">
+  <martifHeader>
+    <fileDesc>
+      <sourceDesc>
+        <p>Colloca sample termbase: 8 entries, exported from Colloca</p>
+      </sourceDesc>
+    </fileDesc>
+    <encodingDesc>
+      <p type="DCSName">TBXBasicXCSV02.xcs</p>
+    </encodingDesc>
+  </martifHeader>
+  <text>
+    <body>
+      <termEntry id="c1">
+        <descrip type="subjectField">legal</descrip>
+        <langSet xml:lang="es">
+          <descrip type="definition">Acuerdo &lt;entre&gt; partes &amp; más</descrip>
+          <tig>
+            <term>contrato</term>
+            <termNote type="partOfSpeech">noun</termNote>
+            <descrip type="context">El contrato establece las reglas.</descrip>
+          </tig>
+        </langSet>
+        <langSet xml:lang="it">
+          <tig>
+            <term>contratto</term>
+            <termNote type="partOfSpeech">noun</termNote>
+            <termNote type="administrativeStatus">preferredTerm-admn-sts</termNote>
+            <note>siempre</note>
+          </tig>
+          <tig>
+            <term>accordo</term>
+            <termNote type="partOfSpeech">noun</termNote>
+            <termNote type="administrativeStatus">deprecatedTerm-admn-sts</termNote>
+          </tig>
+        </langSet>
+      </termEntry>
+      <termEntry id="c2">
+        <langSet xml:lang="es">
+          <tig>
+            <term>plazo</term>
+          </tig>
+        </langSet>
+      </termEntry>
+      <termEntry id="c3">
+        <langSet xml:lang="es">
+          <tig>
+            <term>Madrid</term>
+            <termNote type="partOfSpeech">noun</termNote>
+          </tig>
+        </langSet>
+        <langSet xml:lang="it">
+          <tig>
+            <term>Madrid</term>
+            <termNote type="partOfSpeech">noun</termNote>
+            <termNote type="administrativeStatus">preferredTerm-admn-sts</termNote>
+          </tig>
+        </langSet>
+      </termEntry>
+      <termEntry id="c4">
+        <langSet xml:lang="es">
+          <tig>
+            <term>firmar</term>
+            <termNote type="partOfSpeech">verb</termNote>
+          </tig>
+        </langSet>
+        <langSet xml:lang="it">
+          <tig>
+            <term>firmar</term>
+            <termNote type="partOfSpeech">verb</termNote>
+            <termNote type="administrativeStatus">preferredTerm-admn-sts</termNote>
+          </tig>
+        </langSet>
+      </termEntry>
+      <termEntry id="c5">
+        <langSet xml:lang="es">
+          <tig>
+            <term>válido</term>
+            <termNote type="partOfSpeech">adjective</termNote>
+          </tig>
+        </langSet>
+        <langSet xml:lang="it">
+          <tig>
+            <term>válido</term>
+            <termNote type="partOfSpeech">adjective</termNote>
+            <termNote type="administrativeStatus">preferredTerm-admn-sts</termNote>
+          </tig>
+        </langSet>
+      </termEntry>
+      <termEntry id="c6">
+        <langSet xml:lang="es">
+          <tig>
+            <term>hoy</term>
+            <termNote type="partOfSpeech">adverb</termNote>
+          </tig>
+        </langSet>
+        <langSet xml:lang="it">
+          <tig>
+            <term>hoy</term>
+            <termNote type="partOfSpeech">adverb</termNote>
+            <termNote type="administrativeStatus">preferredTerm-admn-sts</termNote>
+          </tig>
+        </langSet>
+      </termEntry>
+      <termEntry id="c7">
+        <langSet xml:lang="es">
+          <tig>
+            <term>etc</term>
+            <termNote type="partOfSpeech">other</termNote>
+          </tig>
+        </langSet>
+        <langSet xml:lang="it">
+          <tig>
+            <term>etc</term>
+            <termNote type="partOfSpeech">other</termNote>
+            <termNote type="administrativeStatus">preferredTerm-admn-sts</termNote>
+          </tig>
+        </langSet>
+      </termEntry>
+    </body>
+  </text>
+</martif>

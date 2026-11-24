@@ -28,6 +28,7 @@ dev = [
     "es-core-news-sm",
     "it-core-news-sm",
     "ruff>=0.17.6",
+    "lxml>=5",     # RELAX NG validation of the TBX export (tests/test_tbx_schema.py)
 ]
 
 [build-system]

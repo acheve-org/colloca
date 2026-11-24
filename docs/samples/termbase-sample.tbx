@@ -1,0 +1,120 @@
+<?xml version='1.0' encoding='utf-8'?>
+<tbx xmlns="urn:iso:std:iso:30042:ed-2" xml:lang="es" type="TBX-Basic" style="dca">
+  <tbxHeader>
+    <fileDesc>
+      <sourceDesc>
+        <p>Colloca sample termbase: 8 entries, exported from Colloca</p>
+      </sourceDesc>
+    </fileDesc>
+  </tbxHeader>
+  <text>
+    <body>
+      <conceptEntry id="c1">
+        <descrip type="subjectField">legal</descrip>
+        <langSec xml:lang="es">
+          <descrip type="definition">Acuerdo &lt;entre&gt; partes &amp; más</descrip>
+          <termSec>
+            <term>contrato</term>
+            <termNote type="partOfSpeech">noun</termNote>
+            <descrip type="context">El contrato establece las reglas.</descrip>
+          </termSec>
+        </langSec>
+        <langSec xml:lang="it">
+          <termSec>
+            <term>contratto</term>
+            <termNote type="partOfSpeech">noun</termNote>
+            <termNote type="administrativeStatus">preferredTerm-admn-sts</termNote>
+            <note>siempre</note>
+          </termSec>
+          <termSec>
+            <term>accordo</term>
+            <termNote type="partOfSpeech">noun</termNote>
+            <termNote type="administrativeStatus">deprecatedTerm-admn-sts</termNote>
+          </termSec>
+        </langSec>
+      </conceptEntry>
+      <conceptEntry id="c2">
+        <langSec xml:lang="es">
+          <termSec>
+            <term>plazo</term>
+          </termSec>
+        </langSec>
+      </conceptEntry>
+      <conceptEntry id="c3">
+        <langSec xml:lang="es">
+          <termSec>
+            <term>Madrid</term>
+            <termNote type="partOfSpeech">noun</termNote>
+          </termSec>
+        </langSec>
+        <langSec xml:lang="it">
+          <termSec>
+            <term>Madrid</term>
+            <termNote type="partOfSpeech">noun</termNote>
+            <termNote type="administrativeStatus">preferredTerm-admn-sts</termNote>
+          </termSec>
+        </langSec>
+      </conceptEntry>
+      <conceptEntry id="c4">
+        <langSec xml:lang="es">
+          <termSec>
+            <term>firmar</term>
+            <termNote type="partOfSpeech">verb</termNote>
+          </termSec>
+        </langSec>
+        <langSec xml:lang="it">
+          <termSec>
+            <term>firmar</term>
+            <termNote type="partOfSpeech">verb</termNote>
+            <termNote type="administrativeStatus">preferredTerm-admn-sts</termNote>
+          </termSec>
+        </langSec>
+      </conceptEntry>
+      <conceptEntry id="c5">
+        <langSec xml:lang="es">
+          <termSec>
+            <term>válido</term>
+            <termNote type="partOfSpeech">adjective</termNote>
+          </termSec>
+        </langSec>
+        <langSec xml:lang="it">
+          <termSec>
+            <term>válido</term>
+            <termNote type="partOfSpeech">adjective</termNote>
+            <termNote type="administrativeStatus">preferredTerm-admn-sts</termNote>
+          </termSec>
+        </langSec>
+      </conceptEntry>
+      <conceptEntry id="c6">
+        <langSec xml:lang="es">
+          <termSec>
+            <term>hoy</term>
+            <termNote type="partOfSpeech">adverb</termNote>
+          </termSec>
+        </langSec>
+        <langSec xml:lang="it">
+          <termSec>
+            <term>hoy</term>
+            <termNote type="partOfSpeech">adverb</termNote>
+            <termNote type="administrativeStatus">preferredTerm-admn-sts</termNote>
+          </termSec>
+        </langSec>
+      </conceptEntry>
+      <conceptEntry id="c7">
+        <langSec xml:lang="es">
+          <termSec>
+            <term>etc</term>
+            <termNote type="partOfSpeech">other</termNote>
+          </termSec>
+        </langSec>
+        <langSec xml:lang="it">
+          <termSec>
+            <term>etc</term>
+            <termNote type="partOfSpeech">other</termNote>
+            <termNote type="administrativeStatus">preferredTerm-admn-sts</termNote>
+          </termSec>
+        </langSec>
+      </conceptEntry>
+    </body>
+  </text>
+</tbx>
