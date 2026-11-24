@@ -17,7 +17,7 @@
       group: 'nav.group.corpus',
       items: [
         { id: 'sources', label: 'nav.sources' },
-        { id: 'base', label: 'nav.base' },
+        { id: 'languages', label: 'nav.languages' },
       ],
     },
     {

@@ -16,7 +16,7 @@ export const it: Messages = {
   'common.noResults': 'Nessun risultato',
   'table.loading': 'Caricamento…',
   'nav.sources': 'Fonti',
-  'nav.base': 'Corpora di base',
+  'nav.languages': 'Lingue',
   'nav.concordance': 'Concordanze',
   'nav.collocations': 'Collocazioni',
   'nav.ngrams': 'N-grammi',

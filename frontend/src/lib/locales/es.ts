@@ -16,7 +16,7 @@ export const es: Messages = {
   'common.noResults': 'Sin resultados',
   'table.loading': 'Cargando…',
   'nav.sources': 'Fuentes',
-  'nav.base': 'Corpus base',
+  'nav.languages': 'Idiomas',
   'nav.concordance': 'Concordancia',
   'nav.collocations': 'Colocaciones',
   'nav.ngrams': 'N-gramas',

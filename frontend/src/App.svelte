@@ -10,7 +10,7 @@
   import ShortcutHelp from './lib/ui/ShortcutHelp.svelte';
   import type { Component } from 'svelte';
   import type { ScreenId } from './lib/router.svelte';
-  import BaseCorpora from './screens/BaseCorpora.svelte';
+  import Languages from './screens/Languages.svelte';
   import Collocations from './screens/Collocations.svelte';
   import Concordance from './screens/Concordance.svelte';
   import Dispersion from './screens/Dispersion.svelte';
@@ -32,7 +32,7 @@
   // Screen outlet: every route has its screen.
   const SCREEN_COMPONENTS: Record<ScreenId, Component> = {
     sources: Sources,
-    base: BaseCorpora,
+    languages: Languages,
     concordance: Concordance,
     frequency: Frequency,
     dispersion: Dispersion,
