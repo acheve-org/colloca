@@ -35,6 +35,7 @@
   {/if}
   {#if working.length}
     <select aria-label={t('corpus.switcher')} value={String(corpusStore.currentId ?? '')} onchange={pick}>
+      {#if corpusStore.currentId === null}<option value="" disabled>{t('ctx.choose')}</option>{/if}
       {#each groups as g (g.label)}
         <optgroup label={g.label}>
           {#each g.corpora as c (c.id)}<option value={String(c.id)}>{c.name}</option>{/each}

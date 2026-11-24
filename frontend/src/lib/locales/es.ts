@@ -110,6 +110,7 @@ export const es: Messages = {
   'ctx.noProject': 'Sin proyecto',
   'ctx.noCorpus': 'Ningún corpus seleccionado',
   'ctx.label': 'Contexto de trabajo',
+  'ctx.choose': 'Elegir un corpus',
   'nav.group.corpus': 'Corpus',
   'nav.group.explore': 'Explorar',
   'nav.group.terms': 'Términos',

@@ -30,7 +30,7 @@
     align-items: baseline;
     padding: var(--s-1) var(--s-3);
     font-size: var(--fs-small);
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid var(--line);
   }
   .sep,
   .muted {

@@ -53,7 +53,7 @@
   import { go, route, screenHref } from '../router.svelte';
   import { setMode, theme, type ThemeMode } from '../theme.svelte';
   import { loadSession, logout, session } from '../session.svelte';
-  import { loadLanguageNames } from '../context.svelte';
+  import { ensureLanguageName, loadLanguageNames } from '../context.svelte';
   import { messages } from '../messages.svelte';
   import { reloadProjects } from '../projects.svelte';
   import ContextBlock from './ContextBlock.svelte';
@@ -65,6 +65,11 @@
     const say = (err: unknown) => messages.say(err instanceof Error ? err.message : String(err), 'err');
     reloadProjects().catch(say);
     loadLanguageNames().catch(say);
+  });
+
+  // A corpus in a language added after the names were loaded.
+  $effect(() => {
+    void ensureLanguageName();
   });
 
   // Leave a screen whose rail item is hidden, but only once the corpus load has settled

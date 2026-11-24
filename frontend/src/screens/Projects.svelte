@@ -360,7 +360,7 @@
     display: flex;
     flex-direction: column;
     gap: var(--s-1);
-    border: 1px solid var(--border);
+    border: 1px solid var(--line);
     border-radius: var(--radius);
   }
   .plist li.sel {
@@ -409,7 +409,7 @@
   td {
     padding: var(--s-1) var(--s-2);
     text-align: left;
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid var(--line);
   }
   .sr {
     position: absolute;

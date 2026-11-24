@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { del, get, post } from '../lib/api';
   import { t } from '../lib/i18n';
+  import { loadLanguageNames } from '../lib/context.svelte';
   import { messages } from '../lib/messages.svelte';
   import type { CatalogEntry, Corpus, LanguageSetting } from '../lib/types';
   import BaseCorpusCard from '../lib/ui/BaseCorpusCard.svelte';
@@ -71,6 +72,8 @@
       catalog = c;
       await loadSettings();
       loaded = true;
+      // The rail and the context strip show language names: refresh them after any change here.
+      loadLanguageNames().catch(() => {});
     } catch (err) {
       messages.say(errMsg(err), 'err');
     }

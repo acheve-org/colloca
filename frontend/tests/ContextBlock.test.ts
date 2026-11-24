@@ -55,6 +55,14 @@ describe('ContextBlock', () => {
     expect(within(screen.getByRole('combobox')).getAllByRole('group')).toHaveLength(1);
   });
 
+  it('a corpus whose project is unknown lands in the "No project" group', () => {
+    corpusStore.list = [corpus(1, 'A1', 7), corpus(9, 'Orphan', 999)];
+    render(ContextBlock);
+    const groups = within(screen.getByRole('combobox')).getAllByRole('group');
+    expect(groups.map((g) => g.getAttribute('label'))).toEqual(['Acme', 'No project']);
+    expect(within(groups[1]).getByRole('option', { name: 'Orphan' })).toBeInTheDocument();
+  });
+
   it('selecting a corpus calls corpusStore.select', async () => {
     const spy = vi.spyOn(corpusStore, 'select').mockResolvedValue();
     render(ContextBlock);
@@ -70,5 +78,8 @@ describe('ContextBlock', () => {
     expect(screen.getByText('No corpus selected')).toBeInTheDocument();
     expect(screen.queryByText('A1', { selector: 'strong' })).toBeNull();
     expect(screen.getByRole('link', { name: 'Change' })).toBeInTheDocument();
+    const choose = screen.getByRole('option', { name: 'Choose a corpus' }) as HTMLOptionElement;
+    expect(choose.disabled).toBe(true);
+    expect(choose.selected).toBe(true);
   });
 });
