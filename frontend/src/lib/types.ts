@@ -20,6 +20,26 @@ export interface Corpus {
 
 export type Languages = Record<string, string>;
 
+export interface CatalogEntry {
+  code: string;
+  name: string;
+  sizes: string[];
+  tesseract: string;
+  added: boolean;
+}
+
+export type InstallState = 'idle' | 'installing' | 'failed';
+
+export interface LanguageSetting {
+  code: string;
+  name: string;
+  model_size: string | null;
+  tesseract: string;
+  corpus_count: number;
+  model: { name: string | null; version: string | null; size: string | null; small: boolean; state: InstallState; message: string };
+  ocr: { engine: boolean; tesseract: string; available: boolean; state: InstallState; message: string };
+}
+
 export interface ParallelInfo {
   documents: number;
   segments: number;

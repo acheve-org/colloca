@@ -30,6 +30,17 @@
     }
   });
 
+  // The set of languages can change in the Languages screen: read it again when the new-corpus dialog opens.
+  $effect(() => {
+    if (!newOpen) return;
+    get<Languages>('/api/languages')
+      .then((l) => {
+        languages = l;
+        if (!(lang in l)) lang = Object.keys(l)[0] ?? '';
+      })
+      .catch((err) => messages.say(err instanceof Error ? err.message : String(err), 'err'));
+  });
+
   const visible = $derived(corpusStore.list.filter((c) => inProject(c, projectStore.filter)));
   // Like the old header: grouped by project when all projects are shown.
   const groups = $derived.by(() => {

@@ -1,43 +1,253 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { get } from '../lib/api';
+  import { del, get, post } from '../lib/api';
   import { t } from '../lib/i18n';
   import { messages } from '../lib/messages.svelte';
-  import type { Corpus, Languages } from '../lib/types';
+  import type { CatalogEntry, Corpus, LanguageSetting } from '../lib/types';
   import BaseCorpusCard from '../lib/ui/BaseCorpusCard.svelte';
+  import Button from '../lib/ui/Button.svelte';
+  import Dialog from '../lib/ui/Dialog.svelte';
   import Toggle from '../lib/ui/Toggle.svelte';
+  import AddLanguageDialog from './AddLanguageDialog.svelte';
+  import EditLanguageDialog from './EditLanguageDialog.svelte';
 
   const uid = $props.id();
-  let langs = $state.raw<Languages>({});
+  const errMsg = (err: unknown) => (err instanceof Error ? err.message : String(err));
+  const SIZES = ['sm', 'md', 'lg'];
+
+  let rows = $state.raw<LanguageSetting[]>([]);
   let refs = $state.raw<Corpus[]>([]);
+  let catalog = $state.raw<CatalogEntry[]>([]);
   let loaded = $state(false);
   let force = $state(false);
+  let busy = $state(false);
+  let chosen = $state.raw<Record<string, string>>({});
+  let addOpen = $state(false);
+  let editOpen = $state(false);
+  let editing = $state.raw<LanguageSetting | null>(null);
+  let removeOpen = $state(false);
+  let removing = $state.raw<LanguageSetting | null>(null);
+  let alsoUninstall = $state(false);
+
+  let seq = 0;
+  let mounted = true;
+  // Last state seen per language, to announce an install that just finished or failed.
+  let seen: Record<string, { model: string; ocr: string }> = {};
+
+  const installing = $derived(rows.some((r) => r.model.state === 'installing' || r.ocr.state === 'installing'));
+  const sizesOf = (code: string) => catalog.find((e) => e.code === code)?.sizes ?? SIZES;
+
+  function announce(next: LanguageSetting[]): void {
+    for (const r of next) {
+      const prev = seen[r.code];
+      if (prev?.model === 'installing' && r.model.state === 'idle') messages.say(t('lang.modelDone', { name: r.name }), 'ok');
+      if (prev?.model === 'installing' && r.model.state === 'failed') {
+        messages.say(t('lang.modelFailed', { name: r.name, message: r.model.message }), 'err');
+      }
+      if (prev?.ocr === 'installing' && r.ocr.state === 'idle') messages.say(t('lang.ocrDone', { name: r.name }), 'ok');
+      if (prev?.ocr === 'installing' && r.ocr.state === 'failed') {
+        messages.say(t('lang.ocrFailed', { name: r.name, message: r.ocr.message }), 'err');
+      }
+      seen[r.code] = { model: r.model.state, ocr: r.ocr.state };
+    }
+  }
+
+  async function loadSettings(): Promise<void> {
+    const n = ++seq;
+    try {
+      const next = await get<LanguageSetting[]>('/api/language-settings');
+      if (n !== seq || !mounted) return;
+      announce(next);
+      rows = next;
+    } catch (err) {
+      if (n === seq) messages.say(errMsg(err), 'err');
+    }
+  }
 
   async function load(): Promise<void> {
     try {
-      [langs, refs] = await Promise.all([get<Languages>('/api/languages'), get<Corpus[]>('/api/references')]);
+      const [r, c] = await Promise.all([get<Corpus[]>('/api/references'), get<CatalogEntry[]>('/api/language-catalog')]);
+      refs = r;
+      catalog = c;
+      await loadSettings();
       loaded = true;
     } catch (err) {
-      messages.say(err instanceof Error ? err.message : String(err), 'err');
+      messages.say(errMsg(err), 'err');
     }
   }
-  onMount(load);
+
+  onMount(() => {
+    load();
+    return () => {
+      mounted = false;
+      seq++;
+    };
+  });
+
+  $effect(() => {
+    if (!installing) return;
+    const id = setInterval(loadSettings, 2000);
+    return () => clearInterval(id);
+  });
+
+  async function act(fn: () => Promise<void>): Promise<void> {
+    if (busy) return;
+    busy = true;
+    try {
+      await fn();
+    } catch (err) {
+      messages.say(errMsg(err), 'err');
+    } finally {
+      busy = false;
+    }
+  }
+
+  const currentSize = (r: LanguageSetting) => chosen[r.code] ?? r.model_size ?? r.model.size ?? 'md';
+  const sizeChanged = (r: LanguageSetting) => chosen[r.code] !== undefined && chosen[r.code] !== (r.model.size ?? r.model_size);
+
+  const installModel = (r: LanguageSetting) =>
+    act(async () => {
+      const size = chosen[r.code];
+      await post(`/api/languages/${r.code}/model`, size ? { size } : {});
+      await loadSettings();
+    });
+  const uninstallModel = (r: LanguageSetting) =>
+    act(async () => {
+      await del(`/api/languages/${r.code}/model`);
+      await loadSettings();
+    });
+  const installOcr = (r: LanguageSetting) =>
+    act(async () => {
+      await post(`/api/languages/${r.code}/ocr`);
+      await loadSettings();
+    });
+  const removeOcr = (r: LanguageSetting) =>
+    act(async () => {
+      await del(`/api/languages/${r.code}/ocr`);
+      await loadSettings();
+    });
+
+  function askRemove(r: LanguageSetting): void {
+    removing = r;
+    alsoUninstall = false;
+    removeOpen = true;
+  }
+
+  async function confirmRemove(): Promise<void> {
+    const r = removing;
+    removeOpen = false;
+    if (!r) return;
+    await act(async () => {
+      await del(`/api/languages/${r.code}${alsoUninstall ? '?uninstall_model=true' : ''}`);
+      messages.say(t('lang.removed', { name: r.name }), 'ok');
+      delete seen[r.code];
+      await load();
+    });
+  }
 </script>
 
 <div class="languages">
-  <p class="intro">{t('base.intro')}</p>
-  <div><Toggle bind:checked={force} label={t('src.force')} /></div>
+  <p class="intro">{t('lang.intro')}</p>
+  <div class="bar">
+    <Button variant="primary" onclick={() => (addOpen = true)}>{t('lang.add')}</Button>
+    <Toggle bind:checked={force} label={t('src.force')} />
+  </div>
+
   {#if loaded}
     <div class="cards">
-      {#each Object.entries(langs) as [code, name] (code)}
-        <section class="card" aria-labelledby="{uid}-{code}">
-          <h3 id="{uid}-{code}">{name}</h3>
-          <BaseCorpusCard lang={code} {name} reference={refs.find((r) => r.lang === code) ?? null} {force} onchange={load} />
+      {#each rows as r (r.code)}
+        <section class="card" aria-labelledby="{uid}-{r.code}">
+          <h3><span id="{uid}-{r.code}">{r.name}</span> <span class="code">{r.code}</span></h3>
+
+          <div class="line">
+            <b>{t('lang.model')}</b>
+            {#if r.model.state === 'installing'}
+              <progress aria-label={t('lang.installing')}></progress>
+              <span>{t('lang.installing')}</span>
+            {:else if r.model.name}
+              <span>{t('lang.modelLine', { name: r.model.name, version: r.model.version ?? '', size: r.model.size ?? '' })}</span>
+            {:else}
+              <span class="muted">{t('lang.notInstalled')}</span>
+            {/if}
+            {#if r.model.state === 'failed'}<span class="err" role="alert">{r.model.message}</span>{/if}
+          </div>
+          {#if r.model.state !== 'installing'}
+            <div class="row">
+              <select
+                aria-label={t('lang.sizeFor', { name: r.name })}
+                value={currentSize(r)}
+                onchange={(e) => (chosen = { ...chosen, [r.code]: e.currentTarget.value })}
+              >
+                {#each sizesOf(r.code) as s (s)}<option value={s}>{s}</option>{/each}
+              </select>
+              {#if r.model.name}
+                <Button
+                  disabled={busy || !sizeChanged(r)}
+                  ariaLabel={t('lang.changeSizeFor', { name: r.name })}
+                  onclick={() => installModel(r)}>{t('lang.changeSize')}</Button
+                >
+                <Button variant="danger" disabled={busy} ariaLabel={t('lang.uninstallFor', { name: r.name })} onclick={() => uninstallModel(r)}>
+                  {t('lang.uninstall')}
+                </Button>
+              {:else}
+                <Button variant="primary" disabled={busy} ariaLabel={t('lang.installFor', { name: r.name })} onclick={() => installModel(r)}>
+                  {t('lang.install')}
+                </Button>
+              {/if}
+            </div>
+          {/if}
+
+          <div class="line">
+            <b>{t('lang.ocr')}</b>
+            {#if !r.ocr.engine}
+              <span class="muted">{t('lang.engineMissing')}</span>
+            {:else if !r.tesseract}
+              <span class="muted">{t('lang.noOcrCode')}</span>
+            {:else if r.ocr.state === 'installing'}
+              <progress aria-label={t('lang.installing')}></progress>
+              <span>{t('lang.installing')}</span>
+            {:else if r.ocr.available}
+              <span>{t('lang.dataReady')}</span>
+              <Button disabled={busy} ariaLabel={t('lang.removeOcrFor', { name: r.name })} onclick={() => removeOcr(r)}>{t('lang.removeData')}</Button>
+            {:else}
+              <span class="muted">{t('lang.dataMissing')}</span>
+              <Button disabled={busy} ariaLabel={t('lang.installOcrFor', { name: r.name })} onclick={() => installOcr(r)}>{t('lang.installData')}</Button>
+            {/if}
+            {#if r.ocr.state === 'failed'}<span class="err" role="alert">{r.ocr.message}</span>{/if}
+          </div>
+
+          <div class="row">
+            <Button
+              ariaLabel={t('lang.editLabel', { name: r.name })}
+              onclick={() => {
+                editing = r;
+                editOpen = true;
+              }}>{t('lang.edit')}</Button
+            >
+            <Button variant="danger" disabled={busy || r.corpus_count > 0} ariaLabel={t('lang.removeLabel', { name: r.name })} onclick={() => askRemove(r)}>
+              {t('lang.remove')}
+            </Button>
+            {#if r.corpus_count > 0}<span class="muted">{t('lang.blocked', { n: r.corpus_count })}</span>{/if}
+          </div>
+
+          <h4>{t('lang.baseCorpus')}</h4>
+          <BaseCorpusCard lang={r.code} name={r.name} reference={refs.find((x) => x.lang === r.code) ?? null} {force} onchange={load} />
         </section>
       {/each}
     </div>
   {/if}
 </div>
+
+<AddLanguageDialog bind:open={addOpen} {catalog} onadded={load} />
+<EditLanguageDialog bind:open={editOpen} lang={editing} sizes={editing ? sizesOf(editing.code) : SIZES} onsaved={load} />
+<Dialog bind:open={removeOpen} title={t('lang.removeTitle', { name: removing?.name ?? '' })}>
+  <p class="confirm">{t('lang.removeBody')}</p>
+  <Toggle bind:checked={alsoUninstall} label={t('lang.alsoUninstall')} />
+  {#snippet footer()}
+    <Button onclick={() => (removeOpen = false)}>{t('common.cancel')}</Button>
+    <Button variant="danger" onclick={confirmRemove}>{t('lang.remove')}</Button>
+  {/snippet}
+</Dialog>
 
 <style>
   .languages {
@@ -52,15 +262,56 @@
     margin: 0;
     color: var(--muted);
   }
+  .bar {
+    display: flex;
+    align-items: center;
+    gap: var(--s-3);
+  }
   .cards {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
     gap: var(--s-3);
   }
   .card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s-2);
     min-width: 0;
     padding: var(--s-2) var(--s-3);
     border: 1px solid var(--line);
     border-radius: var(--radius);
+  }
+  h3,
+  h4 {
+    margin: 0;
+  }
+  h4 {
+    font-size: var(--fs-small);
+    color: var(--muted);
+  }
+  .code {
+    font-size: var(--fs-small);
+    font-weight: 400;
+    color: var(--muted);
+  }
+  .line,
+  .row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--s-2);
+  }
+  .muted {
+    color: var(--muted);
+  }
+  .err {
+    color: var(--danger);
+  }
+  progress {
+    width: 8rem;
+    accent-color: var(--accent);
+  }
+  .confirm {
+    margin: 0 0 var(--s-2);
   }
 </style>
