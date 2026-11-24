@@ -1,4 +1,5 @@
 """Turn URLs and uploaded files into clean plain text."""
+import contextlib
 import io
 import ipaddress
 import os
@@ -8,7 +9,7 @@ import threading
 import time
 import unicodedata
 from collections import Counter
-from urllib.parse import urljoin, urlparse
+from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlsplit, urlunsplit
 
 import httpx
 
@@ -22,6 +23,7 @@ USER_AGENT = "colloca/0.1 (personal terminology research)"
 URL_DELAY = float(os.environ.get("URL_DELAY_SECONDS", "1"))                  # between two requests to one host (lists)
 MAX_URL_LIST = int(os.environ.get("MAX_URL_LIST", "50"))                      # URLs in one list
 MAX_URLS_PER_HOST = int(os.environ.get("MAX_URLS_PER_HOST", "20"))            # of them, to the same host
+MAX_DISCOVERED = 2000                                                         # links listed from one index page
 
 
 class IngestError(ValueError):
@@ -157,6 +159,113 @@ def parse_url_list(raw: list[str]) -> tuple[list[str], list[dict]]:
             per_host[parsed.hostname.lower()] = per_host.get(parsed.hostname.lower(), 0) + 1
             urls.append(url)
     return urls, bad
+
+
+# --------------------------------------------------------------------------- catalogs
+_NON_ARTICLE_SEGMENTS = frozenset({
+    "login", "signin", "register", "signup", "search", "tag", "tags", "category", "categories", "author",
+    "authors", "cart", "privacy", "contact", "about", "terms", "cookies"})
+_TRACKING = ("utm_",)
+_TRACKING_EXACT = frozenset({"fbclid", "gclid"})
+_FEED_ROOTS = frozenset({"rss", "feed", "rdf"})
+
+
+def _clean_link(href: str, base: str) -> str | None:
+    """An absolute http(s) URL without fragment and tracking parameters, or None."""
+    parts = urlsplit(urljoin(base, href.strip()))
+    if parts.scheme not in ("http", "https") or not parts.hostname:
+        return None
+    query = urlencode([(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True)
+                       if not k.lower().startswith(_TRACKING) and k.lower() not in _TRACKING_EXACT])
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, query, ""))
+
+
+def _local(tag) -> str:
+    return tag.rsplit("}", 1)[-1].lower() if isinstance(tag, str) else ""
+
+
+def _feed_links(root, base: str) -> tuple[str, list[tuple[str, str]]]:
+    title = ""
+    out: list[tuple[str, str]] = []
+    for el in root.iter():
+        name = _local(el.tag)
+        if name == "title" and not title and _local(el.getparent().tag) in ("channel", "feed"):
+            title = " ".join((el.text or "").split())
+        elif name in ("item", "entry"):
+            text, href = "", ""
+            for child in el:
+                cname = _local(child.tag)
+                if cname == "title":
+                    text = " ".join((child.text or "").split())
+                elif cname == "link":
+                    if child.get("href"):                         # Atom: prefer rel="alternate" (or none)
+                        if not href or child.get("rel", "alternate") == "alternate":
+                            href = child.get("href") or ""
+                    elif child.text and not href:                 # RSS
+                        href = child.text.strip()
+            if href:
+                out.append((href, text))
+    return title, out
+
+
+def parse_links(data: bytes, base_url: str) -> dict:
+    """The links of an index page (or the entries of an RSS/Atom feed): {title, links: [{url, text, same_host}]}.
+    Navigation, header, footer and aside links, account/search/tag-style paths, empty links and the page itself
+    are left out of HTML pages; fragments and tracking parameters are removed; duplicates are merged."""
+    from lxml import etree
+    from lxml import html as lxml_html
+    root = None
+    root = None
+    with contextlib.suppress(etree.XMLSyntaxError):
+        root = etree.fromstring(data, etree.XMLParser(recover=True, resolve_entities=False, no_network=True))
+    is_feed = root is not None and _local(root.tag) in _FEED_ROOTS
+    raw: list[tuple[str, str]]
+    if is_feed:
+        title, raw = _feed_links(root, base_url)
+    else:
+        try:
+            try:                                  # UTF-8 first; otherwise lxml reads the page's own charset
+                doc = lxml_html.fromstring(data.decode("utf-8"))
+            except (UnicodeDecodeError, ValueError):
+                doc = lxml_html.fromstring(data)
+        except (etree.ParserError, ValueError):
+            return {"title": "", "links": []}
+        title = " ".join(str(doc.xpath("string(//title)")).split())
+        bases = doc.xpath("//base/@href")
+        if bases:
+            base_url = urljoin(base_url, bases[0])
+        raw = []
+        for a in doc.xpath("//a[@href][not(ancestor::nav or ancestor::header or ancestor::footer "
+                           "or ancestor::aside)]"):
+            text = " ".join(a.text_content().split()) or (a.get("title") or "").strip()
+            if text:
+                raw.append((a.get("href"), text))
+    page = _clean_link(base_url, base_url)
+    host = (urlparse(base_url).hostname or "").lower()
+    found: dict[str, str] = {}
+    for href, text in raw:
+        url = _clean_link(href, base_url)
+        if not url or (not is_feed and (url == page or
+                                        _NON_ARTICLE_SEGMENTS & {s.lower() for s in urlparse(url).path.split("/")})):
+            continue
+        if len(text) > len(found.get(url, "")) or url not in found:
+            found[url] = text
+    links = [{"url": u, "text": t, "same_host": (urlparse(u).hostname or "").lower() == host}
+             for u, t in found.items()]
+    return {"title": title, "links": links}
+
+
+def discover_links(url: str) -> dict:
+    """Fetch an index page or feed and list the links on it (one request; nothing is imported)."""
+    data, ctype = _download(url)
+    head = data[:2048].lower()
+    if not (any(k in ctype for k in ("html", "xml", "rss", "atom")) or
+            any(m in head for m in (b"<html", b"<?xml", b"<rss", b"<feed", b"<!doctype html"))):
+        raise IngestError("Not a web page or a feed")
+    res = parse_links(data, url)
+    truncated = len(res["links"]) > MAX_DISCOVERED
+    return {"url": url, "title": res["title"] or urlparse(url).netloc, "links": res["links"][:MAX_DISCOVERED],
+            "truncated": truncated, "max_per_request": min(MAX_URL_LIST, MAX_URLS_PER_HOST)}
 
 
 # --------------------------------------------------------------------------- formats
