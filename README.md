@@ -177,6 +177,12 @@ Concordance options (also available as API parameters):
 - **Filter boxes** above the table narrow the lines already loaded (left/right context, or source/target in aligned
   mode) without a new search; the CSV export carries the search options, not these client-side filters.
 
+Selecting a hit shows the document's metadata (source, author, date, text type, tags) and the whole sentence under
+the table. **Open document** reads the text around the hit with the match marked (aligned documents show the
+translation of each segment beside it), with *Previous / Next hit* and *Show more before / after*. The browser asks
+`GET /api/documents/{id}/context?pos=&span=&radius=` for just the sentences or segments around the hit, never the whole
+text.
+
 ## Development
 
 Tooling: [mise](https://mise.jdx.dev) (Python 3.14 + uv) and [uv](https://docs.astral.sh/uv/) for dependencies.

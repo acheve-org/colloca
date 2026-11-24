@@ -12,7 +12,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import analysis, db, importer, ingest, jobanalysis, metadata, nlp, parallel, termbase, termexport
+from . import analysis, db, docview, importer, ingest, jobanalysis, metadata, nlp, parallel, termbase, termexport
 
 
 @asynccontextmanager
@@ -547,6 +547,21 @@ def get_document(doc_id: int):
             raise HTTPException(404, "Document not found")
         tags = [r[0] for r in conn.execute("SELECT tag FROM doc_tags WHERE doc_id=? ORDER BY tag", (doc_id,))]
         return {**dict(row), "tags": tags}
+
+
+@app.get("/api/documents/{doc_id}/context")
+def document_context(doc_id: int, pos: int = Query(ge=0), span: int = Query(1, ge=1, le=200),
+                     radius: int = Query(3, ge=0, le=docview.MAX_RADIUS)):
+    """The text around the token at `pos`: `radius` sentences (or aligned segments, with their translations)
+    on each side, the hit marked by character offsets, and the document's metadata. For 'open the document
+    at this hit' without downloading the whole text."""
+    with db.session() as conn:
+        try:
+            return docview.context(conn, doc_id, pos, span, radius)
+        except LookupError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
 
 
 @app.patch("/api/documents/{doc_id}")
