@@ -35,6 +35,9 @@ window, with a warning when a language runs on a small (`sm`) model. Data lives 
 4. **Keyness**: compares your corpus with the language's **base corpus** (below) by default, or with any other
    corpus of the same language you pick. The *Show* choice adds **under-used** words (negative LL), including
    words that occur only in the reference corpus.
+5. **Dispersion plot**: where a word or phrase occurs in each document of the corpus (the same query options as the
+   concordance). One bar per document from start to end, a mark per hit; click a mark to read that passage, then
+   step through the hits. The hit counts match the concordance.
 
 ## Projects, document details and filters
 
@@ -368,7 +371,7 @@ mise run ui:e2e               # builds the UI and runs the Playwright end-to-end
   need neither Node nor a build. A wheel (`uv build`) includes the UI only if it was built first.
 - **Layout**: a left rail with the corpus switcher (project filter, *…* to manage projects, corpus selector with
   its language, documents and words, *New corpus*, *Delete*), the screens grouped as **Corpus** (Sources, Base
-  corpora), **Explore** (Concordance, Collocations, N-grams, Frequency list, Keyness, Word cloud, Equivalents),
+  corpora), **Explore** (Concordance, Collocations, N-grams, Frequency list, Dispersion plot, Keyness, Word cloud, Equivalents),
   **Terms** (Termbase) and **Job**, and the theme and language switches (Auto, Light, Dark; EN, ES, IT). The work area shows a toolbar with
   the options, the document filter, a result strip (counts and *Filter in results*), the sortable table and, for
   the selected row, a detail strip with its actions. Messages appear in the status line at the top. The screen

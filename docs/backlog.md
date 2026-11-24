@@ -59,7 +59,7 @@ The T-numbers are stable labels used for cross-references; the **row order is th
 | T24 | PDF extraction robustness | Low | M | P3 | Audit |
 | T25 | URL fetching: DNS-rebinding hardening, import a list of URLs | Low | S | P3 | Audit |
 | T26 | Virtual scrolling for very large tables | Low | M | P3 | Audit |
-| T27 | Dispersion plot for a word across documents | Low | S | P3 | Research #14 |
+| T27 | Dispersion plot for a word across documents (**done**) | Low | S | P3 | Research #14 |
 | Q1 | Show the active spaCy model in the interface, fix the documented default | Medium | S | Quick | Roadmap Phase 1 item 5 |
 | Q2 | Keyness: also list words that are key only in the reference corpus | Medium | S | Quick | Audit |
 
@@ -658,6 +658,10 @@ that are fetched as background jobs with a per-URL report (the trimming step bec
 ### T27. Dispersion plot for a word across documents
 
 **Priority** P3 · **Value** Low · **Effort** S · **Source** Research #14
+
+**Status: done.** *Explore › Dispersion plot* (`GET /api/corpora/{id}/dispersion`, same query options and document filter as the concordance): one bar per
+document with a mark per hit at its relative position, hits and per-million per document, CSV; a click opens the shared document viewer
+at the nearest mark and Previous/Next step through the marks of the plot.
 
 **Why it matters.** AntConc's "plot" shows where a word occurs across the documents of a corpus. It is secondary for translators but cheap.
 
