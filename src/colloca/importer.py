@@ -227,6 +227,12 @@ class Job:
     # A big result a job wants to hand back (e.g. an analysis report). Not a dataclass field, so it never
     # travels in the job lists the UI polls; fetch it with GET /api/jobs/{id}/result.
     payload: ClassVar[dict | None] = None
+    # An analysis job also remembers what a saved report needs: its name and parameters (`meta`), the analysed text
+    # only if the user asked to keep it (`text`: held in memory until the job is forgotten), and the id of the
+    # report saved from it (`report_id`).
+    meta: ClassVar[dict | None] = None
+    text: ClassVar[str | None] = None
+    report_id: ClassVar[int | None] = None
 
     def set_progress(self, fraction: float) -> None:
         self.progress = round(min(max(fraction, 0.0), 1.0), 3)

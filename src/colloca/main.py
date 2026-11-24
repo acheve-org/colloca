@@ -29,6 +29,7 @@ from . import (
     importer,
     ingest,
     jobanalysis,
+    jobreports,
     logsetup,
     metadata,
     nlp,
@@ -667,9 +668,11 @@ def near_duplicates(corpus_id: int, threshold: float = Query(dedup.THRESHOLD, ge
 @app.post("/api/corpora/{corpus_id}/analyse-job", status_code=202)
 async def analyse_job(corpus_id: int, file: UploadFile | None = File(None), text: str = Form(""),
                       min_freq: int = Query(2, ge=1), min_corpus_freq: int = Query(3, ge=1),
-                      force_language: bool = False, sq: ScopeQuery = Depends()):
+                      force_language: bool = False, keep_text: bool = False, sq: ScopeQuery = Depends()):
     """Analyse a text you are about to translate (an uploaded file, or `text`) against this corpus and its
-    project's termbase. Runs as a job; fetch the report from GET /api/jobs/{id}/result. Nothing is stored."""
+    project's termbase. Runs as a job; fetch the report from GET /api/jobs/{id}/result. Nothing is stored unless
+    you save the report (POST /api/jobs/{id}/save); the analysed text is kept with a saved report only when
+    `keep_text=true` was sent here."""
     with db.session() as conn:
         corpus = dict(_corpus(conn, corpus_id))
     if corpus["is_reference"]:
@@ -684,6 +687,9 @@ async def analyse_job(corpus_id: int, file: UploadFile | None = File(None), text
         data, name = None, "pasted text"
     else:
         raise HTTPException(400, "Upload a file or paste the text to analyse")
+    params = {"min_freq": min_freq, "min_corpus_freq": min_corpus_freq, "force_language": force_language,
+              "tags": list(scope.tags), "text_type": scope.text_type, "date_from": scope.date_from,
+              "date_to": scope.date_to, "docs": list(scope.doc_ids)}
 
     def work(job):
         parsed = ingest.read_file(name, data, corpus["lang"], progress=lambda f: job.set_progress(f * 0.5)) \
@@ -693,6 +699,8 @@ async def analyse_job(corpus_id: int, file: UploadFile | None = File(None), text
             job.payload = jobanalysis.analyse(conn, scope, corpus, body, min_freq=min_freq,
                                               min_corpus_freq=min_corpus_freq, force_language=force_language,
                                               progress=job.set_progress)
+        job.meta = {"source": "" if data is None else name, "params": params}
+        job.text = body if keep_text else None
         return {"summary": job.payload["summary"], "warnings": parsed["warnings"]}
     job = importer.submit(corpus_id, "analysis", name, work)
     return {"job_id": job.id}
@@ -701,36 +709,126 @@ async def analyse_job(corpus_id: int, file: UploadFile | None = File(None), text
 _JOB_SECTIONS = ("key_terms", "gaps", "known_terms", "phrases")
 
 
-def _annotated_report(job) -> dict:
-    """The stored report with `in_termbase` / `dropped` on its candidate tables, as of now (the termbase and
-    the stop list may have changed since the analysis ran)."""
-    report = dict(job.payload)
+def _annotated_report(payload: dict, corpus_id: int) -> dict:
+    """The report with `in_termbase` / `dropped` on its candidate tables, as of now (the termbase and the stop
+    list may have changed since the analysis ran)."""
+    report = dict(payload)
     with db.session() as conn:
-        corpus = conn.execute("SELECT * FROM corpora WHERE id=?", (job.corpus_id,)).fetchone()
+        corpus = conn.execute("SELECT * FROM corpora WHERE id=?", (corpus_id,)).fetchone()
         if corpus:
             for name in ("key_terms", "gaps", "phrases"):
                 report[name] = candidates.annotate(conn, corpus, [dict(r) for r in report[name]])
     return report
 
 
+def _report_reply(payload: dict, corpus_id: int, section: str, fmt: str, title: str, source: str):
+    """Shared by a finished job and a saved report: the whole report as JSON or one workbook (`format=xlsx`),
+    or one table as JSON or CSV (`section`)."""
+    if not section:
+        if fmt == "xlsx":
+            media, ext = _EXPORTS["xlsx"]
+            body = jobreports.to_xlsx(payload, title, source)
+            return Response(body, media_type=media, headers={"Content-Disposition": 'attachment; '
+                                                             f'filename="job-report.{ext}"'})
+        return _annotated_report(payload, corpus_id)
+    if section not in _JOB_SECTIONS:
+        raise HTTPException(400, f"section must be one of {', '.join(_JOB_SECTIONS)}")
+    rows = payload[section]
+    if section == "known_terms":
+        rows = [{"term": r["item"], "occurrences": r["occurrences"], "example": r["example"],
+                 "translations": "; ".join(f"{t['term'] or '—'} [{t['status']}]" for t in r["translations"])}
+                for r in rows]
+    return _reply(rows, fmt, section)
+
+
 @app.get("/api/jobs/{job_id}/result")
 def job_result(job_id: int, section: str = "", format: str = "json"):
-    """The report of an analysis job; `section` + `format=csv` downloads one table."""
+    """The report of an analysis job; `section` + `format=csv` downloads one table, `format=xlsx` the whole
+    report as one workbook."""
     job = importer.get_job(job_id)
     if not job:
         raise HTTPException(404, "Job not found")
     if job.status != "done" or job.payload is None:
         raise HTTPException(409, "The job has no result (yet)")
-    if not section:
-        return _annotated_report(job)
-    if section not in _JOB_SECTIONS:
-        raise HTTPException(400, f"section must be one of {', '.join(_JOB_SECTIONS)}")
-    rows = job.payload[section]
-    if section == "known_terms":
-        rows = [{"term": r["item"], "occurrences": r["occurrences"], "example": r["example"],
-                 "translations": "; ".join(f"{t['term'] or '—'} [{t['status']}]" for t in r["translations"])}
-                for r in rows]
-    return _reply(rows, format, section)
+    meta = job.meta or {}
+    return _report_reply(job.payload, job.corpus_id, section, format, job.label, meta.get("source", ""))
+
+
+class ReportSave(BaseModel):
+    title: str = Field(default="", max_length=200)
+
+
+@app.post("/api/jobs/{job_id}/save")
+def save_report(job_id: int, body: ReportSave):
+    """Keep the report of a finished analysis (with the analysed text only if `keep_text` was asked when it ran)
+    so it can be reopened after a restart. Saving twice returns the same report."""
+    job = importer.get_job(job_id)
+    if not job:
+        raise HTTPException(404, "Job not found")
+    if job.status != "done" or job.payload is None:
+        raise HTTPException(409, "The job has no result (yet)")
+    with db.session() as conn:
+        corpus = conn.execute("SELECT id FROM corpora WHERE id=? AND deleted_at IS NULL", (job.corpus_id,)).fetchone()
+        if not corpus:
+            raise HTTPException(404, "Corpus not found")
+        if job.report_id is not None and jobreports.get(conn, job.report_id):
+            return {"id": job.report_id, "saved_before": True}
+        meta = job.meta or {}
+        source = meta.get("source", "")
+        title = body.title.strip() or f"{source or 'Pasted text'} · {time.strftime('%Y-%m-%d %H:%M')}"
+        job.report_id = jobreports.save(  # type: ignore[misc]   # per-job attribute, see importer.Job
+            conn, job.corpus_id, job.payload, title, source, meta.get("params", {}), job.text)
+    return {"id": job.report_id, "saved_before": False}
+
+
+def _stored_report(conn, report_id: int):
+    row = jobreports.get(conn, report_id)
+    if not row:
+        raise HTTPException(404, "Report not found")
+    return row
+
+
+@app.get("/api/corpora/{corpus_id}/reports")
+def list_reports(corpus_id: int):
+    """The saved job reports of this corpus, newest first."""
+    with db.session() as conn:
+        _corpus(conn, corpus_id)
+        return jobreports.listing(conn, corpus_id)
+
+
+@app.get("/api/reports/{report_id}/result")
+def report_result(report_id: int, section: str = "", format: str = "json"):
+    """A saved report, as GET /api/jobs/{id}/result gives it (the table flags are as of now), plus `title`,
+    `source`, `created` and `has_text`."""
+    with db.session() as conn:
+        row = _stored_report(conn, report_id)
+    payload = json.loads(row["payload"])
+    res = _report_reply(payload, row["corpus_id"], section, format, row["title"], row["source"])
+    if isinstance(res, dict):
+        res.update({"report_id": row["id"], "title": row["title"], "source": row["source"],
+                    "created": row["created"], "has_text": row["text"] is not None,
+                    "params": json.loads(row["params"])})
+    return res
+
+
+@app.get("/api/reports/{report_id}/text")
+def report_text(report_id: int):
+    """The analysed text, if it was kept with the report."""
+    with db.session() as conn:
+        row = _stored_report(conn, report_id)
+        if row["text"] is None:
+            raise HTTPException(404, "The text was not kept with this report")
+        lang = conn.execute("SELECT lang FROM corpora WHERE id=?", (row["corpus_id"],)).fetchone()["lang"]
+    return {"text": row["text"], "lang": lang}
+
+
+@app.delete("/api/reports/{report_id}", status_code=204)
+def delete_report(report_id: int):
+    """Delete a saved report for good, with the text kept in it."""
+    with db.session() as conn:
+        _stored_report(conn, report_id)
+        jobreports.delete(conn, report_id)
+    return Response(status_code=204)
 
 
 @app.post("/api/corpora/{corpus_id}/reannotate", status_code=202)
