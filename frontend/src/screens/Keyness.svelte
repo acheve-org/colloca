@@ -23,6 +23,13 @@
   let ref = $state(initial.ref ?? '');
   let minFreq = $state<number | null>(toInt(initial.min, 3));
   let pos = $state(initial.pos ?? '');
+  /** over = studied corpus only (the API default); under / both ask the API for both directions. */
+  let dir = $state(initial.dir === 'under' || initial.dir === 'both' ? initial.dir : 'over');
+  const dirOptions = $derived([
+    { value: 'over', label: t('ex.ky.dir.over') },
+    { value: 'under', label: t('ex.ky.dir.under') },
+    { value: 'both', label: t('ex.ky.dir.both') },
+  ]);
 
   let refs = $state.raw<Corpus[]>([]);
   let refsLoaded = $state(false);
@@ -33,6 +40,10 @@
   }
   let rows = $state.raw<KeynessRow[]>([]);
   let result = $state.raw<Result | null>(null);
+  let shownDir = $state('over');
+  const shown = $derived(
+    shownDir === 'under' ? rows.filter((r) => r.ll < 0) : rows,
+  );
 
   const runner = useRunner({
     reset: () => {
@@ -76,6 +87,7 @@
     { key: 'ref_per_million', label: t('ex.col.refPerM'), num: true },
     { key: 'log_ratio', label: t('ex.col.logRatio'), num: true },
     { key: 'll', label: t('ex.col.ll'), num: true },
+    ...(shownDir === 'over' ? [] : [{ key: 'direction', label: t('ex.col.direction'), width: '6rem' }]),
   ]);
 
   async function loadRefs(): Promise<void> {
@@ -96,14 +108,21 @@
     const min = toInt(minFreq, 3);
     minFreq = min;
     const memo = { ref, min_freq: min, pos: pos.trim() };
-    const params = { ...memo, ...scopeParams() };
+    const params = { ...memo, ...(dir === 'over' ? {} : { both_directions: 'true' }), ...scopeParams() };
+    const runDir = dir;
     runner.exec(
       (id) => get<KeynessRow[]>(`/api/corpora/${id}/keyness`, params),
       (r, id) => {
-        rows = r;
+        rows = runDir === 'over'
+            ? r
+            : r.map((x) => ({
+                ...x,
+                direction: t(x.direction === 'under' ? 'ex.ky.dir.under' : 'ex.ky.dir.over'),
+              })) as unknown as KeynessRow[];
+        shownDir = runDir;
         result = { path: `/api/corpora/${id}/keyness`, params };
         keynessMemo.last = memo;
-        go('keyness', { ref, min: String(min), pos: pos.trim() });
+        go('keyness', { ref, min: String(min), pos: pos.trim(), dir });
       },
     );
   }
@@ -117,16 +136,17 @@
   {#snippet fields()}
     <Field label={t('ex.ky.ref')}><Select label={t('ex.ky.ref')} bind:value={ref} options={refOptions} /></Field>
     <Field label={t('ex.minFreq')}><input type="number" min="1" bind:value={minFreq} /></Field>
+    <Field label={t('ex.ky.dir')}><Select label={t('ex.ky.dir')} bind:value={dir} options={dirOptions} /></Field>
     <Field label={t('ex.pos')}><input bind:value={pos} placeholder="NOUN,ADJ" size="10" /></Field>
   {/snippet}
 
   {#if result}
     <ExploreTable
       {columns}
-      {rows}
+      rows={shown}
       loading={runner.loading}
-      summary={t('ex.freq.summary', { n: rows.length })}
-      note={t('ex.ky.help')}
+      summary={t('ex.freq.summary', { n: shown.length })}
+      note={t('ex.ky.help') + (shownDir === 'over' ? '' : t('ex.ky.helpUnder'))}
       unit="lemma"
       onterm={(r) => openTerm({ source: r.item, pos: r.pos, origin: 'keyness' })}
     />

@@ -31,7 +31,8 @@ prefetches them). Data lives in the
 3. Explore with the screens of the left rail. Click any word in a table to jump to its concordance. Every table
    sorts by a click on its header, has a *Filter in results* box, and a CSV export.
 4. **Keyness**: compares your corpus with the language's **base corpus** (below) by default, or with any other
-   corpus of the same language you pick.
+   corpus of the same language you pick. The *Show* choice adds **under-used** words (negative LL), including
+   words that occur only in the reference corpus.
 
 ## Projects, document details and filters
 

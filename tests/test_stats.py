@@ -142,3 +142,16 @@ def test_keyness_negative_for_underused_words(conn):
     ref = make_corpus(conn, "r", [[" ".join(["foo"] * 100 + ["bar"] * 900)]])
     rows = {r["item"]: r for r in analysis.keyness(conn, target, ref, min_freq=1)}
     assert rows["foo"]["ll"] < 0                                             # sign marks under-representation
+
+
+def test_keyness_both_directions_lists_reference_only_words(conn):
+    target = make_corpus(conn, "t", [[" ".join(["foo"] * 30 + ["bar"] * 970)]])
+    ref = make_corpus(conn, "r", [[" ".join(["foo"] * 10 + ["baz"] * 1990)]])
+    default = analysis.keyness(conn, target, ref, min_freq=1)
+    assert all("direction" not in r for r in default) and "baz" not in {r["item"] for r in default}
+    rows = {r["item"]: r for r in analysis.keyness(conn, target, ref, min_freq=1, both_directions=True)}
+    baz = rows["baz"]
+    assert baz["freq"] == 0 and baz["ref_freq"] == 1990 and baz["direction"] == "under"
+    assert baz["ll"] == pytest.approx(-2 * 1990 * math.log(2000 / 1330), rel=1e-2)  # b*ln(b/e2), e2 = 2000*1990/3000
+    assert rows["foo"]["direction"] == "over" and rows["bar"]["direction"] == "over"
+    assert rows["baz"]["ll"] < 0 < rows["foo"]["ll"]

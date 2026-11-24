@@ -178,6 +178,13 @@ const en: Record<string, string> = {
     'Create a base corpus (Base corpora) or a second corpus of the same language to use as reference.',
   'ex.ky.help':
     'Positive LL: more frequent in this corpus than in the reference. By default the reference is the language’s base corpus; you can also pick another corpus of the same language.',
+  'ex.ky.dir': 'Show',
+  'ex.ky.dir.over': 'Over-used',
+  'ex.ky.dir.under': 'Under-used',
+  'ex.ky.dir.both': 'Both',
+  'ex.ky.helpUnder':
+    ' Negative LL: less frequent in this corpus than in the reference (under-used); words absent from this corpus are included.',
+  'ex.col.direction': 'Use',
   'ex.ky.start': 'Compare with a reference corpus',
   'ex.eq.toolbar': 'Equivalents options',
   'ex.eq.source': 'Source word or phrase',
