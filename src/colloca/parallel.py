@@ -12,6 +12,8 @@ import os
 import re
 from collections import Counter
 from dataclasses import replace
+from xml.etree import ElementTree as StdET
+from xml.sax.saxutils import escape
 
 from defusedxml import DefusedXmlException
 from defusedxml import ElementTree as SafeET
@@ -47,8 +49,22 @@ def _seg_text(el) -> str:
     return "".join(parts)
 
 
-def read_tmx(data: bytes, lang_a: str, lang_b: str) -> tuple[list[Pair], int]:
-    """(pairs as (lang_a text, lang_b text), number of translation units skipped)."""
+MAX_MARKUP_CHARS = 20_000         # inline markup longer than this is not kept
+
+
+def _seg_markup(el) -> str | None:
+    """The inner XML of a TMX <seg> when it has inline elements (bpt, ph, hi...), else None."""
+    if not len(el):
+        return None
+    raw = escape(el.text or "") + "".join(StdET.tostring(child, encoding="unicode") for child in el)
+    return raw if len(raw) <= MAX_MARKUP_CHARS else None
+
+
+def read_tmx(data: bytes, lang_a: str, lang_b: str,
+             markup: list[tuple[str | None, str | None]] | None = None) -> tuple[list[Pair], int]:
+    """(pairs as (lang_a text, lang_b text), number of translation units skipped). If `markup` is given, the
+    original inline markup of each kept pair, (raw of lang_a, raw of lang_b) with None where a side had none, is
+    appended to it, in the same order as the pairs."""
     pairs: list[Pair] = []
     skipped = 0
     try:
@@ -56,16 +72,20 @@ def read_tmx(data: bytes, lang_a: str, lang_b: str) -> tuple[list[Pair], int]:
             if el.tag != "tu":
                 continue
             texts: dict[str, str] = {}
+            raws: dict[str, str | None] = {}
             for tuv in el.findall("tuv"):
                 code = tuv.get(_XML_LANG) or tuv.get("lang") or ""
                 seg = tuv.find("seg")
                 for lang in (lang_a, lang_b):
                     if lang not in texts and lang_matches(code, lang) and seg is not None:
                         texts[lang] = clean_segment(_seg_text(seg))
+                        raws[lang] = _seg_markup(seg) if markup is not None else None
             el.clear()
             a, b = texts.get(lang_a, ""), texts.get(lang_b, "")
             if a and b and len(a) <= MAX_SEGMENT_CHARS and len(b) <= MAX_SEGMENT_CHARS:
                 pairs.append((a, b))
+                if markup is not None:
+                    markup.append((raws.get(lang_a), raws.get(lang_b)))
             else:
                 skipped += 1
     except (SafeET.ParseError, DefusedXmlException) as exc:
@@ -126,12 +146,13 @@ def read_xliff_pairs(data: bytes, lang_a: str, lang_b: str, swap: bool = False) 
     return [(b, a) if swap else (a, b) for a, b in kept], doc.skipped + len(pairs) - len(kept)
 
 
-def read_pairs(filename: str, data: bytes, lang_a: str, lang_b: str, swap: bool = False) -> tuple[list[Pair], int]:
+def read_pairs(filename: str, data: bytes, lang_a: str, lang_b: str, swap: bool = False,
+               markup: list[tuple[str | None, str | None]] | None = None) -> tuple[list[Pair], int]:
     """Segment pairs from a file, oriented (lang_a, lang_b). TMX is oriented by its language codes;
-    two-column files by column order (`swap` flips it)."""
+    two-column files by column order (`swap` flips it). `markup` collects the inline markup of a TMX (see read_tmx)."""
     ext = filename.lower().rsplit(".", 1)[-1] if "." in filename else ""
     if ext == "tmx":
-        pairs, skipped = read_tmx(data, lang_a, lang_b)
+        pairs, skipped = read_tmx(data, lang_a, lang_b, markup)
     elif ext in ("xlf", "xliff"):
         pairs, skipped = read_xliff_pairs(data, lang_a, lang_b, swap)
     elif ext in ("tsv", "csv", "txt"):
@@ -161,10 +182,11 @@ def import_pairs(corpus_id: int, partner_id: int, filename: str, data: bytes, sw
                      for i in (corpus_id, partner_id)]
         if not all(langs):
             raise importer.ImportRejected(404, "Corpus no longer exists", "gone")
+        markup: list[tuple[str | None, str | None]] = []
         if preread is not None:
             pairs, skipped = preread, 0
         else:
-            pairs, skipped = read_pairs(filename, data, langs[0]["lang"], langs[1]["lang"], swap)
+            pairs, skipped = read_pairs(filename, data, langs[0]["lang"], langs[1]["lang"], swap, markup)
         parts = [pairs[i:i + PAIRS_PER_DOC] for i in range(0, len(pairs), PAIRS_PER_DOC)]
         done = dups = 0
         for n, part in enumerate(parts):
@@ -192,6 +214,12 @@ def import_pairs(corpus_id: int, partner_id: int, filename: str, data: bytes, sw
                     continue
                 conn.execute("UPDATE documents SET pair_doc_id=? WHERE id=?", (db_["id"], da["id"]))
                 conn.execute("UPDATE documents SET pair_doc_id=? WHERE id=?", (da["id"], db_["id"]))
+                # inline markup of a TMX (kept for the export): segment i of this part is line i of both texts
+                base = n * PAIRS_PER_DOC
+                conn.executemany("INSERT OR REPLACE INTO segment_markup VALUES (?,?,?)", (
+                    (doc["id"], i, raw) for i in range(len(part))
+                    for doc, raw in ((da, markup[base + i][0]), (db_, markup[base + i][1]))
+                    if base + i < len(markup) and raw))
             done += 1
         return {"documents": done, "segments": len(pairs), "skipped_units": skipped, "skipped_duplicates": dups}
     return work
