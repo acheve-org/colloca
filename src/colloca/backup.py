@@ -279,7 +279,9 @@ def import_payload(conn: sqlite3.Connection, payload: dict, *, project_id: int |
             if row:
                 general.append(row["id"])
             else:
-                general.append(conn.execute("INSERT INTO projects (name) VALUES ('General')").lastrowid)
+                new_id = conn.execute("INSERT INTO projects (name) VALUES ('General')").lastrowid
+                assert new_id is not None
+                general.append(new_id)
                 rep.created["projects"] += 1
         return general[0]
 
