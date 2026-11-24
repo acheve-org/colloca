@@ -759,6 +759,11 @@ export const en: Messages = {
   'proj.colDocs': 'Documents',
   'proj.colWords': 'Words',
   'proj.confirmEmpty': 'Delete project “{name}”?',
+  'proj.deleteHas1': '{name} still has 1 corpus. Choose where it goes before deleting the project.',
+  'proj.deleteTrashed': '{name} still has corpora in the Trash. Restore or empty them in Backup and Trash first.',
+  'proj.trashLink': 'Open Backup and Trash',
+  'proj.moveOf': 'Move {name}',
+  'proj.colActions': 'Actions',
   'job.intro':
     'Analyse a text before you translate it against this corpus and its project’s termbase: how much of its vocabulary the corpus covers, where it has no evidence, which terms are characteristic of the text, which termbase entries occur (and which translations to avoid), and which phrases it repeats. The text is analysed and forgotten; nothing is added to the corpus. The filter bar narrows the corpus used as evidence.',
   'job.toolbar': 'Text to analyse',

@@ -94,7 +94,8 @@
     delProjectOpen = true;
   }
 
-  const delCount = $derived(delProject ? delProject.corpora + delProject.trashed : 0);
+  const delTrashed = $derived(delProject?.trashed ?? 0);
+  const delCount = $derived(delProject?.corpora ?? 0);
   const targets = $derived(projectStore.list.filter((p) => p.id !== delProject?.id));
 
   async function confirmDeleteProject(): Promise<void> {
@@ -102,15 +103,19 @@
     delProjectOpen = false;
     if (!p) return;
     await run(async () => {
-      if (target) {
-        for (const c of corpusStore.list.filter((x) => x.project_id === p.id)) {
-          await patch(`/api/corpora/${c.id}`, { project_id: Number(target) });
+      try {
+        if (target) {
+          for (const c of corpusStore.list.filter((x) => x.project_id === p.id)) {
+            await patch(`/api/corpora/${c.id}`, { project_id: Number(target) });
+          }
+          picked = Number(target);
         }
-        picked = Number(target);
+        await del(`/api/projects/${p.id}`);
+        messages.say(t('proj.deleted'), 'ok');
+      } finally {
+        // Also after a failed move: corpora already moved must show under their new project.
+        await changed();
       }
-      await del(`/api/projects/${p.id}`);
-      messages.say(t('proj.deleted'), 'ok');
-      await changed();
     });
   }
 
@@ -230,7 +235,7 @@
               <th>{t('proj.colLang')}</th>
               <th class="num">{t('proj.colDocs')}</th>
               <th class="num">{t('proj.colWords')}</th>
-              <th></th>
+              <th><span class="sr">{t('proj.colActions')}</span></th>
             </tr>
           </thead>
           <tbody>
@@ -269,7 +274,7 @@
                     <Button ariaLabel={t('proj.renameOf', { name: c.name })} disabled={busy} onclick={() => startRename(c)}>{t('proj.rename')}</Button>
                   {/if}
                   <select
-                    aria-label={t('proj.move')}
+                    aria-label={t('proj.moveOf', { name: c.name })}
                     disabled={busy}
                     value=""
                     onchange={(e) => moveCorpus(c, e.currentTarget.value)}
@@ -303,8 +308,11 @@
 </Dialog>
 
 <Dialog bind:open={delProjectOpen} title={t('proj.confirmTitle')}>
-  {#if delCount > 0}
-    <p>{t('proj.deleteHas', { name: delProject?.name ?? '', n: delCount })}</p>
+  {#if delTrashed > 0}
+    <p>{t('proj.deleteTrashed', { name: delProject?.name ?? '' })}</p>
+    <p><a href="#/trash" onclick={() => (delProjectOpen = false)}>{t('proj.trashLink')}</a></p>
+  {:else if delCount > 0}
+    <p>{delCount === 1 ? t('proj.deleteHas1', { name: delProject?.name ?? '' }) : t('proj.deleteHas', { name: delProject?.name ?? '', n: delCount })}</p>
     <select aria-label={t('proj.moveTo')} bind:value={target}>
       <option value="">{t('proj.moveTo')}</option>
       {#each targets as p (p.id)}<option value={String(p.id)}>{p.name}</option>{/each}
@@ -314,7 +322,7 @@
   {/if}
   {#snippet footer()}
     <Button onclick={() => (delProjectOpen = false)}>{t('common.cancel')}</Button>
-    <Button variant="danger" disabled={delCount > 0 && !target} onclick={confirmDeleteProject}>{t('common.delete')}</Button>
+    <Button variant="danger" disabled={delTrashed > 0 || (delCount > 0 && !target)} onclick={confirmDeleteProject}>{t('common.delete')}</Button>
   {/snippet}
 </Dialog>
 
@@ -402,6 +410,14 @@
     padding: var(--s-1) var(--s-2);
     text-align: left;
     border-bottom: 1px solid var(--border);
+  }
+  .sr {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
   .num {
     text-align: right;

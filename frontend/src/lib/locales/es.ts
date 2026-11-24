@@ -758,6 +758,11 @@ export const es: Messages = {
   'proj.colDocs': 'Documentos',
   'proj.colWords': 'Palabras',
   'proj.confirmEmpty': '¿Eliminar el proyecto «{name}»?',
+  'proj.deleteHas1': '{name} aún tiene 1 corpus. Elige adónde va antes de eliminar el proyecto.',
+  'proj.deleteTrashed': '{name} aún tiene corpus en la papelera. Restáuralos o vacíala antes, en Copia de seguridad y papelera.',
+  'proj.trashLink': 'Abrir Copia de seguridad y papelera',
+  'proj.moveOf': 'Mover {name}',
+  'proj.colActions': 'Acciones',
   'job.intro':
     'Analiza un texto antes de traducirlo con este corpus y la base terminológica de su proyecto: cuánto de su vocabulario cubre el corpus, dónde no hay datos, qué términos caracterizan el texto, qué entradas de la base terminológica aparecen (y qué traducciones evitar) y qué frases repite. El texto se analiza y se olvida; no se añade nada al corpus. La barra de filtros acota el corpus usado como evidencia.',
   'job.toolbar': 'Texto que analizar',

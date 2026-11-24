@@ -14,11 +14,13 @@ interface Call { method: string; path: string; body?: Record<string, unknown> }
 let calls: Call[];
 let projects: { id: number; name: string; corpora: number; trashed: number }[];
 let corpora: ReturnType<typeof corpus>[];
+let failPatch: number | null;
 
 const res = (status: number, body: unknown) => ({ ok: status < 400, status, statusText: 'x', json: async () => body });
 
 beforeEach(() => {
   calls = [];
+  failPatch = null;
   projects = [
     { id: 7, name: 'Acme', corpora: 2, trashed: 0 },
     { id: 8, name: 'Bolt', corpora: 1, trashed: 0 },
@@ -44,6 +46,7 @@ beforeEach(() => {
     }
     if (/^\/api\/corpora\/\d+$/.test(path) && method === 'PATCH') {
       const id = Number(path.split('/').pop());
+      if (id === failPatch) return res(500, { detail: 'patch failed' });
       corpora = corpora.map((c) => (c.id === id ? { ...c, ...body } : c));
       return res(200, {});
     }
@@ -106,7 +109,7 @@ describe('Projects screen', () => {
   it('Move patches the corpus with the new project_id', async () => {
     await show();
     const row = rowOf('A2');
-    await fireEvent.change(within(row).getByLabelText('Move'), { target: { value: '8' } });
+    await fireEvent.change(within(row).getByLabelText(/^Move /), { target: { value: '8' } });
     await waitFor(() => expect(calls.some((c) => c.method === 'PATCH' && c.path === '/api/corpora/2')).toBe(true));
     expect(calls.find((c) => c.path === '/api/corpora/2' && c.method === 'PATCH')?.body).toEqual({ project_id: 8 });
     await waitFor(() => expect(screen.queryByText('A2')).toBeNull());
@@ -164,6 +167,48 @@ describe('Projects screen', () => {
     await show();
     await fireEvent.click(screen.getByRole('button', { name: /No project/ }));
     expect(screen.getByText('Loose')).toBeInTheDocument();
-    expect(within(rowOf('Loose')).getByLabelText('Move')).toBeInTheDocument();
+    expect(within(rowOf('Loose')).getByLabelText(/^Move /)).toBeInTheDocument();
+  });
+
+  it.each([
+    ['trashed-only', { id: 9, name: 'Empty', corpora: 0, trashed: 2 }, 'Empty'],
+    ['mixed', { id: 7, name: 'Acme', corpora: 2, trashed: 1 }, 'Acme'],
+  ])('a %s project cannot be deleted: message and link, Delete disabled, nothing sent', async (_n, proj, name) => {
+    projects = projects.map((p) => (p.id === proj.id ? proj : p));
+    await show();
+    await fireEvent.click(screen.getByRole('button', { name: new RegExp('^' + name) }));
+    await fireEvent.click(screen.getByRole('button', { name: `Delete ${name}` }));
+    await tick();
+    const dlg = screen.getByRole('dialog', { name: 'Delete this project?' });
+    expect(dlg).toHaveTextContent(`${name} still has corpora in the Trash`);
+    expect(within(dlg).getByRole('link')).toHaveAttribute('href', '#/trash');
+    expect(within(dlg).queryByLabelText('Move corpora to…')).toBeNull();
+    expect(within(dlg).getByRole('button', { name: 'Delete' })).toBeDisabled();
+    expect(calls.some((c) => c.method === 'PATCH' || c.method === 'DELETE')).toBe(false);
+  });
+
+  it('uses the singular text when the project has one corpus', async () => {
+    projects = projects.map((p) => (p.id === 8 ? { ...p, corpora: 1 } : p));
+    await show();
+    await fireEvent.click(screen.getByRole('button', { name: /Bolt/ }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Delete Bolt' }));
+    await tick();
+    expect(screen.getByRole('dialog', { name: 'Delete this project?' })).toHaveTextContent('Bolt still has 1 corpus.');
+  });
+
+  it('after a failed move it shows the error, skips DELETE and reloads the lists', async () => {
+    failPatch = 2;
+    await show();
+    await fireEvent.click(screen.getByRole('button', { name: 'Delete Acme' }));
+    await tick();
+    const dlg = screen.getByRole('dialog', { name: 'Delete this project?' });
+    await fireEvent.change(within(dlg).getByLabelText('Move corpora to…'), { target: { value: '8' } });
+    const before = calls.filter((c) => c.method === 'GET' && c.path === '/api/projects').length;
+    await fireEvent.click(within(dlg).getByRole('button', { name: 'Delete' }));
+    await waitFor(() => expect(messages.current).toEqual({ text: 'patch failed', kind: 'err' }));
+    await waitFor(() =>
+      expect(calls.filter((c) => c.method === 'GET' && c.path === '/api/projects').length).toBeGreaterThan(before));
+    expect(calls.some((c) => c.method === 'DELETE')).toBe(false);
+    await waitFor(() => expect(corpusStore.list.find((c) => c.id === 1)?.project_id).toBe(8));
   });
 });
