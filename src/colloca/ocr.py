@@ -13,6 +13,7 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
+from . import languages, ocrdata
 from .ingest import IngestError
 
 ENABLED = os.environ.get("OCR_ENABLED", "1") != "0"
@@ -20,10 +21,10 @@ MAX_OCR_PAGES = int(os.environ.get("MAX_OCR_PAGES", "100"))
 PAGE_TIMEOUT_S = int(os.environ.get("OCR_PAGE_TIMEOUT", "120"))
 MIN_CONFIDENCE = float(os.environ.get("OCR_MIN_CONFIDENCE", "70"))
 RENDER_DPI = 300
-TESSERACT_LANGS = {"es": "spa", "it": "ita"}
 
-HINT = ("Install it with `apt install tesseract-ocr tesseract-ocr-spa tesseract-ocr-ita` (Docker: build with "
-        "--build-arg WITH_OCR=1) and `uv sync --extra ocr`, or convert the scan to text elsewhere.")
+HINT = ("Install it with `apt install tesseract-ocr` (Docker: build with --build-arg WITH_OCR=1) and "
+        "`uv sync --extra ocr`, then install the language data in the Languages screen, or convert the scan to "
+        "text elsewhere.")
 
 
 @dataclass
@@ -41,18 +42,18 @@ def _tesseract() -> str:
     return exe
 
 
-def _languages(exe: str, lang: str | None) -> str:
-    wanted = [TESSERACT_LANGS[lang]] if lang in TESSERACT_LANGS else list(TESSERACT_LANGS.values())
-    try:
-        out = subprocess.run([exe, "--list-langs"], capture_output=True, text=True, timeout=30)
-        have = set(out.stdout.split()) | set(out.stderr.split())
-    except (OSError, subprocess.SubprocessError):
-        have = set()
-    missing = [w for w in wanted if w not in have]
-    if missing:
-        raise IngestError(f"Tesseract has no language data for {', '.join(missing)}. "
-                          f"Install tesseract-ocr-{missing[0]} (see the README, section OCR).")
-    return "+".join(wanted)
+def _languages(exe: str, lang: str | None) -> tuple[str, list[str]]:
+    """The `-l` value and the extra tesseract arguments (`--tessdata-dir`) for a corpus language."""
+    own = languages.get(lang) if lang else None
+    wanted = [own.tesseract] if own and own.tesseract else [x.tesseract for x in languages.all_languages()
+                                                           if x.tesseract]
+    extra = ocrdata.tessdata_args(wanted)
+    have = ocrdata.list_langs(extra)
+    missing = [w for w in wanted if w not in have and not ocrdata.in_app_dir(w)]
+    if missing or not wanted:
+        raise IngestError(f"Tesseract has no language data for {', '.join(missing) or 'this language'}. "
+                          "Install it in the Languages screen (or the tesseract-ocr language package).")
+    return "+".join(wanted), extra
 
 
 def parse_tsv(tsv: str) -> tuple[str, list[float]]:
@@ -82,7 +83,7 @@ def ocr_pdf(data: bytes, lang: str | None, progress=None) -> OcrResult:
     except ImportError as exc:
         raise IngestError("This PDF has no text layer (it looks scanned) and the OCR extra is not installed. "
                           + HINT) from exc
-    langs = _languages(exe, lang)
+    langs, extra = _languages(exe, lang)
     try:
         pdf = pypdfium2.PdfDocument(data)
     except Exception as exc:
@@ -97,7 +98,7 @@ def ocr_pdf(data: bytes, lang: str | None, progress=None) -> OcrResult:
             img = Path(tmp) / f"p{i}.png"
             pdf[i].render(scale=RENDER_DPI / 72).to_pil().save(img)
             try:
-                run = subprocess.run([exe, str(img), "stdout", "-l", langs, "tsv"], capture_output=True,
+                run = subprocess.run([exe, str(img), "stdout", *extra, "-l", langs, "tsv"], capture_output=True,
                                      text=True, timeout=PAGE_TIMEOUT_S)
             except subprocess.TimeoutExpired as exc:
                 raise IngestError(f"OCR of page {i + 1} took longer than {PAGE_TIMEOUT_S} s") from exc
