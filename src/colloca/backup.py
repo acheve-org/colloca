@@ -276,8 +276,11 @@ def import_payload(conn: sqlite3.Connection, payload: dict, *, project_id: int |
     def general_project() -> int:
         if not general:
             row = conn.execute("SELECT id FROM projects WHERE name='General' COLLATE NOCASE").fetchone()
-            general.append(row["id"] if row else
-                           conn.execute("INSERT INTO projects (name) VALUES ('General')").lastrowid)
+            if row:
+                general.append(row["id"])
+            else:
+                general.append(conn.execute("INSERT INTO projects (name) VALUES ('General')").lastrowid)
+                rep.created["projects"] += 1
         return general[0]
 
     cmap: dict[Any, int] = {}

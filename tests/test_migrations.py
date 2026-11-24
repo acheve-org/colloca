@@ -83,13 +83,11 @@ def general_ids(conn):
     return [r[0] for r in conn.execute("SELECT id FROM projects WHERE name = 'General' COLLATE NOCASE")]
 
 
-def test_v15_moves_projectless_corpora_and_general_termbase_into_general(tmp_path):
+def test_v15_moves_projectless_corpora_into_general(tmp_path):
     conn = v14(tmp_path / "a.db")
     conn.execute("INSERT INTO corpora (id, name, lang) VALUES (1, 'work', 'es')")
     conn.execute("INSERT INTO corpora (id, name, lang, is_reference) VALUES (2, 'base', 'es', 1)")
     conn.execute("INSERT INTO corpora (id, name, lang, deleted_at) VALUES (3, 'trashed', 'it', '2026-01-01 00:00:00')")
-    conn.execute("INSERT INTO terms (src_lang, tgt_lang, src_term) VALUES ('es', 'it', 'casa')")
-    conn.execute("INSERT INTO term_rejections (lang, term) VALUES ('es', 'foo')")
     conn.commit()
     assert db.migrate(conn) == 15
     (gid,) = general_ids(conn)
@@ -99,8 +97,6 @@ def test_v15_moves_projectless_corpora_and_general_termbase_into_general(tmp_pat
 
     assert pid("corpora", 1) == gid and pid("corpora", 3) == gid
     assert pid("corpora", 2) is None
-    assert conn.execute("SELECT project_id FROM terms").fetchone()[0] == gid
-    assert conn.execute("SELECT project_id FROM term_rejections").fetchone()[0] == gid
 
 
 def test_v15_reuses_an_existing_general_project_case_insensitively(tmp_path):
@@ -134,17 +130,24 @@ def test_v15_is_idempotent(tmp_path):
     assert len(general_ids(conn)) == 1
 
 
-def test_v15_general_row_wins_over_a_projectless_duplicate(tmp_path):
+def test_v15_leaves_the_general_termbase_alone_and_creates_no_general_for_it(tmp_path):
     conn = v14(tmp_path / "f.db")
-    conn.execute("INSERT INTO projects (id, name) VALUES (4, 'General')")
-    conn.execute("INSERT INTO terms (project_id, src_lang, tgt_lang, src_term, tgt_term, status) "
-                 "VALUES (4, 'es', 'it', 'casa', '', 'candidate')")
-    conn.execute("INSERT INTO terms (project_id, src_lang, tgt_lang, src_term, tgt_term, status) "
-                 "VALUES (NULL, 'es', 'it', 'Casa', '', 'approved')")
-    conn.execute("INSERT INTO term_rejections (project_id, lang, term) VALUES (4, 'es', 'foo')")
-    conn.execute("INSERT INTO term_rejections (project_id, lang, term) VALUES (NULL, 'es', 'foo')")
+    conn.execute("INSERT INTO terms (src_lang, tgt_lang, src_term) VALUES ('es', 'it', 'casa')")
+    conn.execute("INSERT INTO term_rejections (lang, term) VALUES ('es', 'foo')")
     conn.commit()
     assert db.migrate(conn) == 15
-    rows = conn.execute("SELECT project_id, src_term, status FROM terms").fetchall()
-    assert [tuple(r) for r in rows] == [(4, "casa", "candidate")]                 # General's row kept, duplicate gone
-    assert [tuple(r) for r in conn.execute("SELECT project_id, term FROM term_rejections")] == [(4, "foo")]
+    assert general_ids(conn) == []
+    assert conn.execute("SELECT project_id FROM terms").fetchone()[0] is None
+    assert conn.execute("SELECT project_id FROM term_rejections").fetchone()[0] is None
+
+
+def test_v15_keeps_null_terms_null_even_when_general_is_created_for_corpora(tmp_path):
+    conn = v14(tmp_path / "g.db")
+    conn.execute("INSERT INTO corpora (name, lang) VALUES ('work', 'es')")
+    conn.execute("INSERT INTO terms (src_lang, tgt_lang, src_term) VALUES ('es', 'it', 'casa')")
+    conn.execute("INSERT INTO term_rejections (lang, term) VALUES ('es', 'foo')")
+    conn.commit()
+    db.migrate(conn)
+    assert len(general_ids(conn)) == 1
+    assert conn.execute("SELECT project_id FROM terms").fetchone()[0] is None
+    assert conn.execute("SELECT project_id FROM term_rejections").fetchone()[0] is None

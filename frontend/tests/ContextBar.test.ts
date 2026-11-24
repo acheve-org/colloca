@@ -16,7 +16,7 @@ beforeEach(async () => {
     ok: true, status: 200, statusText: 'OK', json: async () => ({ es: 'Spanish' }),
   })));
   await loadLanguageNames();
-  projectStore.list = [{ id: 7, name: 'Acme', corpora: 1, trashed: 0 }];
+  projectStore.list = [{ id: 7, name: 'Acme', corpora: 1, trashed: 0, terms: 0 }];
   corpusStore.list = [corpus(1, 7), corpus(2, null)];
   corpusStore.currentId = 1;
   go('concordance');

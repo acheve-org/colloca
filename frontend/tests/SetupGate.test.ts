@@ -50,14 +50,14 @@ describe('SetupGate', () => {
   });
 
   it('a project but no working corpus: asks for a corpus', () => {
-    projectStore.list = [{ id: 7, name: 'Acme', corpora: 0, trashed: 0 }];
+    projectStore.list = [{ id: 7, name: 'Acme', corpora: 0, trashed: 0, terms: 0 }];
     render(GateHost);
     expect(screen.getByText('Create a corpus')).toBeInTheDocument();
     expect(link('Go to Projects')).toHaveAttribute('href', '#/projects');
   });
 
   it('only base corpora do not count as a working corpus', () => {
-    projectStore.list = [{ id: 7, name: 'Acme', corpora: 0, trashed: 0 }];
+    projectStore.list = [{ id: 7, name: 'Acme', corpora: 0, trashed: 0, terms: 0 }];
     corpusStore.list = [corpus(1, 1)];
     corpusStore.currentId = 1;
     render(GateHost);
@@ -65,7 +65,7 @@ describe('SetupGate', () => {
   });
 
   it('with a working corpus the children render unchanged', () => {
-    projectStore.list = [{ id: 7, name: 'Acme', corpora: 1, trashed: 0 }];
+    projectStore.list = [{ id: 7, name: 'Acme', corpora: 1, trashed: 0, terms: 0 }];
     corpusStore.list = [corpus(1)];
     corpusStore.currentId = 1;
     render(GateHost);
@@ -83,7 +83,7 @@ describe('SetupGate', () => {
   });
 
   it('after the first settle a corpus switch (loaded false for a moment) keeps the screen mounted', async () => {
-    projectStore.list = [{ id: 7, name: 'Acme', corpora: 1, trashed: 0 }];
+    projectStore.list = [{ id: 7, name: 'Acme', corpora: 1, trashed: 0, terms: 0 }];
     corpusStore.list = [corpus(1)];
     corpusStore.currentId = 1;
     render(GateHost);
@@ -123,7 +123,7 @@ describe('setupStep', () => {
     expect(setupStep()).toBe('language');
     await setLanguages({ es: 'Spanish' });
     expect(setupStep()).toBe('project');
-    projectStore.list = [{ id: 7, name: 'Acme', corpora: 0, trashed: 0 }];
+    projectStore.list = [{ id: 7, name: 'Acme', corpora: 0, trashed: 0, terms: 0 }];
     expect(setupStep()).toBe('corpus');
     corpusStore.list = [corpus(1)];
     corpusStore.currentId = 1;

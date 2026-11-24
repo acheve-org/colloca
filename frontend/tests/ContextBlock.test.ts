@@ -17,8 +17,8 @@ beforeEach(async () => {
   })));
   await loadLanguageNames();
   projectStore.list = [
-    { id: 7, name: 'Acme', corpora: 2, trashed: 0 },
-    { id: 8, name: 'Bolt', corpora: 1, trashed: 0 },
+    { id: 7, name: 'Acme', corpora: 2, trashed: 0, terms: 0 },
+    { id: 8, name: 'Bolt', corpora: 1, trashed: 0, terms: 0 },
   ];
   corpusStore.list = [
     corpus(1, 'A1', 7), corpus(2, 'A2', 7), corpus(3, 'B1', 8), corpus(4, 'Loose', null), corpus(5, 'RefCorpus', null, 1),

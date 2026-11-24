@@ -60,6 +60,9 @@ export async function ensureLanguageName(): Promise<void> {
   }
 }
 
+/** The language's name, or its code while the names are not loaded or the code is unknown. */
+export const languageName = (code: string): string => languageNames.names[code] ?? code;
+
 export function workingContext(): WorkingContext | null {
   const corpus = corpusStore.current;
   if (!corpus) return null;

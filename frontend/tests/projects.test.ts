@@ -8,7 +8,7 @@ const corpus = (project_id: number | null): Corpus => ({
 
 describe('projectOf', () => {
   it('finds the corpus project, or null', () => {
-    projectStore.list = [{ id: 7, name: 'Acme', corpora: 1, trashed: 0 }];
+    projectStore.list = [{ id: 7, name: 'Acme', corpora: 1, trashed: 0, terms: 0 }];
     expect(projectOf(corpus(7))?.name).toBe('Acme');
     expect(projectOf(corpus(null))).toBeNull();
     expect(projectOf(corpus(99))).toBeNull();

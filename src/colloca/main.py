@@ -264,7 +264,8 @@ def list_projects():
         rows = conn.execute(
             """SELECT p.*,
                       COUNT(CASE WHEN c.is_reference=0 AND c.deleted_at IS NULL THEN c.id END) AS corpora,
-                      COUNT(CASE WHEN c.deleted_at IS NOT NULL THEN c.id END) AS trashed
+                      COUNT(CASE WHEN c.deleted_at IS NOT NULL THEN c.id END) AS trashed,
+                      (SELECT COUNT(*) FROM terms t WHERE t.project_id=p.id) AS terms
                FROM projects p LEFT JOIN corpora c ON c.project_id=p.id
                GROUP BY p.id ORDER BY p.name COLLATE NOCASE""").fetchall()
         return [dict(r) for r in rows]

@@ -245,26 +245,17 @@ INSERT INTO languages (code, name, model_size, tesseract, added) VALUES
     ('it', 'Italian', NULL, 'ita', '2000-01-01 00:00:01');
 """
 
-# --- v15: every working corpus and the term bank belong to a project. Project-less data left by earlier versions
-# (v5 corpora.project_id NULL, v7 NULL = "no project" in terms/term_rejections) moves into a project named General,
-# created only when something needs it and reused (case-insensitively) when it already exists. Reference corpora stay
-# project-less. A NULL-project term or rejection that duplicates one already in General is dropped (the unique index
-# forbids both): the General row wins and the duplicate's metadata (status, notes, ...) is discarded, not merged.
+# --- v15: every working corpus belongs to a project. Project-less working corpora left by earlier versions (v5
+# corpora.project_id NULL) move into a project named General, created only when such a corpus exists and reused
+# (case-insensitively) when it already exists. Reference corpora stay project-less. Terms and rejections with no
+# project are the deliberate general termbase shared by all projects: they are not touched.
 _V15 = """
 INSERT INTO projects (name)
 SELECT 'General'
 WHERE NOT EXISTS (SELECT 1 FROM projects WHERE name = 'General' COLLATE NOCASE)
-  AND (EXISTS (SELECT 1 FROM corpora WHERE is_reference = 0 AND project_id IS NULL)
-       OR EXISTS (SELECT 1 FROM terms WHERE project_id IS NULL)
-       OR EXISTS (SELECT 1 FROM term_rejections WHERE project_id IS NULL));
+  AND EXISTS (SELECT 1 FROM corpora WHERE is_reference = 0 AND project_id IS NULL);
 UPDATE corpora SET project_id = (SELECT MIN(id) FROM projects WHERE name = 'General' COLLATE NOCASE)
 WHERE is_reference = 0 AND project_id IS NULL;
-UPDATE OR IGNORE terms SET project_id = (SELECT MIN(id) FROM projects WHERE name = 'General' COLLATE NOCASE)
-WHERE project_id IS NULL;
-DELETE FROM terms WHERE project_id IS NULL;
-UPDATE OR IGNORE term_rejections SET project_id = (SELECT MIN(id) FROM projects WHERE name = 'General' COLLATE NOCASE)
-WHERE project_id IS NULL;
-DELETE FROM term_rejections WHERE project_id IS NULL;
 """
 
 MIGRATIONS: list[tuple[int, str]] = [(1, _V1), (2, _V2), (3, _V3), (4, _V4), (5, _V5), (6, _V6), (7, _V7), (8, _V8),

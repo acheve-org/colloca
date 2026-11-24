@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { del, patch, post } from '../lib/api';
+  import { languageName } from '../lib/context.svelte';
   import { corpusStore } from '../lib/corpus.svelte';
   import { fmt, t } from '../lib/i18n';
   import { messages } from '../lib/messages.svelte';
@@ -98,6 +99,7 @@
   }
 
   const delTrashed = $derived(delProject?.trashed ?? 0);
+  const delTerms = $derived(delProject?.terms ?? 0);
   const delCount = $derived(delProject?.corpora ?? 0);
   const targets = $derived(projectStore.list.filter((p) => p.id !== delProject?.id));
 
@@ -138,12 +140,21 @@
       await changed();
     });
 
-  const moveCorpus = (c: Corpus, to: string) => {
+  const moveCorpus = async (c: Corpus, select: HTMLSelectElement) => {
+    const to = select.value;
     if (!to) return;
-    return run(async () => {
+    await run(async () => {
       await patch(`/api/corpora/${c.id}`, { project_id: Number(to) });
       await changed();
     });
+    // A failed move leaves the row in place: show the placeholder again, not the rejected choice.
+    select.value = '';
+  };
+
+  // Rename mode is explicit for corpora: put the cursor in the field it opens.
+  const focusOnMount = (node: HTMLInputElement) => {
+    node.focus();
+    node.select();
   };
 
   function askDeleteCorpus(c: Corpus): void {
@@ -256,6 +267,7 @@
                     <input
                       value={corpusNames[c.id] ?? c.name}
                       maxlength="120"
+                      use:focusOnMount
                       aria-label={t('proj.nameOf', { name: c.name })}
                       oninput={(e) => (corpusNames = { ...corpusNames, [c.id]: e.currentTarget.value })}
                       onkeydown={(e) => {
@@ -269,7 +281,7 @@
                     {c.name}
                   {/if}
                 </td>
-                <td>{c.lang}</td>
+                <td>{languageName(c.lang)}</td>
                 <td class="num">{fmt(c.docs)}</td>
                 <td class="num">{fmt(c.tokens)}</td>
                 <td class="actions">
@@ -287,7 +299,7 @@
                     aria-label={t('proj.moveOf', { name: c.name })}
                     disabled={busy}
                     value=""
-                    onchange={(e) => moveCorpus(c, e.currentTarget.value)}
+                    onchange={(e) => moveCorpus(c, e.currentTarget)}
                   >
                     <option value="">{t('proj.move')}…</option>
                     {#each projectStore.list.filter((p) => p.id !== c.project_id) as p (p.id)}
@@ -331,6 +343,9 @@
     </select>
   {:else}
     <p>{t('proj.confirmEmpty', { name: delProject?.name ?? '' })}</p>
+  {/if}
+  {#if delTerms > 0 && delTrashed === 0}
+    <p class="warn" role="alert">{t('proj.deleteTerms', { name: delProject?.name ?? '', n: delTerms })}</p>
   {/if}
   {#snippet footer()}
     <Button onclick={() => (delProjectOpen = false)}>{t('common.cancel')}</Button>
@@ -422,6 +437,10 @@
     padding: var(--s-1) var(--s-2);
     text-align: left;
     border-bottom: 1px solid var(--line);
+  }
+  .warn {
+    color: var(--danger, inherit);
+    font-weight: 600;
   }
   .sr {
     position: absolute;

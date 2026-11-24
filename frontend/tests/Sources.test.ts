@@ -96,7 +96,7 @@ beforeEach(() => {
     if (p === '/api/corpora/2/facets') return res(200, { tags: [], text_types: [], date_min: '', date_max: '' });
     if (p === '/api/corpora') return res(200, corpusStore.list);
     if (/\/parallel$/.test(p)) return res(200, { documents: 0, segments: 0, partners: [] });
-    if (p === '/api/projects') return res(200, [{ id: 7, name: 'Acme', corpora: 0 }]);
+    if (p === '/api/projects') return res(200, [{ id: 7, name: 'Acme', corpora: 0, trashed: 0, terms: 0 }]);
     return res(404, { detail: 'nope' });
   }));
 });
@@ -455,6 +455,17 @@ describe('Sources', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Save corpus' }));
     await waitFor(() => expect(calls.some((c) => c.path === '/api/corpora/1' && c.method === 'PATCH')).toBe(true));
     expect(calls.find((c) => c.path === '/api/corpora/1' && c.method === 'PATCH')!.body).toEqual({ name: 'Renamed', project_id: 7 });
+  });
+
+  it('a corpus without a project shows a disabled placeholder and a rename never sends project_id', async () => {
+    await ready();
+    await waitFor(() => expect(screen.getByRole('option', { name: 'Acme' })).toBeInTheDocument());
+    expect(screen.queryByRole('option', { name: '— none —' })).toBeNull();
+    expect(screen.getByRole('option', { name: 'Choose a project' })).toBeDisabled();
+    await fireEvent.input(screen.getByLabelText('Corpus name'), { target: { value: 'Renamed' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Save corpus' }));
+    await waitFor(() => expect(calls.some((c) => c.path === '/api/corpora/1' && c.method === 'PATCH')).toBe(true));
+    expect(calls.find((c) => c.path === '/api/corpora/1' && c.method === 'PATCH')!.body).toEqual({ name: 'Renamed' });
   });
 
   it('keeps the previous rows and reports the error when a reload fails', async () => {

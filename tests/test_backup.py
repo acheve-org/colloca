@@ -287,6 +287,39 @@ def test_import_puts_a_projectless_working_corpus_into_general(client):
         assert [r[0] for r in conn.execute("SELECT project_id FROM corpora WHERE name='base'")] == [None]
 
 
+def drop_general(client):
+    """The test database is shared by the whole run: make sure no General project exists yet."""
+    with db.session() as conn:
+        for (gid,) in conn.execute("SELECT id FROM projects WHERE name = 'General' COLLATE NOCASE").fetchall():
+            conn.execute("DELETE FROM corpora WHERE project_id = ?", (gid,))
+            conn.execute("DELETE FROM projects WHERE id = ?", (gid,))
+
+
+def test_import_counts_a_lazily_created_general_and_dry_run_agrees(client):
+    drop_general(client)
+    payload = {"format": "colloca-export", "format_version": 1,
+               "corpora": [{"ref": 1, "name": "orphan", "lang": "es", "project_ref": None}],
+               "documents": [{"ref": 1, "corpus_ref": 1, "title": "d", "text": ES_TEXT}]}
+    files = {"file": ("p.json", json.dumps(payload).encode())}
+    dry = client.post("/api/import", data={"dry_run": "true", "annotate": "false"}, files=files).json()
+    real = client.post("/api/import", data={"dry_run": "false", "annotate": "false"}, files=files).json()
+    assert dry["created"]["projects"] == real["created"]["projects"] == 1
+
+
+def test_explicit_target_project_wins_over_general(client):
+    drop_general(client)
+    dst = project(client)
+    payload = {"format": "colloca-export", "format_version": 1,
+               "corpora": [{"ref": 1, "name": "orphan", "lang": "es", "project_ref": None}],
+               "documents": [{"ref": 1, "corpus_ref": 1, "title": "d", "text": ES_TEXT}]}
+    r = client.post("/api/import", data={"dry_run": "false", "annotate": "false", "project_id": str(dst)},
+                    files={"file": ("p.json", json.dumps(payload).encode())})
+    assert r.status_code == 200, r.text
+    assert r.json()["created"]["projects"] == 0
+    assert [c["project_id"] for c in client.get("/api/corpora").json() if c["name"] == "orphan"] == [dst]
+    assert not [p for p in client.get("/api/projects").json() if p["name"].lower() == "general"]
+
+
 def test_database_backup_has_a_consistent_sqlite_copy_and_excludes_the_trash(client, tmp_path):
     cid = make_corpus(client, "es", "in-backup")
     add(client, cid, ES_TEXT)

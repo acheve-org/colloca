@@ -3,6 +3,7 @@ import { tick } from 'svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Projects from '../src/screens/Projects.svelte';
 import { corpusStore } from '../src/lib/corpus.svelte';
+import { loadLanguageNames } from '../src/lib/context.svelte';
 import { messages } from '../src/lib/messages.svelte';
 import { projectStore } from '../src/lib/projects.svelte';
 
@@ -12,7 +13,7 @@ const corpus = (id: number, name: string, project_id: number | null) => ({
 
 interface Call { method: string; path: string; body?: Record<string, unknown> }
 let calls: Call[];
-let projects: { id: number; name: string; corpora: number; trashed: number }[];
+let projects: { id: number; name: string; corpora: number; trashed: number; terms: number }[];
 let corpora: ReturnType<typeof corpus>[];
 let failPatch: number | null;
 
@@ -22,9 +23,9 @@ beforeEach(() => {
   calls = [];
   failPatch = null;
   projects = [
-    { id: 7, name: 'Acme', corpora: 2, trashed: 0 },
-    { id: 8, name: 'Bolt', corpora: 1, trashed: 0 },
-    { id: 9, name: 'Empty', corpora: 0, trashed: 0 },
+    { id: 7, name: 'Acme', corpora: 2, trashed: 0, terms: 0 },
+    { id: 8, name: 'Bolt', corpora: 1, trashed: 0, terms: 0 },
+    { id: 9, name: 'Empty', corpora: 0, trashed: 0, terms: 0 },
   ];
   corpora = [corpus(1, 'A1', 7), corpus(2, 'A2', 7), corpus(3, 'B1', 8)];
   corpusStore.list = [...corpora];
@@ -88,7 +89,7 @@ describe('Projects screen empty states', () => {
   });
 
   it('a project without corpora: Create a corpus prompt next to the New corpus button', async () => {
-    projects = [{ id: 9, name: 'Empty', corpora: 0, trashed: 0 }];
+    projects = [{ id: 9, name: 'Empty', corpora: 0, trashed: 0, terms: 0 }];
     corpora = [];
     corpusStore.list = [];
     corpusStore.currentId = null;
@@ -198,8 +199,8 @@ describe('Projects screen', () => {
   });
 
   it.each([
-    ['trashed-only', { id: 9, name: 'Empty', corpora: 0, trashed: 2 }, 'Empty'],
-    ['mixed', { id: 7, name: 'Acme', corpora: 2, trashed: 1 }, 'Acme'],
+    ['trashed-only', { id: 9, name: 'Empty', corpora: 0, trashed: 2, terms: 0 }, 'Empty'],
+    ['mixed', { id: 7, name: 'Acme', corpora: 2, trashed: 1, terms: 0 }, 'Acme'],
   ])('a %s project cannot be deleted: message and link, Delete disabled, nothing sent', async (_n, proj, name) => {
     projects = projects.map((p) => (p.id === proj.id ? proj : p));
     await show();
@@ -237,5 +238,50 @@ describe('Projects screen', () => {
       expect(calls.filter((c) => c.method === 'GET' && c.path === '/api/projects').length).toBeGreaterThan(before));
     expect(calls.some((c) => c.method === 'DELETE')).toBe(false);
     await waitFor(() => expect(corpusStore.list.find((c) => c.id === 1)?.project_id).toBe(8));
+  });
+
+  it('after a failed Move the select goes back to its placeholder', async () => {
+    failPatch = 2;
+    await show();
+    const sel = within(rowOf('A2')).getByLabelText(/^Move /) as HTMLSelectElement;
+    await fireEvent.change(sel, { target: { value: '8' } });
+    await waitFor(() => expect(messages.current).toEqual({ text: 'patch failed', kind: 'err' }));
+    await waitFor(() => expect(sel.value).toBe(''));
+  });
+
+  it('the Language column shows the language name, the code when unknown', async () => {
+    await loadLanguageNames();
+    corpora = [...corpora, { ...corpus(6, 'Odd', 7), lang: 'xx' }];
+    corpusStore.list = [...corpora];
+    await show();
+    expect(within(rowOf('A1')).getByText('Spanish')).toBeInTheDocument();
+    expect(within(rowOf('Odd')).getByText('xx')).toBeInTheDocument();
+  });
+
+  it('starting a corpus rename focuses the field', async () => {
+    await show();
+    await fireEvent.click(within(rowOf('A2')).getByRole('button', { name: 'Rename A2' }));
+    await tick();
+    expect(screen.getByLabelText('Name of project A2')).toHaveFocus();
+  });
+
+  it.each([
+    ['empty project', 9, 'Empty'],
+    ['project with corpora', 7, 'Acme'],
+  ])('warns about permanent termbase loss for a %s with terms', async (_n, id, name) => {
+    projects = projects.map((p) => (p.id === id ? { ...p, terms: 5 } : p));
+    await show();
+    await fireEvent.click(screen.getByRole('button', { name: new RegExp('^' + name) }));
+    await fireEvent.click(screen.getByRole('button', { name: `Delete ${name}` }));
+    await tick();
+    const dlg = screen.getByRole('dialog', { name: 'Delete this project?' });
+    expect(dlg).toHaveTextContent(`Deleting ${name} also permanently deletes its 5 termbase entries.`);
+  });
+
+  it('shows no termbase warning when the project has no terms', async () => {
+    await show();
+    await fireEvent.click(screen.getByRole('button', { name: 'Delete Acme' }));
+    await tick();
+    expect(screen.getByRole('dialog', { name: 'Delete this project?' })).not.toHaveTextContent('termbase entries');
   });
 });

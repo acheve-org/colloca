@@ -104,6 +104,18 @@ def test_projects_list_reports_trashed_count(client):
     assert (p["corpora"], p["trashed"]) == (1, 1)
 
 
+def test_projects_list_counts_the_termbase_entries_live_and_trashed(client):
+    pid = project(client)
+    make_corpus(client, project_id=pid)
+    ids = [client.post("/api/terms", json={"src_lang": "es", "src_term": t, "tgt_term": "x", "status": "approved",
+                                           "project_id": pid}).json()["id"] for t in ("casa", "perro")]
+    client.delete(f"/api/terms/{ids[1]}")
+    p = next(p for p in client.get("/api/projects").json() if p["id"] == pid)
+    assert (p["corpora"], p["terms"]) == (1, 2)
+    empty = project(client)
+    assert next(p for p in client.get("/api/projects").json() if p["id"] == empty)["terms"] == 0
+
+
 # --------------------------------------------------------------------------- metadata
 def test_metadata_normalisation():
     assert metadata.normalize_tags(" Contrato, cliente  X ,,CONTRATO") == ["contrato", "cliente x"]

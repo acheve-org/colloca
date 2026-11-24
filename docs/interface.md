@@ -13,7 +13,7 @@ Colour, contrast and screen-reader notes: [accessibility.md](accessibility.md).
 | Work area | Toolbar (options, document filter) → result strip (counts, *Filter in results*) → sortable table → detail strip with actions for the selected row. |
 | Status line | Top of the window: messages, active model per language. |
 
-- First run: with an empty address and no working corpus selected, the app opens on *Projects* (or *Languages* when no language is configured). A deep link opens its screen with a "set up first" message instead; empty screens point to the next step.
+- First run: with an empty address and no working corpus selected, the app opens on *Projects* (or *Languages* when no language is configured). A deep link opens its screen with an empty-state message instead; empty screens point to the next step ("Add your first language", "Start your first project", "Create a corpus").
 - Creating, renaming, moving and deleting corpora and projects is done on *Projects*.
 - Screen and options live in the address (`#/concordance?q=...`): reload and bookmarks restore the search; the rail returns each screen to its last search.
 - Back/forward between searches on one screen changes the address without re-running the search.

@@ -44,7 +44,7 @@ Appears when the corpus has aligned texts. Run it on the target-language corpus 
 | Query in source | Marked. |
 | Approved termbase translation | Solid underline in target. Wins. |
 | Best *Equivalents* candidate | Dotted underline + label *guess*. Statistical: check before adopting. In small memories several words can tie; the one most like the query is chosen. |
-| Termbase term (KWIC and *Source + target*) | Underlined; approved translation on hover. Matches word forms, lemmas, multi-word terms. Termbase of the corpus's project. |
+| Termbase term (KWIC and *Source + target*) | Underlined; approved translation on hover. Matches word forms, lemmas, multi-word terms. Project termbase, plus the general termbase. |
 | Forbidden translation in target | Struck through + ⚠; approved alternative on hover. |
 
 - Words match by lemma (*contratti* marks for *contrato*).

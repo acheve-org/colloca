@@ -11,7 +11,7 @@ beforeEach(() => {
   vi.stubGlobal('fetch', vi.fn(async () => ({
     ok: true, status: 200, statusText: 'OK', json: async () => ({ es: 'Spanish' }),
   })));
-  projectStore.list = [{ id: 7, name: 'Acme', corpora: 1, trashed: 0 }];
+  projectStore.list = [{ id: 7, name: 'Acme', corpora: 1, trashed: 0, terms: 0 }];
   corpusStore.list = [corpus(1, 'es', 7), corpus(2, 'es', null), corpus(3, 'xx', 7)];
   corpusStore.currentId = null;
 });
