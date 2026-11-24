@@ -5,7 +5,7 @@ from docx import Document
 
 from colloca import db, importer
 
-from .test_api import make_corpus, wait_for_jobs
+from .test_api import default_project, make_corpus, wait_for_jobs
 from .test_projects import doc, project
 from .test_reference import fill_reference, make_reference
 
@@ -38,7 +38,8 @@ def report(client, cid, text=JOB, **params):
 
 
 def term(client, **fields):
-    body = {"src_lang": "es", "status": "approved", **fields}
+    # terms default to the project of make_corpus(), as the report reads the termbase of the corpus's project
+    body = {"src_lang": "es", "status": "approved", "project_id": default_project(client), **fields}
     assert client.post("/api/terms", json=body).status_code == 201, body
 
 

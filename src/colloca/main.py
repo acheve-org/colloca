@@ -262,8 +262,10 @@ def _project(conn, project_id: int):
 def list_projects():
     with db.session() as conn:
         rows = conn.execute(
-            """SELECT p.*, COUNT(c.id) AS corpora FROM projects p
-               LEFT JOIN corpora c ON c.project_id=p.id AND c.is_reference=0 AND c.deleted_at IS NULL
+            """SELECT p.*,
+                      COUNT(CASE WHEN c.is_reference=0 AND c.deleted_at IS NULL THEN c.id END) AS corpora,
+                      COUNT(CASE WHEN c.deleted_at IS NOT NULL THEN c.id END) AS trashed
+               FROM projects p LEFT JOIN corpora c ON c.project_id=p.id
                GROUP BY p.id ORDER BY p.name COLLATE NOCASE""").fetchall()
         return [dict(r) for r in rows]
 
@@ -295,9 +297,13 @@ def update_project(project_id: int, body: ProjectPatch):
 
 @app.delete("/api/projects/{project_id}", status_code=204)
 def delete_project(project_id: int):
-    """Removes the grouping only: its corpora are kept and become unassigned."""
+    """Refused while any corpus (trashed ones included) still belongs to the project."""
     with db.session() as conn:
-        _project(conn, project_id)
+        project = _project(conn, project_id)
+        n = conn.execute("SELECT COUNT(*) FROM corpora WHERE project_id=?", (project_id,)).fetchone()[0]
+        if n:
+            raise HTTPException(409, f"Project '{project['name']}' still has {n} corpora. "
+                                     "Move or delete them first.")
         conn.execute("DELETE FROM projects WHERE id=?", (project_id,))
 
 
@@ -306,13 +312,13 @@ class CorpusIn(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     lang: str
     description: str = ""
-    project_id: int | None = None
+    project_id: int
 
 
 class CorpusPatch(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=120)
     description: str | None = None
-    project_id: int | None = None      # send null to take the corpus out of its project
+    project_id: int | None = None      # a corpus can move to another project, never out of projects
 
 
 @app.get("/api/languages")
@@ -537,8 +543,7 @@ def create_corpus(body: CorpusIn):
     if body.lang not in nlp.SUPPORTED:
         raise HTTPException(400, f"Language must be one of {list(nlp.SUPPORTED)}")
     with db.session() as conn:
-        if body.project_id is not None:
-            _project(conn, body.project_id)
+        _project(conn, body.project_id)
         cur = conn.execute("INSERT INTO corpora (name,lang,description,project_id) VALUES (?,?,?,?)",
                            (body.name.strip(), body.lang, body.description, body.project_id))
         return {"id": cur.lastrowid}
@@ -546,14 +551,15 @@ def create_corpus(body: CorpusIn):
 
 @app.patch("/api/corpora/{corpus_id}")
 def update_corpus(corpus_id: int, body: CorpusPatch):
-    """Rename a corpus, change its description, or move it to another project (project_id null = none)."""
+    """Rename a corpus, change its description, or move it to another project."""
     with db.session() as conn:
         corpus = _corpus(conn, corpus_id)
         if "project_id" in body.model_fields_set:
             if corpus["is_reference"]:
                 raise HTTPException(400, "A base corpus belongs to no project")
-            if body.project_id is not None:
-                _project(conn, body.project_id)
+            if body.project_id is None:
+                raise HTTPException(400, "A corpus must belong to a project")
+            _project(conn, body.project_id)
             conn.execute("UPDATE corpora SET project_id=? WHERE id=?", (body.project_id, corpus_id))
         if body.name is not None:
             conn.execute("UPDATE corpora SET name=? WHERE id=?", (body.name.strip(), corpus_id))

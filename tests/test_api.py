@@ -15,8 +15,19 @@ IT_TEXT = (
 )
 
 
-def make_corpus(client, lang="es", name="t"):
-    r = client.post("/api/corpora", json={"name": name, "lang": lang})
+def default_project(client) -> int:
+    """Id of the shared `Test project`, created on first use (the database lives for the whole run)."""
+    for p in client.get("/api/projects").json():
+        if p["name"] == "Test project":
+            return p["id"]
+    r = client.post("/api/projects", json={"name": "Test project"})
+    assert r.status_code == 201
+    return r.json()["id"]
+
+
+def make_corpus(client, lang="es", name="t", project_id=None):
+    pid = project_id if project_id is not None else default_project(client)
+    r = client.post("/api/corpora", json={"name": name, "lang": lang, "project_id": pid})
     assert r.status_code == 201
     return r.json()["id"]
 
@@ -37,7 +48,8 @@ def wait_for_jobs(client, cid, timeout=60):
 
 
 def test_unsupported_language(client):
-    assert client.post("/api/corpora", json={"name": "x", "lang": "fr"}).status_code == 400
+    body = {"name": "x", "lang": "fr", "project_id": default_project(client)}
+    assert client.post("/api/corpora", json=body).status_code == 400
 
 
 def test_add_and_frequency(client):
