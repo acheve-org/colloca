@@ -76,13 +76,13 @@
 
 **Interfaces:**
 - Produces: `NAV` first group `nav.group.setup` ("Setup": Languages, Projects) followed by `nav.group.corpus` ("Corpus": Sources); link order in the rail is `Languages, Projects, Sources, Concordance, …`.
-- Produces in `projects.svelte.ts`: remove `projectStore.filter` and `inProject`; `projectStore` is `$state<{ list: Project[] }>`; `reloadProjects(): Promise<void>` unchanged; `export function projectOf(c: Corpus | null): Project | null` (list lookup by `c.project_id`, null when none/unknown).
+- Produces in `projects.svelte.ts`: keep `projectStore.filter` and `inProject` for now (the old `CorpusSwitcher` still uses them; Task 5 removes them); add `export function projectOf(c: Corpus | null): Project | null` (list lookup by `c.project_id`, null when none/unknown).
 - Produces locale keys (en text in parentheses): `nav.projects` (Projects), `nav.group.setup` (Setup), `ctx.working` (Working in), `ctx.change` (Change), `ctx.noProject` (No project), `ctx.noCorpus` (No corpus selected), `ctx.label` (Working context), plus the `proj.*` keys Task 4 uses (defined there).
 
 - [ ] **Step 1: Write failing tests**: `router.test.ts` — `#/projects` parses to screen `projects`; `Rail.test.ts` — update the link order expectation (Languages, Projects before Sources, and the rail no longer has Sources-group Languages); `projects.test.ts` — `projectOf` returns the matching project, null for `project_id: null` and for an unknown id.
 - [ ] **Step 2: Run** `npm test -- router Rail projects` (in `frontend/`) → FAIL.
-- [ ] **Step 3: Implement**: route, nav group, `SCREEN_COMPONENTS.projects`, `projectOf`, drop `filter`/`inProject` (also fix their two importers `Sources.svelte`, `Trash.svelte` — they only read `projectStore.list`, so only the imports of removed names change), `Project.trashed`, the locale keys in all three files (es/it translated).
-- [ ] **Step 4: Run** `npm test && npm run check && npm run lint` → PASS (CorpusSwitcher still compiles only if you keep it until Task 5: temporarily keep `projectStore.filter` out of it by leaving the file untouched — it is deleted in Task 5; if `check` fails on it, stub the removed names locally and note it for Task 5).
+- [ ] **Step 3: Implement**: route, nav group, `SCREEN_COMPONENTS.projects`, `projectOf`, `Project.trashed`, the locale keys in all three files (es/it translated).
+- [ ] **Step 4: Run** `npm test && npm run check && npm run lint` → PASS (`CorpusSwitcher` is untouched in this task).
 - [ ] **Step 5: Commit** `feat(ui): projects route, Setup nav group and working-context helpers`.
 
 ### Task 4: Projects screen
@@ -90,7 +90,6 @@
 **Files:**
 - Modify: `frontend/src/screens/Projects.svelte`
 - Create: `frontend/src/screens/NewCorpusDialog.svelte` (name, language select from `/api/languages`, project select, preselected to the selected project)
-- Delete: `frontend/src/lib/ui/ProjectsDialog.svelte`, `frontend/tests/ProjectsDialog.test.ts`
 - Test: `frontend/tests/Projects.test.ts` (new)
 
 **Interfaces:**
@@ -100,7 +99,7 @@
 
 - [ ] **Step 1: Write failing tests** in `Projects.test.ts` (stub `fetch` like `CorpusSwitcher.test.ts` does): selecting a project shows only its corpora; `Open` calls `corpusStore.select` with that id and the row shows "Working"; `New corpus` posts `{name, lang, project_id}` with the selected project and opens the new corpus; `Move` sends `PATCH /api/corpora/{id}` with the new `project_id`; deleting a project with corpora requires picking a target, moves the corpora, then calls `DELETE /api/projects/{id}`; renaming a project posts `PATCH /api/projects/{id}`; a corpus with `project_id: null` is listed under a "No project" entry in the left list and offers `Move`.
 - [ ] **Step 2: Run** `npm test -- Projects` → FAIL.
-- [ ] **Step 3: Implement** the screen and `NewCorpusDialog` per the Interfaces block; follow `ProjectsDialog.svelte`/`CorpusSwitcher.svelte` for the rename, busy-guard and error-reporting idioms and for table styling use the existing `DataTable` only if it fits, otherwise a plain table with the project's tokens. Remove `ProjectsDialog` and its test.
+- [ ] **Step 3: Implement** the screen and `NewCorpusDialog` per the Interfaces block; follow `ProjectsDialog.svelte`/`CorpusSwitcher.svelte` for the rename, busy-guard and error-reporting idioms and for table styling use the existing `DataTable` only if it fits, otherwise a plain table with the project's tokens. Leave `ProjectsDialog` in place (the old `CorpusSwitcher` imports it until Task 5).
 - [ ] **Step 4: Run** `npm test && npm run check && npm run lint` → PASS.
 - [ ] **Step 5: Commit** `feat(ui): Projects page for projects, corpora and the working corpus`.
 
@@ -109,7 +108,7 @@
 **Files:**
 - Create: `frontend/src/lib/ui/ContextBlock.svelte` (rail), `frontend/src/lib/ui/ContextBar.svelte` (breadcrumb strip), `frontend/src/lib/context.svelte.ts`
 - Modify: `frontend/src/lib/ui/Rail.svelte` (replace `<CorpusSwitcher />`), `frontend/src/lib/ui/AppShell.svelte` (render `<ContextBar />` above `<main>`)
-- Delete: `frontend/src/lib/ui/CorpusSwitcher.svelte`, `frontend/tests/CorpusSwitcher.test.ts`
+- Delete: `frontend/src/lib/ui/CorpusSwitcher.svelte`, `frontend/tests/CorpusSwitcher.test.ts`, `frontend/src/lib/ui/ProjectsDialog.svelte`, `frontend/tests/ProjectsDialog.test.ts`; remove `projectStore.filter` and `inProject` from `frontend/src/lib/projects.svelte.ts` (`projectStore` becomes `$state<{ list: Project[] }>`)
 - Test: `frontend/tests/ContextBlock.test.ts`, `frontend/tests/ContextBar.test.ts`, `frontend/tests/context.test.ts` (new)
 
 **Interfaces:**
