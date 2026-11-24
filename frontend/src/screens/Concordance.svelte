@@ -34,7 +34,7 @@
   import { go, route } from '../lib/router.svelte';
   import { formatKeys, registerShortcut, withKeys } from '../lib/shortcuts.svelte';
   import { openTerm, termStore } from '../lib/term.svelte';
-  import type { BilingualResult, ConcLine, ConcordanceResult, DocContext } from '../lib/types';
+  import type { BilingualResult, ConcLine, ConcordanceResult, DocContext, QueryExplanation } from '../lib/types';
   import Badge from '../lib/ui/Badge.svelte';
   import Button from '../lib/ui/Button.svelte';
   import DetailStrip from '../lib/ui/DetailStrip.svelte';
@@ -58,9 +58,35 @@
   let bilingual = $state(initial.bi === '1');
   let caseSensitive = $state(initial.case === '1');
   let anyOrder = $state(initial.any === '1');
+  let advanced = $state(initial.adv === '1');
+  let accent = $state(initial.acc === '1');
   let limit = $state(LIMITS.includes(initial.n ?? '') ? (initial.n as string) : DEFAULT_LIMIT);
   let sampling = $state(Number.parseInt(initial.sample ?? '', 10) > 0);
   let seed = $state(Number.parseInt(initial.sample ?? '', 10) > 0 ? Number.parseInt(initial.sample!, 10) : newSeed());
+
+  // The query in words (or the mistake with its position) while typing in advanced mode, and after a search.
+  let capped = $state(false);
+  let explanation = $state<QueryExplanation | null>(null);
+  let explainSeq = 0;
+
+  $effect(() => {
+    const text = q.trim();
+    const params = { q: text, unit, advanced: 'true', ...(caseSensitive ? { case_sensitive: 'true' } : {}), ...(accent ? { accent_insensitive: 'true' } : {}) };
+    if (!advanced || !text) {
+      explanation = null;
+      return;
+    }
+    const n = ++explainSeq;
+    const timer = setTimeout(async () => {
+      try {
+        const r = await get<QueryExplanation>('/api/query/explain', params);
+        if (n === explainSeq) explanation = r;
+      } catch {
+        if (n === explainSeq) explanation = null;
+      }
+    }, 250);
+    return () => clearTimeout(timer);
+  });
 
   interface Result {
     total: number;
@@ -157,7 +183,9 @@
       sort,
       limit: Number(limit),
       ...(caseSensitive ? { case_sensitive: 'true' } : {}),
-      ...(anyOrder ? { any_order: 'true' } : {}),
+      ...(anyOrder && !advanced ? { any_order: 'true' } : {}),
+      ...(advanced ? { advanced: 'true' } : {}),
+      ...(accent ? { accent_insensitive: 'true' } : {}),
       ...(sampling ? { sample: seed } : {}),
       ...scopeParams(),
     };
@@ -169,6 +197,7 @@
       if (n !== seq) return;
       lines = r.lines;
       result = { total: r.total, query, mode, path, params };
+      capped = !!r.capped;
       // Persist only a search that worked, so a failing query never reaches the URL.
       go('concordance', {
         q: query,
@@ -178,6 +207,8 @@
         bi: bilingual ? '1' : '',
         case: caseSensitive ? '1' : '',
         any: anyOrder ? '1' : '',
+        adv: advanced ? '1' : '',
+        acc: accent ? '1' : '',
         n: limit === DEFAULT_LIMIT ? '' : limit,
         sample: sampling ? String(seed) : '',
       });
@@ -313,9 +344,17 @@
         <span class="switch" title={t('cc.caseHint')}>
           <Toggle bind:checked={caseSensitive} label={t('cc.case')} />
         </span>
-        <span class="switch" title={t('cc.anyOrderHint')}>
-          <Toggle bind:checked={anyOrder} label={t('cc.anyOrder')} />
+        <span class="switch" title={t('cc.accentHint')}>
+          <Toggle bind:checked={accent} label={t('cc.accent')} />
         </span>
+        <span class="switch" title={t('cc.advancedHint')}>
+          <Toggle bind:checked={advanced} label={t('cc.advanced')} />
+        </span>
+        {#if !advanced}
+          <span class="switch" title={t('cc.anyOrderHint')}>
+            <Toggle bind:checked={anyOrder} label={t('cc.anyOrder')} />
+          </span>
+        {/if}
         <span class="switch" title={t('cc.sampleHint')}>
           <Toggle bind:checked={sampling} label={t('cc.sample')} />
         </span>
@@ -334,11 +373,19 @@
         </div>
       </Toolbar>
     </form>
+    {#if advanced && explanation}
+      {#if explanation.ok}
+        <p class="parsed">{t('cc.parsed', { text: explanation.parsed })}</p>
+      {:else}
+        <p class="parsed bad" role="alert">{t('cc.queryError', { text: explanation.error })}</p>
+      {/if}
+    {/if}
     <ScopeFilter />
 
     {#if result}
       <div class="strip">
         <span class="count">{t('cc.summary', { hits: result.total, docs: docCount })}</span>
+        {#if capped}<span class="muted">{t('cc.capped')}</span>{/if}
         {#if result.total > lines.length}
           <span class="muted">({t(sampling ? 'cc.sampled' : 'cc.showing', { n: lines.length })})</span>
         {/if}
@@ -474,6 +521,14 @@
   }
   .width {
     width: 4.5em;
+  }
+  .parsed {
+    margin: 0.25rem 0;
+    font-size: 0.9em;
+    color: var(--muted);
+  }
+  .parsed.bad {
+    color: var(--danger);
   }
   .switch {
     align-self: center;

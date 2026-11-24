@@ -187,6 +187,11 @@ Concordance options (also available as API parameters):
   refused. `?` and `[` are ordinary characters.
 - **Any order** (`any_order=true`): all the words of the query in the same sentence, in any order; the node spans from
   the first to the last of them.
+- **Advanced query** (`advanced=true`): token syntax with regex, lemma and part of speech, `|`, and gaps, for example
+  `[lemma="tomar"] []{0,3} [pos="NOUN"]` or `tomar +3 NOUN`; the query is echoed back in words and mistakes point at
+  the character. Full grammar, examples and limits in [docs/query-language.md](docs/query-language.md).
+- **Ignore accents** (`accent_insensitive=true`): `cafe` finds *café* (ñ stays distinct from n); works with both
+  syntaxes.
 - **Hits** (100, 500 or 2000) and **Random sample** (`sample=<seed>`): a random selection of that many hits, the same
   for the same seed; **New sample** draws another one. The hit count always shows the total found.
 - **Sort**: document, whole left or right context, or the 1st or 2nd word to the left or right (`l1 l2 r1 r2`).

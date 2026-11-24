@@ -1,6 +1,6 @@
 // Minimal shapes of the API responses the UI reads (see src/colloca/main.py).
 
-import type { TermMark } from './highlight';
+import type { TermMark } from "./highlight";
 
 export interface Project {
   id: number;
@@ -65,7 +65,7 @@ export interface Job {
   corpus_id: number;
   kind: string;
   label: string;
-  status: 'queued' | 'running' | 'done' | 'error' | string;
+  status: "queued" | "running" | "done" | "error" | string;
   progress: number;
   error: string;
   code: string;
@@ -100,7 +100,15 @@ export interface ConcordanceLine {
 export interface ConcordanceResult {
   total: number;
   lines: ConcordanceLine[];
+  /** advanced searches only: the query in words, and whether the hit cap cut the list short */
+  parsed?: string;
+  capped?: boolean;
 }
+
+/** /api/query/explain: the query in words, or the message and 1-based character position of a mistake */
+export type QueryExplanation =
+  | { ok: true; parsed: string }
+  | { ok: false; error: string; position: number | null };
 
 /** /bilingual returns { total, lines } with the aligned segment */
 export interface BilingualLine extends ConcordanceLine {
@@ -109,7 +117,12 @@ export interface BilingualLine extends ConcordanceLine {
   /** Character offsets into `source`: the hit itself. */
   source_marks?: { start: number; end: number }[];
   /** Character offsets into `target`: the likely equivalent (`guess` = statistical, else a termbase term). */
-  target_marks?: { start: number; end: number; score: number; guess: boolean }[];
+  target_marks?: {
+    start: number;
+    end: number;
+    score: number;
+    guess: boolean;
+  }[];
   /** Termbase hits and forbidden translations (offsets into `source` / `target`). */
   source_terms?: TermMark[];
   target_terms?: TermMark[];
@@ -117,10 +130,22 @@ export interface BilingualLine extends ConcordanceLine {
 export interface BilingualResult {
   total: number;
   lines: BilingualLine[];
+  parsed?: string;
+  capped?: boolean;
 }
 /** A concordance line from either endpoint; `source`/`target` only in bilingual results. */
 export type ConcLine = ConcordanceLine &
-  Partial<Pick<BilingualLine, 'source' | 'target' | 'source_marks' | 'target_marks' | 'source_terms' | 'target_terms'>> & {
+  Partial<
+    Pick<
+      BilingualLine,
+      | "source"
+      | "target"
+      | "source_marks"
+      | "target_marks"
+      | "source_terms"
+      | "target_terms"
+    >
+  > & {
     /** KWIC lines: termbase marks as offsets into `left`, `node`, `right`. */
     left_terms?: TermMark[];
     node_terms?: TermMark[];
@@ -179,7 +204,7 @@ export interface KeynessRow {
   ll: number;
   docs: number;
   /** Only when the request had both_directions. */
-  direction?: 'over' | 'under';
+  direction?: "over" | "under";
 }
 
 export interface EquivalentRow {
@@ -231,7 +256,7 @@ export interface JobSummary {
   content_words: number;
   distinct_lemmas: number;
   sentences: number;
-  language_check: 'ok' | 'uncertain' | 'mismatch' | string;
+  language_check: "ok" | "uncertain" | "mismatch" | string;
   corpus_words: number;
   corpus_filtered: boolean;
   min_corpus_freq: number;
@@ -243,12 +268,12 @@ export interface JobSummary {
   termbase_terms_found: number;
   termbase_size: number;
   /** "base" when the key terms are ranked against a base corpus. */
-  reference: 'base' | null;
+  reference: "base" | null;
 }
 export interface JobTranslation {
   id: number;
   term: string;
-  status: 'candidate' | 'approved' | 'forbidden' | string;
+  status: "candidate" | "approved" | "forbidden" | string;
 }
 export interface JobKnownTerm {
   item: string;

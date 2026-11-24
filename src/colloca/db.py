@@ -9,6 +9,8 @@ import os
 import sqlite3
 from contextlib import contextmanager
 
+from . import cql
+
 log = logging.getLogger("colloca.db")
 
 DATA_DIR = os.environ.get("COLLOCA_DATA_DIR", "./data")
@@ -148,7 +150,15 @@ CREATE TABLE term_rejections (
 CREATE UNIQUE INDEX idx_rejections_unique ON term_rejections (IFNULL(project_id, 0), lang, term);
 """
 
-MIGRATIONS: list[tuple[int, str]] = [(1, _V1), (2, _V2), (3, _V3), (4, _V4), (5, _V5), (6, _V6), (7, _V7)]
+# --- v8: accent-insensitive search (T13). Expression indexes on the accent-stripped form and lemma: SQLite builds
+# (backfills) them from the existing tokens right here, and keeps them current for every later insert. They call
+# colloca_ascii(), which connect() and migrate() register; tokens keeps its columns, so nothing else changes.
+_V8 = """
+CREATE INDEX idx_tokens_norm_ascii ON tokens(colloca_ascii(norm));
+CREATE INDEX idx_tokens_lemma_ascii ON tokens(colloca_ascii(lemma));
+"""
+
+MIGRATIONS: list[tuple[int, str]] = [(1, _V1), (2, _V2), (3, _V3), (4, _V4), (5, _V5), (6, _V6), (7, _V7), (8, _V8)]
 SCHEMA_VERSION = MIGRATIONS[-1][0]
 
 
@@ -160,6 +170,7 @@ def connect(path: str | None = None) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA journal_mode = WAL")
+    cql.register(conn)
     return conn
 
 
@@ -176,6 +187,7 @@ def migrate(conn: sqlite3.Connection, backup_path: str | None = None) -> int:
 
     An existing database (one that already has tables) is copied to `backup_path` first.
     """
+    cql.register(conn)
     current = schema_version(conn)
     if current > SCHEMA_VERSION:
         raise RuntimeError(f"Database schema v{current} is newer than this Colloca (v{SCHEMA_VERSION}); "

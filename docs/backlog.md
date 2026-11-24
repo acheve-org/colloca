@@ -44,7 +44,7 @@ The T-numbers are stable labels used for cross-references; the **row order is th
 | T10 | Termbase table: sort, filter, inline edit, `admitted` and `superseded` statuses | Medium | M | P2 | Research #4, #5 |
 | T11 | Job report: save and reopen, whole report as one Excel file | Medium | M | P2 | New |
 | T12 | Input formats: OCR for scanned PDFs, XLIFF, ODT, RTF, XLSX, SRT | Medium | L | P2 | Roadmap 12 |
-| T13 | Advanced query language: regex, lemma + part of speech, distance patterns, accent-insensitive | Medium | L | P2 | Roadmap 11 |
+| T13 | Advanced query language: regex, lemma + part of speech, distance patterns, accent-insensitive (**done**, `docs/query-language.md`) | Medium | L | P2 | Roadmap 11 |
 | T14 | Project backup and restore, undo for deletes | Medium | M | P2 | Audit, New |
 | T15 | Termbase hits and forbidden terms marked inside concordance lines, "check text" box | Medium | M | P2 | Research #6 |
 | T16 | Near-duplicate document detection | Medium | M | P2 | Roadmap 13 |

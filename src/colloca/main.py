@@ -452,12 +452,12 @@ def parallel_info(corpus_id: int):
 def bilingual(corpus_id: int, q: str, unit: str = "lemma", width: int = Query(8, le=40),
               limit: int = Query(300, ge=1, le=2000), sort: str = "doc", format: str = "json",
               case_sensitive: bool = False, any_order: bool = False, sample: int | None = None,
-              sq: ScopeQuery = Depends()):
+              advanced: bool = False, accent_insensitive: bool = False, sq: ScopeQuery = Depends()):
     """Concordance over aligned documents, each hit with its segment and the aligned translation."""
     with db.session() as conn:
         _corpus(conn, corpus_id)
         res = _run(parallel.bilingual_concordance, conn, sq.scope(corpus_id), q, unit, width, limit, sort,
-                   case_sensitive, any_order, sample)
+                   case_sensitive, any_order, sample, advanced, accent_insensitive)
     if format == "csv":
         hidden = ("pos", "doc_id", "span", "matches", "source_marks", "target_marks", "source_terms", "target_terms")
         return _reply([{k: v for k, v in ln.items() if k not in hidden} for ln in res["lines"]],
@@ -663,18 +663,30 @@ def frequency(corpus_id: int, unit: str = "lemma", pos: str | None = None, min_f
     return _reply(rows, format, "frequency")
 
 
+@app.get("/api/query/explain")
+def explain_query(q: str, unit: str = "lemma", case_sensitive: bool = False, advanced: bool = False,
+                  accent_insensitive: bool = False):
+    """The query in words, or `ok: false` with the message and the 1-based `position` of the mistake."""
+    try:
+        return {"ok": True, "parsed": analysis.explain(q, unit, case_sensitive, advanced, accent_insensitive)}
+    except ValueError as exc:
+        return {"ok": False, "error": str(exc), "position": getattr(exc, "position", None)}
+
+
 @app.get("/api/corpora/{corpus_id}/concordance")
 def concordance(corpus_id: int, q: str, unit: str = "lemma", width: int = Query(8, le=40),
                 limit: int = Query(300, ge=1, le=2000), sort: str = "doc", format: str = "json",
                 case_sensitive: bool = False, any_order: bool = False, sample: int | None = None,
-                sq: ScopeQuery = Depends()):
+                advanced: bool = False, accent_insensitive: bool = False, sq: ScopeQuery = Depends()):
     """`case_sensitive` matches the written form; `*` starts or ends a word (contrat*, *miento); `any_order`
     finds the words anywhere in one sentence; `sample=<seed>` returns a reproducible random selection of
-    `limit` hits; `sort` is doc, left, right, or l1 l2 r1 r2 (the 1st/2nd word to the left/right)."""
+    `limit` hits; `sort` is doc, left, right, or l1 l2 r1 r2 (the 1st/2nd word to the left/right).
+    `advanced=true` reads `q` as a token query (regex, lemma/pos conditions, `|`, gaps; docs/query-language.md)
+    and returns it in words as `parsed`; `accent_insensitive=true` makes `cafe` find `café`."""
     with db.session() as conn:
         _corpus(conn, corpus_id)
         res = _run(analysis.concordance, conn, sq.scope(corpus_id), q, unit, width, limit, sort,
-                   case_sensitive, any_order, sample)
+                   case_sensitive, any_order, sample, advanced, accent_insensitive)
         termhits.mark_kwic(conn, corpus_id, res["lines"], width)
     if format == "csv":
         hidden = ("pos", "matches", "span", "left_terms", "node_terms", "right_terms")
