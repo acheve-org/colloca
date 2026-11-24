@@ -1,4 +1,4 @@
-"""Parallel (aligned) texts: reading TMX / two-column files into segment pairs, importing them as a
+"""Parallel (aligned) texts: reading TMX / XLIFF / two-column files into segment pairs, importing them as a
 pair of documents, and searching them side by side.
 
 Storage (see db migration v6): the source and the target text are ordinary documents in ordinary corpora of
@@ -16,7 +16,7 @@ from dataclasses import replace
 from defusedxml import DefusedXmlException
 from defusedxml import ElementTree as SafeET
 
-from . import analysis, db, importer, ingest, termhits
+from . import analysis, db, formats, importer, ingest, termhits
 
 PAIRS_PER_DOC = 5000              # translation units per stored document pair
 MAX_SEGMENT_CHARS = 3000          # longer segments are skipped (they are paragraphs, not translation units)
@@ -113,19 +113,34 @@ def read_docx_table(data: bytes, swap: bool = False) -> tuple[list[Pair], int]:
     return _finish(rows, swap)
 
 
+def read_xliff_pairs(data: bytes, lang_a: str, lang_b: str, swap: bool = False) -> tuple[list[Pair], int]:
+    """Translated units of an XLIFF 1.2/2.x, oriented (lang_a, lang_b) by the file's language codes (by
+    source/target order, flipped by `swap`, when the codes are missing or do not match the corpora)."""
+    doc = formats.read_xliff(data)
+    pairs = [(clean_segment(s), clean_segment(t)) for s, t in doc.pairs]
+    if lang_matches(doc.source_lang, lang_b) and lang_matches(doc.target_lang, lang_a):
+        swap = True
+    elif lang_matches(doc.source_lang, lang_a) and lang_matches(doc.target_lang, lang_b):
+        swap = False
+    kept = [(a, b) for a, b in pairs if len(a) <= MAX_SEGMENT_CHARS and len(b) <= MAX_SEGMENT_CHARS]
+    return [(b, a) if swap else (a, b) for a, b in kept], doc.skipped + len(pairs) - len(kept)
+
+
 def read_pairs(filename: str, data: bytes, lang_a: str, lang_b: str, swap: bool = False) -> tuple[list[Pair], int]:
     """Segment pairs from a file, oriented (lang_a, lang_b). TMX is oriented by its language codes;
     two-column files by column order (`swap` flips it)."""
     ext = filename.lower().rsplit(".", 1)[-1] if "." in filename else ""
     if ext == "tmx":
         pairs, skipped = read_tmx(data, lang_a, lang_b)
+    elif ext in ("xlf", "xliff"):
+        pairs, skipped = read_xliff_pairs(data, lang_a, lang_b, swap)
     elif ext in ("tsv", "csv", "txt"):
         pairs, skipped = read_delimited(data, swap)
     elif ext == "docx":
         pairs, skipped = read_docx_table(data, swap)
     else:
         raise ingest.IngestError(f"Unsupported file type '.{ext}' for aligned texts "
-                                 "(use .tmx, .tsv, .csv or a .docx table)")
+                                 "(use .tmx, .xlf/.xliff, .tsv, .csv or a .docx table)")
     if not pairs:
         raise ingest.IngestError("No usable translation units found"
                                  + (" for this language pair" if ext == "tmx" else ""))

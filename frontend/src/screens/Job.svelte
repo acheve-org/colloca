@@ -1,5 +1,5 @@
 <script module lang="ts">
-  const ACCEPT = '.docx,.pdf,.txt,.md,.html,.htm';
+  const ACCEPT = '.docx,.pdf,.odt,.rtf,.xlsx,.csv,.tsv,.xlf,.xliff,.srt,.vtt,.txt,.md,.html,.htm';
   type Kind = 'term' | 'forbidden';
 </script>
 

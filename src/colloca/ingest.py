@@ -96,14 +96,23 @@ def extract_html(data: bytes) -> tuple[str, str]:
     return title, normalize_text(text)
 
 
-def extract_pdf(data: bytes) -> str:
+def extract_pdf(data: bytes, lang: str | None = None, notes: list[str] | None = None,
+                progress=None) -> str:
+    """Text of a PDF. Without a text layer the pages are OCRed (see ocr.py); `notes` collects warnings."""
     from pypdf import PdfReader
     reader = PdfReader(io.BytesIO(data))
     if len(reader.pages) > MAX_PDF_PAGES:
         raise IngestError(f"PDF has {len(reader.pages)} pages (limit {MAX_PDF_PAGES}; set MAX_PDF_PAGES)")
     pages = [(p.extract_text() or "") for p in reader.pages]
     if not any(p.strip() for p in pages):
-        raise IngestError("PDF has no text layer (scanned PDFs need OCR, not supported yet)")
+        from . import ocr
+        res = ocr.ocr_pdf(data, lang, progress)
+        if notes is not None:
+            notes.append(f"Text recognised by OCR ({res.pages} pages, mean confidence {res.confidence:.0f}%).")
+            if res.confidence < ocr.MIN_CONFIDENCE:
+                notes.append(f"OCR quality is low (below {ocr.MIN_CONFIDENCE:.0f}%): check the text, expect "
+                             "misspelt words and wrong lemmas, or rescan at a higher resolution.")
+        return normalize_text(res.text)
     # drop running headers/footers: short lines repeated on many pages
     line_pages: Counter = Counter()
     for p in pages:
@@ -167,20 +176,39 @@ def fetch_url(url: str) -> dict:
     return {"url": url, "title": title or urlparse(url).netloc, "text": text}
 
 
-def read_file(filename: str, data: bytes) -> dict:
+READ_EXTENSIONS = (".docx", ".pdf", ".odt", ".rtf", ".xlsx", ".csv", ".tsv", ".xlf", ".xliff", ".srt", ".vtt",
+                   ".txt", ".md", ".html", ".htm")
+
+
+def read_file(filename: str, data: bytes, lang: str | None = None, columns: str = "", progress=None) -> dict:
+    """{"title", "text", "warnings"}. `lang` (corpus language, es/it) selects the OCR language and the side of an
+    XLIFF to read; `columns` picks the text columns of a spreadsheet (see formats.select_text_columns)."""
+    from . import formats
     ext = os.path.splitext(filename)[1].lower()
     title = os.path.splitext(os.path.basename(filename))[0]
+    notes: list[str] = []
     if ext == ".docx":
         text = extract_docx(data)
     elif ext == ".pdf":
-        text = extract_pdf(data)
+        text = extract_pdf(data, lang, notes, progress)
+    elif ext == ".odt":
+        text = formats.extract_odt(data)
+    elif ext == ".rtf":
+        text = formats.extract_rtf(data)
+    elif ext in (".xlsx", ".csv", ".tsv"):
+        text = formats.extract_table(filename, data, columns)
+    elif ext in (".xlf", ".xliff"):
+        text = formats.extract_xliff(data, lang)
+    elif ext in (".srt", ".vtt"):
+        text = formats.extract_subtitles(data)
     elif ext in (".html", ".htm"):
         title2, text = extract_html(data)
         title = title2 or title
     elif ext in (".txt", ".md", ".text", ""):
         text = decode_text(data)
     else:
-        raise IngestError(f"Unsupported file type '{ext}' (use .docx, .pdf, .txt, .md, .html)")
+        raise IngestError(f"Unsupported file type '{ext}' (use .docx, .pdf, .odt, .rtf, .xlsx, .csv, .xlf, .srt, "
+                          ".vtt, .txt, .md, .html)")
     if not text.strip():
         raise IngestError("File contains no text")
-    return {"title": title, "text": text}
+    return {"title": title, "text": text, "warnings": notes}

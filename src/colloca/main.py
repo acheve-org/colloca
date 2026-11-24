@@ -394,11 +394,13 @@ def add_document(corpus_id: int, body: DocIn, background: bool = False, force_la
 @app.post("/api/corpora/{corpus_id}/upload", status_code=202)
 async def upload(corpus_id: int, files: list[UploadFile] = File(...), tags: str = "",
                  text_type: str = "", doc_date: str = "", author: str = "",
-                 force_language: bool = False, sentences: bool = False):
+                 force_language: bool = False, sentences: bool = False, columns: str = ""):
     """Queue each file as a background job. Per-file answers: {file, ok, job_id} or {file, ok:false, error}.
 
     With ?sentences=true a file is read as one sentence per line (Leipzig Corpora Collection files work as
-    they are) and split into several documents. `tags`, `text_type`, `doc_date` and `author` apply to every file."""
+    they are) and split into several documents. `columns` (spreadsheets and CSV) lists the text columns to
+    import, by number or header name ("2,4" or "Texto"); empty = detect them. `tags`, `text_type`, `doc_date`
+    and `author` apply to every file."""
     meta = _meta(tags, text_type, doc_date, author)
     with db.session() as conn:
         _corpus(conn, corpus_id)
@@ -414,7 +416,7 @@ async def upload(corpus_id: int, files: list[UploadFile] = File(...), tags: str 
                             "error": f"File is larger than {limit_mb} MB (set MAX_UPLOAD_MB to change)"})
             continue
         job = importer.submit(corpus_id, "import", name,
-                              importer.import_file(corpus_id, name, data, meta, force_language, sentences))
+                              importer.import_file(corpus_id, name, data, meta, force_language, sentences, columns))
         results.append({"file": name, "ok": True, "job_id": job.id})
     return results
 
@@ -442,7 +444,7 @@ def _partner_corpus(corpus_id: int, partner_corpus_id: int | None, partner_name:
 async def upload_pairs(corpus_id: int, files: list[UploadFile] = File(...), partner_corpus_id: int | None = None,
                        partner_name: str = "", swap: bool = False, tags: str = "", text_type: str = "",
                        doc_date: str = "", author: str = "", force_language: bool = False):
-    """Import aligned texts (TMX, or two-column .tsv/.csv/.docx table) into this corpus and a partner corpus of
+    """Import aligned texts (TMX, XLIFF, or two-column .tsv/.csv/.docx table) into this corpus and a partner corpus of
     the other language: pass `partner_corpus_id`, or `partner_name` to create the partner corpus (same project).
     This corpus receives the first language / column, the partner the second (`swap` flips two-column files)."""
     meta = _meta(tags, text_type, doc_date, author)
@@ -607,12 +609,14 @@ async def analyse_job(corpus_id: int, file: UploadFile | None = File(None), text
         raise HTTPException(400, "Upload a file or paste the text to analyse")
 
     def work(job):
-        body = ingest.read_file(name, data)["text"] if data is not None else text
+        parsed = ingest.read_file(name, data, corpus["lang"], progress=lambda f: job.set_progress(f * 0.5)) \
+            if data is not None else {"text": text, "warnings": []}
+        body = parsed["text"]
         with db.session() as conn:
             job.payload = jobanalysis.analyse(conn, scope, corpus, body, min_freq=min_freq,
                                               min_corpus_freq=min_corpus_freq, force_language=force_language,
                                               progress=job.set_progress)
-        return {"summary": job.payload["summary"]}
+        return {"summary": job.payload["summary"], "warnings": parsed["warnings"]}
     job = importer.submit(corpus_id, "analysis", name, work)
     return {"job_id": job.id}
 

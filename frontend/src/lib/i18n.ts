@@ -456,7 +456,10 @@ const en: Record<string, string> = {
   'src.upload.title': 'Upload documents',
   'src.upload.files': 'Documents to upload',
   'src.upload.go': 'Upload',
-  'src.upload.hint': 'DOCX, PDF (with text layer), TXT, MD, HTML.',
+  'src.upload.hint':
+    'DOCX, ODT, RTF, PDF (scans are read with OCR when it is installed), XLSX/CSV, XLIFF, SRT/VTT, TXT, MD, HTML.',
+  'src.upload.columns': 'Spreadsheet columns to import (optional)',
+  'src.upload.columnsHint': 'e.g. 2,4 or Texto; empty = detect text columns',
   'src.upload.choose': 'Choose files first.',
   'src.pair.title': 'Import aligned texts (translation memory)',
   'src.pair.file': 'Aligned file',
@@ -470,7 +473,7 @@ const en: Record<string, string> = {
   'src.pair.nameNeeded': 'Name the new corpus for the translations.',
   'src.pair.rejected': 'Rejected: {error}',
   'src.pair.hint':
-    'TMX, or two columns (source | target) as .tsv/.csv or a .docx table. This corpus receives the first language; the other-language texts go to the corpus you choose. Each side stays a normal corpus, aligned segment by segment.',
+    'TMX, XLIFF, or two columns (source | target) as .tsv/.csv or a .docx table. This corpus receives the first language; the other-language texts go to the corpus you choose. Each side stays a normal corpus, aligned segment by segment.',
   'align.title': 'Align two documents',
   'align.hint':
     'No TMX? Upload a document and its translation (DOCX, PDF, TXT…). They are split into sentences and matched by length, numbers and names. You review the pairs before anything is stored.',
