@@ -46,6 +46,7 @@ let calls: Call[];
 let statuses: JobT[];
 let result: JobReport;
 let submit: { status: number; body: unknown };
+let savedList: unknown[];
 
 const res = (status: number, body: unknown) => ({ ok: status < 400, status, statusText: 'x', json: async () => body });
 const corpus = (id: number) => ({ id, name: `C${id}`, lang: 'es', project_id: null, is_reference: 0, docs: 2, tokens: 10 });
@@ -56,6 +57,7 @@ beforeEach(() => {
   statuses = [jobOf('queued'), jobOf('running'), jobOf('done', { progress: 1 })];
   result = report();
   submit = { status: 202, body: { job_id: 7 } };
+  savedList = [];
   corpusStore.list = [corpus(1), corpus(2)];
   corpusStore.currentId = 1;
   corpusStore.loaded = true;
@@ -67,6 +69,15 @@ beforeEach(() => {
     calls.push({ method, path: u.pathname, params: u.searchParams, body: init?.body });
     const p = u.pathname;
     if (/\/analyse-job$/.test(p)) return res(submit.status, submit.body);
+    if (p === '/api/jobs/7/save') {
+      savedList = [{ id: 3, title: 'pasted text · now', source: '', created: '2026-11-24 10:00:00', has_text: false, words: 12345, coverage_tokens_pct: 87, gaps: 2, terms_found: 2 }];
+      return res(200, { id: 3, saved_before: false });
+    }
+    if (/\/corpora\/\d+\/reports$/.test(p)) return res(200, savedList);
+    if (p === '/api/reports/3/result') return res(200, { ...result, report_id: 3, title: 'Contrato Acme', source: 'acme.docx', has_text: true });
+    if (p === '/api/reports/3/text') return res(200, { text: 'El contrato fija el plazo.', lang: 'es' });
+    if (p === '/api/reports/3' && method === 'DELETE') { savedList = []; return res(204, null); }
+    if (/\/check-text$/.test(p)) return res(200, { lang: 'es', lines: [{ text: 'El contrato fija el plazo.', marks: [{ start: 3, end: 11, kind: 'term', translations: ['contratto'], forbidden: [] }] }], summary: { hits: 1, forbidden: 0 } });
     if (/^\/api\/jobs\/\d+$/.test(p)) return res(200, statuses.length > 1 ? statuses.shift()! : statuses[0]);
     if (/^\/api\/jobs\/\d+\/result$/.test(p)) return res(200, result);
     if (/\/jobs$/.test(p)) return res(200, []);
@@ -433,5 +444,72 @@ describe('Job', () => {
     await fireEvent.click(analyse());
     await vi.advanceTimersByTimeAsync(1500);
     expect(await screen.findByRole('alert')).toHaveTextContent('The analysis failed: the server gave no reason');
+  });
+});
+
+describe('Job saved reports', () => {
+  it('keeping the text is off by default and is sent when ticked', async () => {
+    render(Job);
+    await paste();
+    await fireEvent.click(analyse());
+    await vi.advanceTimersByTimeAsync(100);
+    expect(submitCalls()[0].params.get('keep_text')).toBe('false');
+    await vi.advanceTimersByTimeAsync(3000);
+    await screen.findByText('87%');
+    await fireEvent.click(screen.getByLabelText('keep the text with a saved report'));
+    await fireEvent.click(analyse());
+    await vi.advanceTimersByTimeAsync(100);
+    expect(submitCalls()[1].params.get('keep_text')).toBe('true');
+  });
+
+  it('saves the report on screen, lists it, and the downloads then come from the saved report', async () => {
+    render(Job);
+    await runToReport();
+    expect(screen.getByRole('link', { name: 'Excel: whole report' }).getAttribute('href')).toBe('/api/jobs/7/result?format=xlsx');
+    await fireEvent.click(screen.getByRole('button', { name: 'Save report' }));
+    expect(await screen.findByText('Saved')).toBeInTheDocument();
+    expect(calls.some((c) => c.path === '/api/jobs/7/save' && c.method === 'POST')).toBe(true);
+    expect(screen.queryByRole('button', { name: 'Save report' })).toBeNull();
+    expect(await screen.findByText('Saved reports')).toBeInTheDocument();
+    expect(screen.getByText(/12,345 words · 87% covered · 2 gaps/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Excel: whole report' }).getAttribute('href')).toBe('/api/reports/3/result?format=xlsx');
+    expect(screen.getByRole('link', { name: 'CSV: Gaps' }).getAttribute('href')).toBe('/api/reports/3/result?section=gaps&format=csv');
+  });
+
+  it('opens a saved report after a restart and shows the text with the termbase hits marked', async () => {
+    savedList = [{ id: 3, title: 'Contrato Acme', source: 'acme.docx', created: '2026-11-23 09:00:00', has_text: true, words: 900, coverage_tokens_pct: 61, gaps: 4, terms_found: 1 }];
+    render(Job);
+    expect(await screen.findByText('Contrato Acme')).toBeInTheDocument();
+    expect(screen.getByText(/61% covered · 4 gaps · text kept/)).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole('button', { name: 'Open report Contrato Acme' }));
+    expect(await screen.findByText('87%')).toBeInTheDocument();
+    expect(screen.getByText('Report for acme.docx')).toBeInTheDocument();
+    expect(screen.getByText('Saved')).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole('button', { name: 'Show the text' }));
+    const region = await screen.findByRole('region', { name: 'Analysed text' });
+    expect(within(region).getByText('contrato')).toHaveClass('hit-term');
+    expect(calls.find((c) => /check-text$/.test(c.path))!.body).toBe(JSON.stringify({ text: 'El contrato fija el plazo.', lang: 'es' }));
+  });
+
+  it('a report without kept text offers no text view', async () => {
+    savedList = [{ id: 3, title: 'Sin texto', source: '', created: '2026-11-23 09:00:00', has_text: false, words: 1, coverage_tokens_pct: 1, gaps: 0, terms_found: 0 }];
+    render(Job);
+    await screen.findByText('Sin texto');
+    expect(screen.queryByRole('button', { name: 'Show the text' })).toBeNull();
+  });
+
+  it('deleting asks first, removes the report and clears it from the screen', async () => {
+    savedList = [{ id: 3, title: 'Contrato Acme', source: 'acme.docx', created: '2026-11-23 09:00:00', has_text: true, words: 900, coverage_tokens_pct: 61, gaps: 4, terms_found: 1 }];
+    render(Job);
+    await fireEvent.click(await screen.findByRole('button', { name: 'Open report Contrato Acme' }));
+    await screen.findByText('87%');
+    await fireEvent.click(screen.getByRole('button', { name: 'Delete report Contrato Acme' }));
+    expect(calls.some((c) => c.method === 'DELETE')).toBe(false);
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog).toHaveTextContent('with the text kept in it');
+    await fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
+    await waitFor(() => expect(calls.some((c) => c.method === 'DELETE' && c.path === '/api/reports/3')).toBe(true));
+    await waitFor(() => expect(screen.queryByText('Saved reports')).toBeNull());
+    expect(screen.queryByText('87%')).toBeNull();
   });
 });

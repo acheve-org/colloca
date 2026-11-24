@@ -42,7 +42,7 @@ The T-numbers are stable labels used for cross-references; the **row order is th
 | T08 | Align two documents automatically when no TMX exists | High | L | P1 | New |
 | T09 | Keyboard-first layer | High | M | P1 | Research #2 |
 | T10 | Termbase table: sort, filter, inline edit, `admitted` and `superseded` statuses | Medium | M | P2 | Research #4, #5 |
-| T11 | Job report: save and reopen, whole report as one Excel file | Medium | M | P2 | New |
+| T11 | Job report: save and reopen, whole report as one Excel file (**done**; leverage figure waits for T18) | Medium | M | P2 | New |
 | T12 | Input formats: OCR for scanned PDFs, XLIFF, ODT, RTF, XLSX, SRT | Medium | L | P2 | Roadmap 12 |
 | T13 | Advanced query language: regex, lemma + part of speech, distance patterns, accent-insensitive (**done**, `docs/query-language.md`) | Medium | L | P2 | Roadmap 11 |
 | T14 | Project backup and restore, undo for deletes (**done**) | Medium | M | P2 | Audit, New |
@@ -362,6 +362,10 @@ an acceptable alternative cannot be told apart, and the TBX export writes every 
 ### T11. Job report: save and reopen, whole report as one Excel file
 
 **Priority** P2 · **Value** Medium · **Effort** M · **Source** New
+
+**Status: done** (migration v11, `jobreports.py`). Save / list / open / delete under `/api/jobs/{id}/save`, `/api/corpora/{id}/reports`,
+`/api/reports/{id}/…`; one workbook (`format=xlsx`); the analysed text is kept only on `keep_text=true` and goes with the report. Not done: the
+leverage figure (needs T18), and saved reports are not in the portable backup JSON (they are in the SQLite copy of a full backup).
 
 **Why it matters.** The report from the Job tab disappears when the server restarts or the page is reloaded, and each table is a separate CSV.
 A translator wants to attach the analysis to the project and to send it to a project manager.

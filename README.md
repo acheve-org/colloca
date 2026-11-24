@@ -147,9 +147,19 @@ against the current corpus (narrowed by the document filter, if set) and the ter
   *Glossary for this job* exports exactly those entries as TBX, Excel or CSV (`/api/terms/export?ids=...`).
 - **Repeated phrases** (2–4 words, no stopword at the edges) with how often the corpus already uses them.
 
-The text is analysed and then forgotten: nothing is added to any corpus. The analysis runs as a background job
-(`POST /api/corpora/{id}/analyse-job`, report at `GET /api/jobs/{id}/result`; each table also as CSV with
-`?section=gaps|key_terms|known_terms|phrases&format=csv`). The report is kept in memory only, like job statuses.
+The text is analysed and then forgotten: nothing is added to any corpus, and by default nothing is kept at all. The
+analysis runs as a background job (`POST /api/corpora/{id}/analyse-job`, report at `GET /api/jobs/{id}/result`; each
+table also as CSV with `?section=gaps|key_terms|known_terms|phrases&format=csv`).
+
+**Saving a report.** *Save report* keeps the report (not the text) in the database: it shows under *Saved reports*, and
+*Open* brings it back after a restart or a reload. The table flags (in termbase, dropped) are recomputed when you open
+it. *Excel: whole report* (`?format=xlsx`, also per saved report) is one workbook with a Summary sheet and one sheet
+per table (cells are always text, never formulas). Tick *keep the text with a saved report* **before** analysing if you
+also want the analysed text stored with it: *Show the text* then displays it with the termbase hits underlined and
+forbidden translations struck through (the same marking as *Check text*). A client's source text is confidential, so
+this is off by default, the text exists only in memory until you save, and deleting a report deletes its text with it.
+The reports of a corpus are removed when the corpus is deleted for good. Saved reports are part of the SQLite copy in a
+full-database backup but not of the portable `data.json` (re-run the analysis after a restore).
 
 ## Termbase
 
