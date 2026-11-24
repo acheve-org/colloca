@@ -253,10 +253,15 @@ mise run ui:e2e               # builds the UI and runs the Playwright end-to-end
   search, and the rail brings each screen back with its last search; back/forward between two searches on the
   same screen changes the address but does not re-run the search. The Job report stays while you visit other
   screens (an analysis keeps running too) until you change the corpus.
-- **Keyboard**: **Ctrl/Cmd+K** goes to the Concordance and focuses the query; **↑/↓** (and PageUp/PageDown,
-  Home/End) move through the rows of a focused table, **Enter** opens the selected row (edit a document or a term);
-  **Ctrl/Cmd+E** adds the selected concordance hit (or the selected text) as a term; **Esc** closes a dialog;
-  **?** lists the shortcuts (Ctrl/Cmd+K does nothing while a dialog is open).
+- **Keyboard**: **/** or **Ctrl/Cmd+K** goes to the Concordance and focuses the query (filled with the selected text,
+  if there is a short selection); **↑/↓** (and PageUp/PageDown, Home/End) move through the rows of a focused table,
+  **Enter** opens the selected row (edit a document or a term); **Ctrl/Cmd+E** adds the selected concordance hit
+  (or the selected text) as a term; on the Candidates screen **A** accepts and **D** drops (or restores) the
+  selected row; in the term dialog **1** to **9** use the matching example sentence; **Esc** closes a dialog;
+  **?** lists the shortcuts. Plain-key shortcuts are off while you type in a field, and `/`, Ctrl/Cmd+K are off
+  while a dialog is open. In the **?** overlay, select a key to change it (press the new keys, Esc cancels);
+  the choice is kept in the browser (`localStorage`, key `colloca.keys`) and *Restore default keys* undoes it.
+  Buttons show their key in the tooltip.
 - Code: screens in `frontend/src/screens/`, reusable components in `frontend/src/lib/ui/`, API client, stores,
   routing and the interface strings (`i18n.ts`, English only for now) in `frontend/src/lib/`, colour and spacing
   tokens in `frontend/src/lib/styles/`. Tests in `frontend/tests/` (Vitest) and `frontend/e2e/` (Playwright).
