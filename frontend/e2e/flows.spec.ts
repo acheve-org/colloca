@@ -68,3 +68,36 @@ test('segment lookup: a segment with one word changed finds its stored match and
   await expect(first.locator('.extra')).toHaveText('nuevo');
   await expect(first.locator('.missing')).toHaveText('antiguo');
 });
+
+test('related terms: words that keep similar company, learned from the corpus', async ({ page }) => {
+  await newCorpus(page, 'Animales');
+  const animals = ['perro', 'gato', 'caballo', 'conejo'];
+  const things = ['coche', 'camión', 'autobús', 'furgón'];
+  const withAnimals = ['come carne fresca', 'duerme cerca del jardín', 'tiene mucho pelo suave', 'corre por el campo verde'];
+  const withThings = ['tiene cuatro ruedas grandes', 'consume mucha gasolina cara', 'circula por la carretera ancha', 'necesita un motor potente'];
+  // independent choices of subject and context (a small deterministic generator), so words of one kind share contexts
+  let seed = 12345;
+  const next = (n: number) => {
+    seed = (seed * 1103515245 + 12345) % 2147483648;
+    return (seed >> 8) % n;
+  };
+  const sentences: string[] = [];
+  for (let i = 0; i < 500; i++) {
+    sentences.push(
+      next(2) ? `El ${animals[next(4)]} ${withAnimals[next(4)]}.` : `El ${things[next(4)]} ${withThings[next(4)]}.`,
+    );
+  }
+  await page.getByLabel('Pasted text', { exact: true }).fill(sentences.join(' '));
+  await page.getByRole('button', { name: 'Add text' }).click();
+  await expect(page.getByRole('row', { name: /Pasted text|Untitled|El perro/i }).first()).toBeVisible({ timeout: 60_000 });
+
+  await page.getByRole('navigation').getByRole('link', { name: 'Related terms' }).click();
+  await page.getByLabel('Word (lemma)').fill('gato');
+  await page.getByRole('button', { name: 'Find', exact: true }).click();
+  await expect(page.getByText(/Related terms \(statistical\)/)).toBeVisible();
+  const rows = page.locator('[role="row"].body');
+  await expect(rows.first()).toBeVisible({ timeout: 30_000 });
+  const top = (await rows.allTextContents()).slice(0, 6).join(' ');      // the nearest few; the long tail has everything
+  expect(top).toContain('perro');
+  expect(top).not.toMatch(/coche|camión|autobús|furgón/);
+});

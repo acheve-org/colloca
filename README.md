@@ -157,6 +157,29 @@ searches use, and is written back on export (switch it off for plain text). Impo
 several partner corpora choose one (`partner_corpus_id`); the document filter narrows the documents. The structure is checked by the tests
 against the content model of the TMX 1.4b DTD, but the official DTD file has not been used and no CAT tool has opened an export yet.
 
+## Related terms (statistical)
+
+*Explore > Related terms* (`GET /api/corpora/{id}/related?q=<lemma>`) suggests words that keep similar company to a lemma: the words
+used in similar contexts. It is a drafting aid, labelled as statistical on screen: neighbours are often synonyms or sister terms
+(*perro*, *caballo* for *gato*), sometimes antonyms or words from the same field, and a table of numbers is not a thesaurus. **Nothing is
+added to the termbase**; *+ Term* opens the usual dialog if you decide to keep one.
+
+Two sources, chosen with *Source*:
+
+- **This corpus**: word vectors trained here, with no extra software, from your own text (and, with *add the base corpus*, the
+  language's base corpus): the content lemmas (no stop words) that co-occur within five words (nearer ones count more) are turned into
+  positive pointwise mutual information and reduced to at most 100 dimensions with a randomised SVD; neighbours are ranked by cosine
+  similarity and can be filtered by part of speech. Up to the 4,000 most frequent content lemmas (at least 3 occurrences) get a vector;
+  results come from the document filter's scope; training takes seconds and is cached until the corpus changes. It learns *your*
+  usage, so it suits specialist vocabulary, but it needs text: under about 100,000 content words the screen warns that the neighbours
+  are rough, and with only a few thousand words there may be nothing to learn from.
+- **Language model**: the word vectors shipped with the spaCy `md` and `lg` models (general language, not trained on your corpus; no
+  part of speech or frequency is shown). The `sm` models have none: the screen says so.
+
+Not included: a **thesaurus** (for example Open Thesaurus for Spanish or Italian data) as a second source. It would bring in a data file
+with its own licence and it was not checked or tested here. Tested with synthetic corpora and a hand-made vector table; the quality on
+real client corpora, and with the `md`/`lg` model vectors, has not been measured.
+
 ## Segment lookup (match percentages)
 
 *Explore > Segment lookup* (visible when the corpus has aligned documents; `POST /api/corpora/{id}/segment-lookup`) takes a source segment and
