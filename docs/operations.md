@@ -38,12 +38,14 @@ For installs without GitHub access at build time:
 
 ```bash
 # on a machine with internet (--dry-run lists URLs)
-uv run python scripts/fetch_model_wheels.py wheels --size lg
+uv run python scripts/fetch_model_wheels.py wheels --size lg            # es and it
+uv run python scripts/fetch_model_wheels.py wheels --size lg --langs fr de   # other catalog languages
 # on the target
 uv pip install --no-index --find-links wheels es_core_news_lg it_core_news_lg
 ```
 
-- Docker: mount the directory, set `SPACY_WHEELS=/wheels`. The entrypoint installs from it instead of downloading.
+- Docker: mount the directory, set `SPACY_WHEELS=/wheels`. The Languages screen and `download-models` install from it instead of downloading.
+- OCR data offline: put the `<code>.traineddata` files in a directory and set `TESSDATA_FILES` to it.
 
 ## Performance
 
@@ -82,5 +84,5 @@ Timings in ms (synthetic Spanish corpus, one run, Apple-silicon laptop, SQLite, 
 | URL safety | Private/internal addresses blocked (`ALLOW_PRIVATE_URLS=1` overrides). The name is resolved once per request and the connection goes to that address (certificates still verified against the host name), so DNS changes cannot reach internal addresses. |
 | Authentication | None unless `COLLOCA_PASSWORD` is set ([security.md](security.md)); otherwise bind to localhost only. |
 | Models | `sm` models make lemma/POS errors; use `lg` (Docker default). |
-| Language check | Reliable only for Spanish vs Italian ([importing.md](importing.md#checks-on-import)). |
+| Language check | Compares stop words of the languages you set up; needs at least two ([importing.md](importing.md#checks-on-import)). |
 | Jobs | Kept in memory; a restart forgets their status. Imported documents stay. |

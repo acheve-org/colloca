@@ -334,6 +334,6 @@ def test_status_reports_model_per_language(client):
 
 
 def test_status_without_models(client, monkeypatch):
-    monkeypatch.setattr("spacy.util.get_installed_models", lambda: [])
+    monkeypatch.setattr("colloca.nlp.installed_version", lambda package: None)
     m = client.get("/api/status").json()["models"]["es"]
     assert m == {"name": None, "version": None, "size": None, "small": False}

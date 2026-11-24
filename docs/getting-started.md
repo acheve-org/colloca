@@ -4,15 +4,16 @@
 
 ```bash
 docker compose build     # builds the UI too
-docker compose up        # first start downloads the spaCy models into ~/.spacy
-# open http://localhost:8000
+docker compose up
+# open http://localhost:8000, then install the models in the Languages screen
+
 ```
 
 | Topic | Detail |
 |---|---|
-| Models | Not in the image. Stored in `~/.spacy` on the host, mounted at `/models`. |
-| Model size | `SPACY_SIZE` (`sm`, `md`, `lg`) on the `colloca` service. Compose default: `lg` (recommended). |
-| Prefetch models | `docker compose run --rm colloca download-models` |
+| Models | Not in the image. Stored in `~/.spacy` on the host, mounted at `/models` (`COLLOCA_MODELS_DIR`). Installed per language in the Languages screen ([languages.md](languages.md)). |
+| Model size | Default `SPACY_SIZE` (`sm`, `md`, `lg`) on the `colloca` service, compose default `lg` (recommended); each language can use another size. |
+| Prefetch models | `docker compose run --rm colloca download-models [CODE...]` (default `es it`) |
 | Active model | Shown in the status line; a warning appears when a language runs on `sm`. |
 | Data | `colloca-data` volume. See [operations.md](operations.md) for backup and trash. |
 

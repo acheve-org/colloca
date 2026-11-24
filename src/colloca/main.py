@@ -34,9 +34,13 @@ from . import (
     ingest,
     jobanalysis,
     jobreports,
+    langcatalog,
+    languages,
     logsetup,
     metadata,
+    models,
     nlp,
+    ocrdata,
     parallel,
     related,
     segmentlookup,
@@ -312,8 +316,174 @@ class CorpusPatch(BaseModel):
 
 
 @app.get("/api/languages")
-def languages():
-    return nlp.SUPPORTED
+def registered_languages():
+    return dict(nlp.SUPPORTED)
+
+
+# --------------------------------------------------------------------------- language management
+def _default_size() -> str:
+    size = os.environ.get("SPACY_SIZE", "md")
+    return size if size in langcatalog.SIZES else "md"
+
+
+def _entry(code: str) -> langcatalog.Entry:
+    entry = langcatalog.CATALOG.get(code)
+    if entry is None:
+        raise HTTPException(400, f"'{code}' is not in the language catalog")
+    return entry
+
+
+def _check_size(entry: langcatalog.Entry, size: str) -> str:
+    if size not in entry.sizes:
+        raise HTTPException(400, f"Model size must be one of {list(entry.sizes)}")
+    return size
+
+
+def _registered(code: str) -> languages.Language:
+    lang = languages.get(code)
+    if lang is None:
+        raise HTTPException(404, f"Language '{code}' is not set up")
+    return lang
+
+
+def _install_model(code: str, size: str) -> None:
+    try:
+        models.install(code, size)
+    except models.Busy:
+        raise HTTPException(409, "An install for this language is already running") from None
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from None
+
+
+def _install_ocr(code: str) -> None:
+    try:
+        ocrdata.install(code)
+    except models.Busy:
+        raise HTTPException(409, "An install for this language is already running") from None
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from None
+
+
+@app.get("/api/language-catalog")
+def language_catalog():
+    """The languages that can be added (spaCy's official pipelines) and whether each one already is."""
+    have = set(nlp.SUPPORTED)
+    return [{"code": e.code, "name": e.name, "sizes": list(e.sizes), "tesseract": e.tesseract,
+             "added": e.code in have} for e in langcatalog.CATALOG.values()]
+
+
+@app.get("/api/language-settings")
+def language_settings():
+    """Every set-up language with its model, OCR data and corpus count, for the Languages screen."""
+    installed = nlp.status()
+    engine = ocrdata.engine_present()
+    out = []
+    for lang in languages.all_languages():
+        out.append({
+            "code": lang.code, "name": lang.name, "model_size": lang.model_size, "tesseract": lang.tesseract,
+            "corpus_count": languages.corpus_count(lang.code),
+            "model": {**installed.get(lang.code, {"name": None, "version": None, "size": None, "small": False}),
+                      **models.state(lang.code)},
+            "ocr": {"engine": engine, "tesseract": lang.tesseract, "available": ocrdata.available(lang.tesseract),
+                    **ocrdata.state(lang.code)},
+        })
+    return out
+
+
+class LanguageIn(BaseModel):
+    code: str
+    name: str = Field(default="", max_length=80)
+    size: str | None = None
+    install_model: bool = True
+    install_ocr: bool = False
+
+
+class LanguagePatch(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=80)
+    model_size: str | None = None       # send null to follow SPACY_SIZE again
+    tesseract: str | None = Field(default=None, max_length=16)
+
+
+class ModelIn(BaseModel):
+    size: str | None = None
+
+
+@app.post("/api/languages", status_code=201)
+def add_language(body: LanguageIn):
+    entry = _entry(body.code)
+    if body.size is not None:
+        _check_size(entry, body.size)
+    try:
+        languages.add(entry.code, body.name.strip() or entry.name, body.size, entry.tesseract)
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from None
+    if body.install_model:
+        _install_model(entry.code, body.size or _default_size())
+    if body.install_ocr:
+        _install_ocr(entry.code)
+    return {"code": entry.code}
+
+
+@app.patch("/api/languages/{code}")
+def update_language(code: str, body: LanguagePatch):
+    _registered(code)
+    entry = _entry(code)
+    changes: dict = {"name": body.name, "tesseract": body.tesseract}
+    if "model_size" in body.model_fields_set:
+        changes["model_size"] = None if body.model_size is None else _check_size(entry, body.model_size)
+    languages.update(code, **changes)
+    nlp.evict(code)
+    if body.model_size is not None:
+        _install_model(code, body.model_size)
+    return {"ok": True}
+
+
+@app.delete("/api/languages/{code}", status_code=204)
+def remove_language(code: str, uninstall_model: bool = False):
+    _registered(code)
+    try:
+        languages.remove(code)
+    except languages.LanguageInUse as exc:
+        raise HTTPException(409, f"{exc.count} corpora (trashed ones included) use this language; "
+                                 "delete them first") from None
+    if uninstall_model:
+        models.uninstall(code)
+    return Response(status_code=204)
+
+
+@app.post("/api/languages/{code}/model", status_code=202)
+def install_language_model(code: str, body: ModelIn):
+    lang = _registered(code)
+    entry = _entry(code)
+    size = _check_size(entry, body.size) if body.size else (lang.model_size or _default_size())
+    if body.size and body.size != lang.model_size:
+        languages.update(code, model_size=body.size)
+    _install_model(code, size)
+    return {"code": code, "size": size}
+
+
+@app.delete("/api/languages/{code}/model", status_code=204)
+def uninstall_language_model(code: str):
+    _registered(code)
+    models.uninstall(code)
+    return Response(status_code=204)
+
+
+@app.post("/api/languages/{code}/ocr", status_code=202)
+def install_language_ocr(code: str):
+    _registered(code)
+    _install_ocr(code)
+    return {"code": code}
+
+
+@app.delete("/api/languages/{code}/ocr", status_code=204)
+def uninstall_language_ocr(code: str):
+    _registered(code)
+    try:
+        ocrdata.uninstall(code)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from None
+    return Response(status_code=204)
 
 
 @app.get("/api/status")
@@ -587,7 +757,22 @@ async def upload(corpus_id: int, files: list[UploadFile] = File(...), tags: str 
     return results
 
 
-def _partner_corpus(corpus_id: int, partner_corpus_id: int | None, partner_name: str) -> int:
+def _target_lang(src_lang: str, requested: str = "") -> str:
+    """The language of a translation of `src_lang`: the one asked for, or the only other language set up."""
+    if requested:
+        if requested not in nlp.SUPPORTED:
+            raise HTTPException(400, f"Language “{requested}” is not set up; add it in the Languages screen")
+        if requested == src_lang:
+            raise HTTPException(400, "The target language must differ from the corpus language")
+        return requested
+    others = [code for code in nlp.SUPPORTED if code != src_lang]
+    if len(others) == 1:
+        return others[0]
+    raise HTTPException(400, "Choose the target language: " + ("add a second language in the Languages screen"
+                                                               if not others else "several languages are set up"))
+
+
+def _partner_corpus(corpus_id: int, partner_corpus_id: int | None, partner_name: str, partner_lang: str = "") -> int:
     """The corpus that receives the translations: an existing one, or a new one in the same project."""
     with db.session() as conn:
         corpus = _corpus(conn, corpus_id)
@@ -601,20 +786,20 @@ def _partner_corpus(corpus_id: int, partner_corpus_id: int | None, partner_name:
         if partner_name.strip():
             return conn.execute(
                 "INSERT INTO corpora (name,lang,description,project_id) VALUES (?,?,?,?)",
-                (partner_name.strip()[:120], termbase.other_lang(corpus["lang"]),
+                (partner_name.strip()[:120], _target_lang(corpus["lang"], partner_lang),
                  f"Translations of “{corpus['name']}”", corpus["project_id"])).lastrowid
     raise HTTPException(400, "Choose the partner corpus (partner_corpus_id) or name a new one (partner_name)")
 
 
 @app.post("/api/corpora/{corpus_id}/upload-pairs", status_code=202)
 async def upload_pairs(corpus_id: int, files: list[UploadFile] = File(...), partner_corpus_id: int | None = None,
-                       partner_name: str = "", swap: bool = False, tags: str = "", text_type: str = "",
-                       doc_date: str = "", author: str = "", force_language: bool = False):
+                       partner_name: str = "", partner_lang: str = "", swap: bool = False, tags: str = "",
+                       text_type: str = "", doc_date: str = "", author: str = "", force_language: bool = False):
     """Import aligned texts (TMX, XLIFF, or two-column .tsv/.csv/.docx table) into this corpus and a partner corpus of
     the other language: pass `partner_corpus_id`, or `partner_name` to create the partner corpus (same project).
     This corpus receives the first language / column, the partner the second (`swap` flips two-column files)."""
     meta = _meta(tags, text_type, doc_date, author)
-    partner_id = _partner_corpus(corpus_id, partner_corpus_id, partner_name)
+    partner_id = _partner_corpus(corpus_id, partner_corpus_id, partner_name, partner_lang)
     if len(files) > ingest.MAX_UPLOAD_FILES:
         raise HTTPException(413, f"Too many files in one upload (limit {ingest.MAX_UPLOAD_FILES})")
     results = []
@@ -746,6 +931,7 @@ class AlignConfirm(BaseModel):
     title: str = Field(default="", max_length=200)
     partner_corpus_id: int | None = None
     partner_name: str = ""
+    partner_lang: str = ""
     tags: str = ""
     text_type: str = ""
     doc_date: str = ""
@@ -765,14 +951,15 @@ async def _read_upload(f: UploadFile) -> dict:
 
 
 @app.post("/api/corpora/{corpus_id}/align/propose")
-async def align_propose(corpus_id: int, source: UploadFile = File(...), target: UploadFile = File(...)):
+async def align_propose(corpus_id: int, source: UploadFile = File(...), target: UploadFile = File(...),
+                        target_lang: str = ""):
     """Align a document (this corpus's language) with its translation (the other language). Only proposes:
     nothing is stored until `/align/confirm`. Paragraph breaks of the files are used as anchors."""
     with db.session() as conn:
         corpus = _corpus(conn, corpus_id)
     if corpus["is_reference"]:
         raise HTTPException(400, "A base corpus cannot hold aligned texts")
-    src_lang, tgt_lang = corpus["lang"], termbase.other_lang(corpus["lang"])
+    src_lang, tgt_lang = corpus["lang"], _target_lang(corpus["lang"], target_lang)
     a, b = await _read_upload(source), await _read_upload(target)
     links = await run_in_threadpool(align.propose, a["text"], b["text"], src_lang, tgt_lang)
     return {"title": a["title"], "source_lang": src_lang, "target_lang": tgt_lang,
@@ -789,7 +976,7 @@ def align_confirm(corpus_id: int, body: AlignConfirm):
     pairs, rep = align.confirm_pairs([(lk.src, lk.tgt, lk.low) for lk in body.links])
     if not pairs:
         raise HTTPException(400, "No link has a text on both sides, nothing to store")
-    partner_id = _partner_corpus(corpus_id, body.partner_corpus_id, body.partner_name)
+    partner_id = _partner_corpus(corpus_id, body.partner_corpus_id, body.partner_name, body.partner_lang)
     title = body.title.strip() or "Aligned documents"
     work = parallel.import_pairs(corpus_id, partner_id, f"{title}.align", b"", False, meta, body.force_language,
                                  preread=pairs)

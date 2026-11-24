@@ -36,7 +36,7 @@ Accepted by *Sources* upload and *Analyse a job*.
 | Item | Detail |
 |---|---|
 | Trigger | PDF without text layer, extra and Tesseract installed. Otherwise the upload fails with a message naming what to install. |
-| Engine | `pypdfium2` renders pages; `tesseract` reads in the corpus language (`spa`, `ita`). |
+| Engine | `pypdfium2` renders pages; `tesseract` reads in the corpus language, using the OCR code set for it in the Languages screen (`spa`, `ita`, …). |
 | Report | Pages read, mean word confidence. Warning below 70 % (`OCR_MIN_CONFIDENCE`). |
 | Limits | `MAX_OCR_PAGES` 100, `OCR_PAGE_TIMEOUT` 120 s per page. |
 | Off switch | `OCR_ENABLED=0` |
@@ -45,7 +45,7 @@ Accepted by *Sources* upload and *Analyse a job*.
 ```bash
 uv sync --extra ocr                                                  # pypdfium2 + Pillow
 brew install tesseract tesseract-lang                                # macOS
-sudo apt install tesseract-ocr tesseract-ocr-spa tesseract-ocr-ita   # Debian/Ubuntu
+sudo apt install tesseract-ocr                                       # Debian/Ubuntu; language data: Languages screen
 docker build --build-arg WITH_OCR=1 -t colloca .                     # image ~100 MB larger
 ```
 
@@ -53,11 +53,11 @@ Check low-confidence OCR text before trusting lemmas.
 
 ## Checks on import
 
-- **Language check**: each import is compared with the corpus language (Spanish/Italian stopword profile).
+- **Language check**: each import is compared with the corpus language (spaCy stop words of the languages you set up).
   - Clear mismatch: rejected unless *import even if the language looks wrong* is ticked.
   - Unclear or very short: imported with a warning badge.
   - Result stored per document (`lang_check`).
-  - Reliably separates only Spanish from Italian; other languages are "unclear".
+  - Needs at least two languages set up; text in a language you have not set up is "unclear" or may be reported as the closest set-up language.
 - **Near-duplicates**: besides identical texts, a MinHash sketch of 5-word shingles (case, punctuation, whitespace ignored; stored in `documents.fingerprint`).
   - At `NEAR_DUP_THRESHOLD` (default 85 %, range 0.5–1) the import stops. *Sources* shows the older document, shared paragraphs and a few new or changed ones.
   - Choices: *Import anyway*, *Replace* (most similar older document), *Skip*.

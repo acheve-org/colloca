@@ -1,6 +1,6 @@
 export type ScreenId =
   | 'sources'
-  | 'base'
+  | 'languages'
   | 'concordance'
   | 'collocations'
   | 'ngrams'
@@ -18,7 +18,7 @@ export type ScreenId =
   | 'trash';
 
 export const SCREENS: readonly ScreenId[] = [
-  'sources', 'base', 'concordance', 'collocations', 'ngrams', 'frequency',
+  'sources', 'languages', 'concordance', 'collocations', 'ngrams', 'frequency',
   'dispersion', 'keyness', 'cloud', 'equivalents', 'lookup', 'related', 'termbase', 'candidates', 'check', 'job', 'trash',
 ];
 
@@ -27,7 +27,8 @@ function parse(hash: string): { screen: ScreenId; params: Record<string, string>
   const q = m.indexOf('?');
   const name = q < 0 ? m : m.slice(0, q);
   const query = q < 0 ? '' : m.slice(q + 1);
-  const screen = (SCREENS as readonly string[]).includes(name) ? (name as ScreenId) : 'sources';
+  const wanted = name === 'base' ? 'languages' : name; // the old Base corpora address
+  const screen = (SCREENS as readonly string[]).includes(wanted) ? (wanted as ScreenId) : 'sources';
   return { screen, params: Object.fromEntries(new URLSearchParams(query)) };
 }
 

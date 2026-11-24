@@ -228,8 +228,25 @@ UPDATE terms SET concept_id = (
 CREATE INDEX idx_terms_concept ON terms (concept_id);
 """
 
+
+# --- v14: the languages the user works with (replaces the fixed Spanish/Italian pair). `model_size` NULL = follow
+# SPACY_SIZE. `tesseract` is the OCR language code ('' = no OCR). Codes must come from langcatalog; corpora.lang keeps
+# being a plain code so trashed and imported rows never break.
+_V14 = """
+CREATE TABLE languages (
+    code TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    model_size TEXT,
+    tesseract TEXT NOT NULL DEFAULT '',
+    added TEXT DEFAULT CURRENT_TIMESTAMP
+);
+INSERT INTO languages (code, name, model_size, tesseract, added) VALUES
+    ('es', 'Spanish', NULL, 'spa', '2000-01-01 00:00:00'),
+    ('it', 'Italian', NULL, 'ita', '2000-01-01 00:00:01');
+"""
+
 MIGRATIONS: list[tuple[int, str]] = [(1, _V1), (2, _V2), (3, _V3), (4, _V4), (5, _V5), (6, _V6), (7, _V7), (8, _V8),
-                                     (9, _V9), (10, _V10), (11, _V11), (12, _V12), (13, _V13)]
+                                     (9, _V9), (10, _V10), (11, _V11), (12, _V12), (13, _V13), (14, _V14)]
 SCHEMA_VERSION = MIGRATIONS[-1][0]
 
 

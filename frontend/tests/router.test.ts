@@ -17,6 +17,12 @@ describe('router', () => {
     expect(route.params).toEqual({ q: 'a b' });
   });
 
+  it('the old base corpora address leads to the languages screen', async () => {
+    location.hash = '#/base';
+    const { route } = await load();
+    expect(route.screen).toBe('languages');
+  });
+
   it('go() updates the hash and route', async () => {
     const { route, go } = await load();
     go('collocations', { q: 'x y' });

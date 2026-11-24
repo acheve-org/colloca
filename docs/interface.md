@@ -7,7 +7,7 @@ Colour, contrast and screen-reader notes: [accessibility.md](accessibility.md).
 | Area | Content |
 |---|---|
 | Left rail | Corpus switcher: project filter, *…* (manage projects), corpus selector (language, documents, words), *New corpus*, *Delete*. |
-| Rail groups | **Corpus** (Sources, Base corpora) · **Explore** (Concordance, Collocations, N-grams, Frequency list, Dispersion plot, Keyness, Word cloud, Equivalents) · **Terms** (Termbase) · **Job**. |
+| Rail groups | **Corpus** (Sources, Languages) · **Explore** (Concordance, Collocations, N-grams, Frequency list, Dispersion plot, Keyness, Word cloud, Equivalents) · **Terms** (Termbase) · **Job**. |
 | Rail foot | Theme (Auto, Light, Dark), language (EN, ES, IT), *Log out* when a password is set. |
 | Work area | Toolbar (options, document filter) → result strip (counts, *Filter in results*) → sortable table → detail strip with actions for the selected row. |
 | Status line | Top of the window: messages, active model per language. |

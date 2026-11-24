@@ -1,6 +1,6 @@
 # Colloca
 
-Self-hosted tool for translators: build **monolingual reference corpora** (Spanish, Italian) from chosen URLs and client documents, then explore them.
+Self-hosted tool for translators: build **monolingual reference corpora** (in the languages you set up) from chosen URLs and client documents, then explore them.
 
 - Local only: one SQLite file in a Docker volume.
 - No external services, except fetching the URLs you ask for.
@@ -12,15 +12,16 @@ Self-hosted tool for translators: build **monolingual reference corpora** (Spani
 - **Aligned texts**: import TMX/XLIFF or align two documents, search source and target side by side, find equivalents, look up segments by match percentage, export TMX.
 - **Termbase**: build terminology from any result, concepts with synonyms, TBX/Excel/CSV import and export, term checks in concordances.
 - **Job analysis**: coverage, gaps, key terms and known terms of a text you are about to translate, with a leverage estimate.
-- **Base corpora** per language as a general-language reference.
+- **Languages** you choose: add, edit or remove them, with a spaCy model, OCR data and a base corpus for each.
 - Interface in English, Spanish and Italian; optional password and encrypted backups.
 
 ## Quick start
 
 ```bash
 docker compose build            # builds the UI too
-docker compose up               # first start downloads the spaCy models into `~/.spacy`
-# open http://localhost:8000
+docker compose up
+# open http://localhost:8000, then install the models in the Languages screen
+# (Spanish and Italian are set up from the start; models are downloaded into `~/.spacy` when you ask)
 ```
 
 Docker uses the `lg` spaCy models by default; data lives in the `colloca-data` volume.
@@ -36,6 +37,7 @@ Configuration: [Getting started](docs/getting-started.md). Backups: [Operations]
 | [Aligned texts](docs/aligned-texts.md) | Translation memories (TMX, XLIFF), aligning documents, equivalents, segment lookup, TMX export |
 | [Termbase](docs/termbase.md) | Adding, reviewing, importing and exporting terminology (TBX, Excel, CSV) |
 | [Job analysis](docs/job-analysis.md) | Analysing a text before translating it; saved reports |
+| [Languages](docs/languages.md) | Setting up languages, their models, OCR data and base corpora |
 | [Base corpora](docs/base-corpora.md) | General-language reference corpora and how to build a reliable one |
 | [The interface](docs/interface.md) | Layout, keyboard shortcuts, interface language |
 | [Accessibility](docs/accessibility.md) | Colour contrast (checked by the test suite), non-colour cues, keyboard and screen readers |

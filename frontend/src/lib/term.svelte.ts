@@ -74,11 +74,9 @@ const blank = (): TermDraft => ({
   tgt_note: '',
 });
 
-let languages: Languages | null = null;
-
+// Not cached: the list changes when the user adds or removes a language.
 async function loadLanguages(): Promise<Languages> {
-  languages ??= await get<Languages>('/api/languages');
-  return languages;
+  return get<Languages>('/api/languages');
 }
 
 export const termStore = $state<{
