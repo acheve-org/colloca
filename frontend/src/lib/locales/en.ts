@@ -832,4 +832,11 @@ export const en: Messages = {
   'src.quality.fair': 'Text quality: fair',
   'src.quality.poor': 'Text quality: poor',
   'src.quality.score': '{n} / 100',
+  'auth.logout': 'Log out',
+  'bk.passphrase': 'Passphrase to encrypt the export',
+  'bk.passphrasePlaceholder': 'passphrase (optional)',
+  'bk.passphraseHint': 'With a passphrase the file is encrypted (AES-256); without it nobody can recover the backup, so keep it safe. Empty = a normal zip.',
+  'bk.passShort': 'The passphrase needs at least 8 characters.',
+  'bk.encrypted': 'Encrypted backup saved: {name}',
+  'bk.importPassphrase': 'Passphrase (encrypted files)',
 };

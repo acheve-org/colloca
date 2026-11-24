@@ -45,12 +45,18 @@
 </script>
 
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { t, LANGS, LANG_NAMES, locale, setLang } from '../i18n';
   import { go, route, screenHref } from '../router.svelte';
   import { setMode, theme, type ThemeMode } from '../theme.svelte';
+  import { loadSession, logout, session } from '../session.svelte';
   import CorpusSwitcher from './CorpusSwitcher.svelte';
 
   const modes: ThemeMode[] = ['auto', 'light', 'dark'];
+
+  onMount(() => {
+    void loadSession();
+  });
 
   // Leave a screen whose rail item is hidden, but only once the corpus load has settled
   // (a deep link to #/equivalents must survive the first load).
@@ -98,6 +104,11 @@
       >
     {/each}
   </div>
+  {#if session.required}
+    <div class="foot">
+      <button type="button" onclick={logout}>{t('auth.logout')}</button>
+    </div>
+  {/if}
 </aside>
 
 <style>

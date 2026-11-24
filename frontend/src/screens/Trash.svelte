@@ -67,6 +67,8 @@
   let annotate = $state(true);
   let report = $state.raw<ImportReport | null>(null);
   let exportProject = $state('');
+  let exportPass = $state('');
+  let importPass = $state('');
 
   async function load(): Promise<void> {
     try {
@@ -136,6 +138,7 @@
     form.append('dry_run', String(dry));
     form.append('annotate', String(annotate));
     if (projectId) form.append('project_id', projectId);
+    if (importPass) form.append('passphrase', importPass);
     busy = true;
     try {
       report = await upload<ImportReport>('/api/import', form);
@@ -155,6 +158,37 @@
     window.location.href = href;
   };
 
+  /** An encrypted export: a POST (the passphrase never travels in a URL), saved from the response. */
+  async function downloadEncrypted(projectId?: string): Promise<void> {
+    if (exportPass.length < 8) {
+      messages.say(t('bk.passShort'), 'err');
+      return;
+    }
+    busy = true;
+    try {
+      const res = await fetch('/api/backup/encrypted', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ passphrase: exportPass, ...(projectId ? { project_id: Number(projectId) } : {}) }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail ?? res.statusText);
+      const name = /filename="?([^";]+)"?/.exec(res.headers.get('content-disposition') ?? '')?.[1] ?? 'colloca-backup.zip.enc';
+      const url = URL.createObjectURL(await res.blob());
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = name;
+      a.click();
+      URL.revokeObjectURL(url);
+      messages.say(t('bk.encrypted', { name }), 'ok');
+    } catch (err) {
+      messages.say(errMsg(err), 'err');
+    } finally {
+      busy = false;
+    }
+  }
+  const backupAll = () => (exportPass ? downloadEncrypted() : download('/api/backup'));
+  const backupProject = () => (exportPass ? downloadEncrypted(exportProject) : download(`/api/projects/${exportProject}/export`));
+
   onMount(() => {
     load();
   });
@@ -165,23 +199,33 @@
     <h3 id="{uid}-bk">{t('bk.title')}</h3>
     <p class="muted">{t('bk.intro')}</p>
     <div class="row">
-      <Button variant="primary" onclick={() => download('/api/backup')}>{t('bk.database')}</Button>
+      <Button variant="primary" disabled={busy} onclick={backupAll}>{t('bk.database')}</Button>
       <select bind:value={exportProject} aria-label={t('bk.project')}>
         <option value="">{t('bk.chooseProject')}</option>
         {#each projectStore.list as p (p.id)}
           <option value={String(p.id)}>{p.name}</option>
         {/each}
       </select>
-      <Button disabled={!exportProject} onclick={() => download(`/api/projects/${exportProject}/export`)}>
+      <Button disabled={!exportProject || busy} onclick={backupProject}>
         {t('bk.exportProject')}
       </Button>
+    </div>
+    <div class="row">
+      <input
+        type="password"
+        bind:value={exportPass}
+        autocomplete="new-password"
+        aria-label={t('bk.passphrase')}
+        placeholder={t('bk.passphrasePlaceholder')}
+      />
+      <span class="muted">{t('bk.passphraseHint')}</span>
     </div>
 
     <h4>{t('bk.importTitle')}</h4>
     <div class="row">
       <input
         type="file"
-        accept=".zip,.json"
+        accept=".zip,.json,.enc"
         aria-label={t('bk.file')}
         onchange={(e) => {
           file = e.currentTarget.files?.[0] ?? null;
@@ -195,6 +239,13 @@
         {/each}
       </select>
       <Toggle bind:checked={annotate} label={t('bk.annotate')} />
+      <input
+        type="password"
+        bind:value={importPass}
+        autocomplete="off"
+        aria-label={t('bk.importPassphrase')}
+        placeholder={t('bk.importPassphrase')}
+      />
     </div>
     <div class="row">
       <Button disabled={!file || busy} onclick={() => runImport(true)}>{t('bk.check')}</Button>

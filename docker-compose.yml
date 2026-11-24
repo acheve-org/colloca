@@ -11,6 +11,7 @@ services:
       SPACY_SIZE: lg            # sm | md | lg
       # ALLOW_PRIVATE_URLS: "1" # allow fetching intranet URLs (off by default)
       MAX_DOWNLOAD_MB: "15"
+      # COLLOCA_PASSWORD: "change me"  # ask for a password (see the README: Password and encryption)
     restart: unless-stopped
 
 volumes:
