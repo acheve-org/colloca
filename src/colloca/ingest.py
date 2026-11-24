@@ -68,7 +68,7 @@ def _check_public(url: str) -> str | None:
         if _behind_proxy():                 # the proxy resolves names, not this machine
             return None
         raise IngestError(f"Cannot resolve host: {host}") from exc
-    addresses = [info[4][0] for info in infos]
+    addresses = [str(info[4][0]) for info in infos]
     if not addresses or any(not ipaddress.ip_address(a).is_global for a in addresses):
         raise blocked
     return None if _behind_proxy() else addresses[0]
