@@ -36,6 +36,7 @@
   import { projectStore, reloadProjects } from '../lib/projects.svelte';
   import type { Doc, Facets, Job, NearDupMatch, NearDupReport } from '../lib/types';
   import AlignDocuments from './AlignDocuments.svelte';
+  import TmxExport from './TmxExport.svelte';
   import Badge from '../lib/ui/Badge.svelte';
   import Button from '../lib/ui/Button.svelte';
   import DataTable from '../lib/ui/DataTable.svelte';
@@ -739,6 +740,7 @@
         </section>
 
         <AlignDocuments />
+        <TmxExport />
 
         <section class="card" aria-labelledby="{uid}-paste">
           <h3 id="{uid}-paste">{t('src.paste.title')}</h3>

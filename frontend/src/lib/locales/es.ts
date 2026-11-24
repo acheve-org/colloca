@@ -818,4 +818,9 @@ export const es: Messages = {
   'job.confirmBody': '¿Eliminar para siempre el informe «{title}», con el texto que contenga? No se puede deshacer.',
   'job.showText': 'Mostrar el texto',
   'job.textTitle': 'Texto analizado',
+  'tmx.title': 'Exportar textos alineados (TMX)',
+  'tmx.partner': 'Traducciones de',
+  'tmx.markup': 'conservar el marcado en línea',
+  'tmx.hint': 'Una memoria de traducción TMX 1.4b de este corpus y sus traducciones alineadas; los códigos de formato conservados de los TMX importados se escriben de nuevo.',
+  'tmx.go': 'Descargar TMX',
 };

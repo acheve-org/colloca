@@ -38,6 +38,7 @@ from . import (
     termexport,
     termhits,
     termimport,
+    tmxexport,
     trash,
 )
 
@@ -516,6 +517,45 @@ async def upload_pairs(corpus_id: int, files: list[UploadFile] = File(...), part
             corpus_id, partner_id, name, data, swap, meta, force_language))
         results.append({"file": name, "ok": True, "job_id": job.id, "partner_corpus_id": partner_id})
     return results
+
+
+@app.get("/api/corpora/{corpus_id}/aligned-partners")
+def aligned_partners(corpus_id: int, sq: ScopeQuery = Depends()):
+    """The corpora that hold translations of this corpus's aligned documents (what a TMX export can pair it with)."""
+    with db.session() as conn:
+        _corpus(conn, corpus_id)
+        return tmxexport.partners(conn, corpus_id, sq.scope(corpus_id))
+
+
+@app.get("/api/corpora/{corpus_id}/export-tmx")
+def export_tmx(corpus_id: int, partner_corpus_id: int | None = None, markup: bool = True,
+               sq: ScopeQuery = Depends()):
+    """Download this corpus and its aligned partner as a TMX 1.4b translation memory (this corpus's language is the
+    source language). `partner_corpus_id` is needed when the aligned documents have several partner corpora;
+    `markup=false` leaves out the inline markup kept from imported TMX files; the document filter narrows the
+    documents. Each unit carries its document's title, source, type, date, author and tags as properties."""
+    with db.session() as conn:
+        corpus = _corpus(conn, corpus_id)
+        scope = sq.scope(corpus_id)
+        found = tmxexport.partners(conn, corpus_id, scope)
+        if not found:
+            raise HTTPException(409, "This corpus has no aligned documents (in the selected documents) to export")
+        if partner_corpus_id is None:
+            if len(found) > 1:
+                raise HTTPException(400, "Several corpora hold translations; choose one with partner_corpus_id: "
+                                    + ", ".join(f"{p['id']} ({p['name']})" for p in found))
+            partner_corpus_id = found[0]["id"]
+        elif partner_corpus_id not in {p["id"] for p in found}:
+            raise HTTPException(400, "That corpus holds no translations of these documents")
+        project = ""
+        if corpus["project_id"]:
+            row = conn.execute("SELECT name FROM projects WHERE id=?", (corpus["project_id"],)).fetchone()
+            project = row["name"] if row else ""
+        body, stats = tmxexport.to_tmx(conn, corpus_id, partner_corpus_id, scope, markup, project)
+    name = "".join(ch if ch.isalnum() or ch in "-_" else "-" for ch in corpus["name"]).strip("-") or "memory"
+    return Response(body, media_type="application/x-tmx+xml; charset=utf-8", headers={
+        "Content-Disposition": f'attachment; filename="{name}.tmx"',
+        "X-Colloca-Units": str(stats["units"]), "X-Colloca-Skipped-Documents": str(stats["skipped_documents"])})
 
 
 class AlignLink(BaseModel):
