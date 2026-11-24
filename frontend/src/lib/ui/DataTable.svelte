@@ -1,5 +1,9 @@
 <script module lang="ts">
-  const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+  const collators: Record<string, Intl.Collator> = {};
+  /** Sort text by the rules of the interface language (accents and case ignored, numbers by value). */
+  function collatorFor(code: string): Intl.Collator {
+    return (collators[code] ??= new Intl.Collator(code, { numeric: true, sensitivity: 'base' }));
+  }
 
   let warnedDuplicates = false;
 
@@ -10,7 +14,7 @@
 
 <script lang="ts" generics="Row">
   import { tick, untrack, type Snippet } from 'svelte';
-  import { t } from '../i18n';
+  import { t, locale } from '../i18n';
   import { cellValue, type Column, type SortState } from './DataTable.types';
 
   interface Props {
@@ -65,6 +69,7 @@
         const get = col.sortValue ?? ((r: Row) => cellValue(r, col));
         const keys = new Map<number, string | number>(idx.map((i) => [i, get(rows[i])]));
         const sign = sort.dir === 'asc' ? 1 : -1;
+        const collator = collatorFor(locale.code);
         idx.sort((a, b) => {
           const x = keys.get(a)!;
           const y = keys.get(b)!;

@@ -36,10 +36,10 @@
     run: () => run(),
   });
 
-  const sourceOptions = [
+  const sourceOptions = $derived([
     { value: 'frequency', label: t('ex.cloud.src.frequency') },
     { value: 'keyness', label: t('ex.cloud.src.keyness') },
-  ];
+  ]);
 
   function run(): void {
     const n = toInt(count, 80, 10, 200);

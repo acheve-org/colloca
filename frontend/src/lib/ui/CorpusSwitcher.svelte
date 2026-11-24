@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { del, get, post } from '../api';
   import { corpusStore } from '../corpus.svelte';
-  import { t } from '../i18n';
+  import { t, fmt } from '../i18n';
   import { messages } from '../messages.svelte';
   import { inProject, projectStore, reloadProjects } from '../projects.svelte';
   import type { Corpus, Languages } from '../types';
@@ -83,7 +83,7 @@
       ? t('corpus.meta', {
           lang: languages[current.lang] ?? current.lang,
           docs: current.docs,
-          words: current.tokens.toLocaleString(),
+          words: fmt(current.tokens),
         })
       : '',
   );

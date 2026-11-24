@@ -12,7 +12,7 @@
   import { onMount } from 'svelte';
   import { del, get, post, upload } from '../lib/api';
   import { corpusStore } from '../lib/corpus.svelte';
-  import { t } from '../lib/i18n';
+  import { t, fmt } from '../lib/i18n';
   import { JOBS_DONE, jobLogs, trackJobs, untrackJobs } from '../lib/jobs.svelte';
   import { messages } from '../lib/messages.svelte';
   import type { Corpus, Job, Languages } from '../lib/types';
@@ -136,7 +136,7 @@
         cls: 'ok',
         text: t('base.jobDone', {
           docs: Number(j.result?.documents ?? 0),
-          words: Number(j.result?.tokens ?? 0).toLocaleString(),
+          words: fmt(Number(j.result?.tokens ?? 0)),
         }),
       };
     }
@@ -178,7 +178,7 @@
             {@const r = c.ref}
             <p>
               <b>{r.name}</b><br />
-              <span class="muted">{t('base.stats', { docs: r.docs.toLocaleString(), words: r.tokens.toLocaleString() })}</span>
+              <span class="muted">{t('base.stats', { docs: fmt(r.docs), words: fmt(r.tokens) })}</span>
             </p>
             <input
               bind:this={inputs[r.id]}

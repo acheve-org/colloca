@@ -16,11 +16,13 @@
   const uid = $props.id();
   const d = $derived(termStore.draft);
 
-  const statusOptions = ['candidate', 'approved', 'admitted', 'superseded', 'forbidden'].map((s) => ({
-    value: s,
-    label: t(`term.status.${s}`),
-  }));
-  const posOptions = [{ value: '', label: t('term.pos.none') }, ...TERM_POS.map((p) => ({ value: p, label: p }))];
+  const statusOptions = $derived(
+    ['candidate', 'approved', 'admitted', 'superseded', 'forbidden'].map((s) => ({
+      value: s,
+      label: t(`term.status.${s}`),
+    })),
+  );
+  const posOptions = $derived([{ value: '', label: t('term.pos.none') }, ...TERM_POS.map((p) => ({ value: p, label: p }))]);
 
   const langLine = $derived.by(() => {
     const c = termStore.ctx;
@@ -41,7 +43,9 @@
       registerShortcut({
         id: `term-example-${i + 1}`,
         keys: String(i + 1),
-        label: t('shortcuts.example'),
+        get label() {
+          return t('shortcuts.example');
+        },
         when: () => termStore.open && i < termStore.examples.length,
         run: () => useExample(termStore.examples[i]),
       }),

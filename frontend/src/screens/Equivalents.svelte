@@ -39,10 +39,10 @@
     run: () => run(),
   });
 
-  const unitOptions = [
+  const unitOptions = $derived([
     { value: 'lemma', label: t('ex.unit.lemma') },
     { value: 'form', label: t('ex.unit.exact') },
-  ];
+  ]);
   const csvHref = $derived(result ? csvUrl(result.path, result.params) : '');
   const columns = $derived.by<Column<EquivalentRow>[]>(() => [
     { key: 'item', label: t('ex.col.equivalent'), width: 'minmax(12rem, 2fr)' },

@@ -90,7 +90,9 @@
       registerShortcut({
         id: 'cand-accept',
         keys: 'a',
-        label: t('shortcuts.accept'),
+        get label() {
+          return t('shortcuts.accept');
+        },
         scope: 'table',
         when: () => selected !== null && !document.querySelector('dialog[open]'),
         run: () => selected && void doAccept(selected),
@@ -98,7 +100,9 @@
       registerShortcut({
         id: 'cand-drop',
         keys: 'd',
-        label: t('shortcuts.drop'),
+        get label() {
+          return t('shortcuts.drop');
+        },
         scope: 'table',
         when: () => selected !== null && !document.querySelector('dialog[open]'),
         run: () => {

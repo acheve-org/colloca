@@ -296,7 +296,9 @@
     const off = registerShortcut({
       id: 'cc-add-term',
       keys: 'Mod+E',
-      label: t('shortcuts.addTerm'),
+      get label() {
+          return t('shortcuts.addTerm');
+        },
       when: () => selected !== null && !termStore.open,
       run: addTermFromHit,
     });
