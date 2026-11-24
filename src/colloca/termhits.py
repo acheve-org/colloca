@@ -96,9 +96,9 @@ def find(conn, project_id: int | None, lang: str, toks: list[dict]) -> list[dict
     for n in range(min(longest, len(toks)), 0, -1):
         for i in range(len(toks) - n + 1):
             by_form = index.get(tuple(norms[i:i + n]), ())
-            infos = {e["id"]: e for e in (*by_form, *index.get(tuple(lemmas[i:i + n]), ()))}
-            if infos:
-                found.append((i, i + n - 1, list(infos.values())))
+            by_id = {e["id"]: e for e in (*by_form, *index.get(tuple(lemmas[i:i + n]), ()))}
+            if by_id:
+                found.append((i, i + n - 1, list(by_id.values())))
     taken: set[int] = set()
     out: list[dict] = []
     for a, b, infos in found:                     # longest first (the loop above runs from long to short)
@@ -163,7 +163,7 @@ def mark_kwic(conn, corpus_id: int, lines: list[dict], width: int) -> None:
 
 def check(conn, project_id: int | None, lang: str, text: str) -> dict:
     """Mark termbase hits and forbidden translations in a pasted text of language `lang`, line by line."""
-    lines = []
+    lines: list[dict] = []
     for raw in text.splitlines():
         if not raw.strip():
             continue

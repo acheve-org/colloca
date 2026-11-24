@@ -58,7 +58,8 @@ def _vocabulary(lang: str, n_lemmas: int, rng: random.Random):
     patterns = _PATTERNS[lang]
     kinds = list(patterns)
     kind_weights = [patterns[k][0] for k in kinds]
-    entries, seen = [], set()
+    entries: list = []
+    seen: set = set()
     for form, lemma, upos in _FUNCTION[lang]:
         entries.append((form, lemma, upos, 1))
     n_function = len(entries)

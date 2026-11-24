@@ -49,7 +49,7 @@ class QueryError(ValueError):
 def strip_accents(s: str) -> str:
     """`café` -> `cafe`. The tilde of ñ is kept (año and ano are different words); everything else
     combining (acute, grave, circumflex, diaeresis, cedilla...) is dropped."""
-    out = []
+    out: list[str] = []
     for ch in unicodedata.normalize("NFD", s):
         if unicodedata.category(ch) == "Mn" and not (ch == "̃" and out and out[-1] in "nN"):
             continue
@@ -308,8 +308,8 @@ def parse(q: str, unit_attr: str = "lemma", case_sensitive: bool = False, accent
             m = _GAP_RE.match(q, i)
             if not m:
                 raise QueryError("After + write the number of words allowed in between, as in +3 or +1-3", at)
-            lo, hi = (int(m.group(1)), None) if m.group(2) is None else (int(m.group(1)), int(m.group(2)))
-            lo, hi = (0, lo) if hi is None else (lo, hi)
+            first = int(m.group(1))
+            lo, hi = (0, first) if m.group(2) is None else (first, int(m.group(2)))
             if hi < lo:
                 raise QueryError("The maximum of a gap cannot be smaller than the minimum", at)
             if hi > MAX_GAP or hi == 0:
@@ -504,13 +504,14 @@ def _regex_sql(alias: str, atom: Atom, col: str, cs: bool, query: Query) -> tupl
     alts = _literal_alternatives(atom.value)
     if alts:
         sql = f"{col} IN ({','.join('?' * len(alts))})"
-        params = [_fold(a, query) for a in alts]
+        params: list = [_fold(a, query) for a in alts]
         if cs:
             sql += f" AND {alias}.form IN ({','.join('?' * len(alts))})"
             params += alts
         return sql, params
     flags = 0 if cs else re.I
-    sql, params = f"colloca_re({alias + '.form' if cs else col}, ?, ?)", [pattern, flags]
+    sql = f"colloca_re({alias + '.form' if cs else col}, ?, ?)"
+    params = [pattern, flags]
     prefix = _regex_prefix(atom.value)
     if len(prefix) >= MIN_LITERALS and not atom.neg:
         sql = f"{col} GLOB ? AND {sql}"

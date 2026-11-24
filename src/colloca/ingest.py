@@ -105,7 +105,7 @@ def extract_pdf(data: bytes) -> str:
     if not any(p.strip() for p in pages):
         raise IngestError("PDF has no text layer (scanned PDFs need OCR, not supported yet)")
     # drop running headers/footers: short lines repeated on many pages
-    line_pages = Counter()
+    line_pages: Counter = Counter()
     for p in pages:
         for ln in {ln.strip() for ln in p.splitlines() if ln.strip()}:
             line_pages[ln] += 1

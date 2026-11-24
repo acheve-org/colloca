@@ -17,6 +17,14 @@ download_models() {
     fi
   done
   [ -z "$urls" ] && return 0
+  # SPACY_WHEELS: a directory of model wheels (scripts/fetch_model_wheels.py) installed without any download.
+  if [ -n "${SPACY_WHEELS:-}" ] && [ -d "$SPACY_WHEELS" ]; then
+    names=""
+    for lang in es it; do names="$names ${lang}_core_news_${size}"; done
+    # shellcheck disable=SC2086
+    uv pip install --no-cache --no-deps --no-index --find-links "$SPACY_WHEELS" --target /models $names
+    return
+  fi
   # shellcheck disable=SC2086
   uv pip install --no-cache --no-deps --target /models $urls
 }

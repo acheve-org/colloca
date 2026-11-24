@@ -2,8 +2,10 @@
 import csv
 import io
 import json
+import logging
 import os
 import sqlite3
+import time
 from contextlib import asynccontextmanager
 from dataclasses import asdict
 
@@ -21,6 +23,7 @@ from . import (
     importer,
     ingest,
     jobanalysis,
+    logsetup,
     metadata,
     nlp,
     parallel,
@@ -33,11 +36,32 @@ from . import (
 
 @asynccontextmanager
 async def lifespan(_app):
+    logsetup.configure()
     db.init_db()
     yield
 
 
 app = FastAPI(title="Colloca", version="0.1.0", lifespan=lifespan)
+
+
+@app.middleware("http")
+async def log_requests(request, call_next):
+    """One warning line for every request slower than COLLOCA_SLOW_MS or ending in a server error."""
+    t0 = time.perf_counter()
+    try:
+        response = await call_next(request)
+    except Exception:
+        logging.getLogger("colloca.http").exception("%s %s failed", request.method, request.url.path)
+        raise
+    ms = (time.perf_counter() - t0) * 1000
+    if response.status_code >= 500:
+        logging.getLogger("colloca.http").error("%s %s -> %s (%.0f ms)", request.method, request.url.path,
+                                                response.status_code, ms)
+    elif logsetup.slow_ms() and ms >= logsetup.slow_ms():
+        logging.getLogger("colloca.http").warning("Slow: %s %s took %.0f ms", request.method, request.url.path, ms)
+    return response
+
+
 # COLLOCA_STATIC_DIR serves a UI build from elsewhere (end-to-end tests); the default is the packaged one.
 STATIC = os.environ.get("COLLOCA_STATIC_DIR") or os.path.join(os.path.dirname(__file__), "static")
 
@@ -603,9 +627,9 @@ def update_document(doc_id: int, body: DocPatch):
         if "title" in sent and body.title:
             conn.execute("UPDATE documents SET title=? WHERE id=?", (body.title.strip(), doc_id))
         meta = _meta(body.tags if "tags" in sent else None,
-                     body.text_type if "text_type" in sent else row["text_type"],
-                     body.doc_date if "doc_date" in sent else row["doc_date"],
-                     body.author if "author" in sent else row["author"])
+                     (body.text_type if "text_type" in sent else row["text_type"]) or "",
+                     (body.doc_date if "doc_date" in sent else row["doc_date"]) or "",
+                     (body.author if "author" in sent else row["author"]) or "")
         conn.execute("UPDATE documents SET text_type=?, doc_date=?, author=? WHERE id=?",
                      (meta["text_type"], meta["doc_date"], meta["author"], doc_id))
         if "tags" in sent:

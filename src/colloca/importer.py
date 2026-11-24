@@ -10,6 +10,7 @@ import logging
 import math
 import re
 import threading
+import time
 from collections.abc import Callable, Iterable, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field
@@ -206,19 +207,25 @@ def submit(corpus_id: int, kind: str, label: str, fn: Callable[[Job], dict]) -> 
         finished = [j for j in _jobs.values() if j.status in ("done", "error")]
         for old in finished[:-KEEP_FINISHED]:
             _jobs.pop(old.id, None)
+    log.info("Job %s queued: %s %s (corpus %s)", job.id, kind, label, corpus_id)
     _executor.submit(_run, job, fn)
     return job
 
 
 def _run(job: Job, fn: Callable[[Job], dict]) -> None:
     job.status = "running"
+    log.info("Job %s started: %s %s (corpus %s)", job.id, job.kind, job.label, job.corpus_id)
+    t0 = time.perf_counter()
     try:
         job.result = fn(job) or {}
         job.progress, job.status = 1.0, "done"
+        log.info("Job %s done in %.1f s", job.id, time.perf_counter() - t0)
     except ImportRejected as exc:
         job.status, job.error, job.code = "error", exc.message, exc.code
+        log.warning("Job %s rejected (%s): %s", job.id, exc.code, exc.message)
     except ingest.IngestError as exc:
         job.status, job.error, job.code = "error", str(exc), "unreadable"
+        log.warning("Job %s unreadable: %s", job.id, exc)
     except Exception as exc:  # never let one bad file kill the worker
         log.exception("Job %s (%s) failed", job.id, job.label)
         job.status, job.error, job.code = "error", f"Unexpected error: {exc}", "internal"
@@ -283,7 +290,7 @@ def reannotate_corpus(corpus_id: int, only_stale: bool) -> Callable[[Job], dict]
             try:
                 with db.session() as conn:
                     updated += reannotate_document(
-                        conn, doc_id, lambda f, i=i: job.set_progress((i + f) / len(docs)))
+                        conn, doc_id, lambda f, i=i: job.set_progress((i + f) / len(docs)))  # type: ignore[misc]
             except Exception as exc:  # keep going; report at the end
                 log.exception("Re-annotation of document %s failed", doc_id)
                 failed.append(f"{title}: {exc}")
