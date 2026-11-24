@@ -112,8 +112,7 @@ def uninstall(code: str) -> None:
             for d in dest.glob(f"{pkg}-*.dist-info"):
                 shutil.rmtree(d, ignore_errors=True)
     else:
-        from spacy.util import get_installed_models
-        have = [p for p in pkgs if p in set(get_installed_models())]
+        have = [p for p in pkgs if nlp.installed_version(p)]
         if have:
             uv = shutil.which("uv")
             cmd = ([uv, "pip", "uninstall", "--python", sys.executable] if uv

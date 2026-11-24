@@ -127,3 +127,19 @@ def test_load_model_prefers_registry_size(client, monkeypatch):
     finally:
         languages.update("es", model_size=None)
     assert tried[0] == "es_core_news_lg"
+
+
+def test_status_sees_a_model_installed_while_the_app_runs(client, tmp_path, monkeypatch):
+    # spaCy's own installed-model list is cached, so a fresh install would show as "not installed" until a restart
+    import importlib
+    info = tmp_path / "fr_core_news_sm-3.8.0.dist-info"
+    info.mkdir()
+    (info / "METADATA").write_text("Metadata-Version: 2.1\nName: fr_core_news_sm\nVersion: 3.8.0\n")
+    languages.add("fr", "French", "sm", "fra")
+    try:
+        assert nlp.status()["fr"]["name"] is None
+        monkeypatch.syspath_prepend(str(tmp_path))
+        importlib.invalidate_caches()
+        assert nlp.status()["fr"] == {"name": "fr_core_news_sm", "version": "3.8.0", "size": "sm", "small": True}
+    finally:
+        languages.remove("fr")

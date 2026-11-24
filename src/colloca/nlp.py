@@ -1,4 +1,5 @@
 """NLP annotation with spaCy (tokenisation, sentences, lemmas, POS)."""
+import importlib.metadata
 import os
 import threading
 from collections.abc import Callable, Iterator
@@ -17,6 +18,15 @@ def size_order(lang: str) -> list[str]:
     own = languages.get(lang)
     return list(dict.fromkeys([s for s in (own.model_size if own else None, os.environ.get("SPACY_SIZE", "md"),
                                            "md", "sm", "lg") if s]))
+
+
+def installed_version(package: str) -> str | None:
+    """Version of an installed model package, read from the live environment (spaCy's own list is cached, so it
+    misses a model installed while the app runs)."""
+    try:
+        return importlib.metadata.version(package)
+    except importlib.metadata.PackageNotFoundError:
+        return None
 
 
 def evict(lang: str) -> None:
@@ -49,15 +59,14 @@ def status() -> dict[str, dict]:
 
     Per language: package name, version, size (sm|md|lg) and `small`; all None when no model is installed.
     """
-    installed = set(spacy.util.get_installed_models())
     out: dict[str, dict] = {}
     for lang in SUPPORTED:
         info: dict = {"name": None, "version": None, "size": None, "small": False}
         for size in size_order(lang):
             name = langcatalog.package(lang, size) if lang in langcatalog.CATALOG else f"{lang}_core_news_{size}"
-            if name in installed:
-                info = {"name": name, "version": spacy.util.get_package_version(name), "size": size,
-                        "small": size == "sm"}
+            version = installed_version(name)
+            if version:
+                info = {"name": name, "version": version, "size": size, "small": size == "sm"}
                 break
         out[lang] = info
     return out
