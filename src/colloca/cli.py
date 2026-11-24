@@ -19,6 +19,7 @@ def _count_lines(path: Path) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    db.init_db()            # the languages offered below are the registered ones
     ap = argparse.ArgumentParser(prog="colloca-import-reference", description=__doc__.split("\n\n")[0])
     ap.add_argument("--lang", required=True, choices=sorted(nlp.SUPPORTED))
     ap.add_argument("files", nargs="+", type=Path, help="sentence files: one sentence per line, or Leipzig "
@@ -28,7 +29,6 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--force-language", action="store_true", help="import even if the language looks wrong")
     args = ap.parse_args(argv)
 
-    db.init_db()
     with db.session() as conn:
         corpus = analysis.reference_corpus(conn, args.lang)
         if corpus:

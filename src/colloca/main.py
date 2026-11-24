@@ -34,9 +34,13 @@ from . import (
     ingest,
     jobanalysis,
     jobreports,
+    langcatalog,
+    languages,
     logsetup,
     metadata,
+    models,
     nlp,
+    ocrdata,
     parallel,
     related,
     segmentlookup,
@@ -312,8 +316,174 @@ class CorpusPatch(BaseModel):
 
 
 @app.get("/api/languages")
-def languages():
-    return nlp.SUPPORTED
+def registered_languages():
+    return dict(nlp.SUPPORTED)
+
+
+# --------------------------------------------------------------------------- language management
+def _default_size() -> str:
+    size = os.environ.get("SPACY_SIZE", "md")
+    return size if size in langcatalog.SIZES else "md"
+
+
+def _entry(code: str) -> langcatalog.Entry:
+    entry = langcatalog.CATALOG.get(code)
+    if entry is None:
+        raise HTTPException(400, f"'{code}' is not in the language catalog")
+    return entry
+
+
+def _check_size(entry: langcatalog.Entry, size: str) -> str:
+    if size not in entry.sizes:
+        raise HTTPException(400, f"Model size must be one of {list(entry.sizes)}")
+    return size
+
+
+def _registered(code: str) -> languages.Language:
+    lang = languages.get(code)
+    if lang is None:
+        raise HTTPException(404, f"Language '{code}' is not set up")
+    return lang
+
+
+def _install_model(code: str, size: str) -> None:
+    try:
+        models.install(code, size)
+    except models.Busy:
+        raise HTTPException(409, "An install for this language is already running") from None
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from None
+
+
+def _install_ocr(code: str) -> None:
+    try:
+        ocrdata.install(code)
+    except models.Busy:
+        raise HTTPException(409, "An install for this language is already running") from None
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from None
+
+
+@app.get("/api/language-catalog")
+def language_catalog():
+    """The languages that can be added (spaCy's official pipelines) and whether each one already is."""
+    have = set(nlp.SUPPORTED)
+    return [{"code": e.code, "name": e.name, "sizes": list(e.sizes), "tesseract": e.tesseract,
+             "added": e.code in have} for e in langcatalog.CATALOG.values()]
+
+
+@app.get("/api/language-settings")
+def language_settings():
+    """Every set-up language with its model, OCR data and corpus count, for the Languages screen."""
+    installed = nlp.status()
+    engine = ocrdata.engine_present()
+    out = []
+    for lang in languages.all_languages():
+        out.append({
+            "code": lang.code, "name": lang.name, "model_size": lang.model_size, "tesseract": lang.tesseract,
+            "corpus_count": languages.corpus_count(lang.code),
+            "model": {**installed.get(lang.code, {"name": None, "version": None, "size": None, "small": False}),
+                      **models.state(lang.code)},
+            "ocr": {"engine": engine, "tesseract": lang.tesseract, "available": ocrdata.available(lang.tesseract),
+                    **ocrdata.state(lang.code)},
+        })
+    return out
+
+
+class LanguageIn(BaseModel):
+    code: str
+    name: str = Field(default="", max_length=80)
+    size: str | None = None
+    install_model: bool = True
+    install_ocr: bool = False
+
+
+class LanguagePatch(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=80)
+    model_size: str | None = None       # send null to follow SPACY_SIZE again
+    tesseract: str | None = Field(default=None, max_length=16)
+
+
+class ModelIn(BaseModel):
+    size: str | None = None
+
+
+@app.post("/api/languages", status_code=201)
+def add_language(body: LanguageIn):
+    entry = _entry(body.code)
+    if body.size is not None:
+        _check_size(entry, body.size)
+    try:
+        languages.add(entry.code, body.name.strip() or entry.name, body.size, entry.tesseract)
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from None
+    if body.install_model:
+        _install_model(entry.code, body.size or _default_size())
+    if body.install_ocr:
+        _install_ocr(entry.code)
+    return {"code": entry.code}
+
+
+@app.patch("/api/languages/{code}")
+def update_language(code: str, body: LanguagePatch):
+    _registered(code)
+    entry = _entry(code)
+    changes: dict = {"name": body.name, "tesseract": body.tesseract}
+    if "model_size" in body.model_fields_set:
+        changes["model_size"] = None if body.model_size is None else _check_size(entry, body.model_size)
+    languages.update(code, **changes)
+    nlp.evict(code)
+    if body.model_size is not None:
+        _install_model(code, body.model_size)
+    return {"ok": True}
+
+
+@app.delete("/api/languages/{code}", status_code=204)
+def remove_language(code: str, uninstall_model: bool = False):
+    _registered(code)
+    try:
+        languages.remove(code)
+    except languages.LanguageInUse as exc:
+        raise HTTPException(409, f"{exc.count} corpora (trashed ones included) use this language; "
+                                 "delete them first") from None
+    if uninstall_model:
+        models.uninstall(code)
+    return Response(status_code=204)
+
+
+@app.post("/api/languages/{code}/model", status_code=202)
+def install_language_model(code: str, body: ModelIn):
+    lang = _registered(code)
+    entry = _entry(code)
+    size = _check_size(entry, body.size) if body.size else (lang.model_size or _default_size())
+    if body.size and body.size != lang.model_size:
+        languages.update(code, model_size=body.size)
+    _install_model(code, size)
+    return {"code": code, "size": size}
+
+
+@app.delete("/api/languages/{code}/model", status_code=204)
+def uninstall_language_model(code: str):
+    _registered(code)
+    models.uninstall(code)
+    return Response(status_code=204)
+
+
+@app.post("/api/languages/{code}/ocr", status_code=202)
+def install_language_ocr(code: str):
+    _registered(code)
+    _install_ocr(code)
+    return {"code": code}
+
+
+@app.delete("/api/languages/{code}/ocr", status_code=204)
+def uninstall_language_ocr(code: str):
+    _registered(code)
+    try:
+        ocrdata.uninstall(code)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from None
+    return Response(status_code=204)
 
 
 @app.get("/api/status")

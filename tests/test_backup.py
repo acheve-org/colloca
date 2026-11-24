@@ -352,3 +352,14 @@ def test_v9_database_upgrades_to_v10_keeping_everything_visible(tmp_path):
     assert conn.execute("SELECT COUNT(*) FROM settings").fetchone()[0] == 0
     assert (tmp_path / "v9.bak").exists()                       # the pre-migration backup is still made
     assert trash.retention_days(conn) == trash.DEFAULT_DAYS
+
+
+def test_import_rejects_only_the_corpus_in_an_unregistered_language(client):
+    payload = {"format": "colloca-export", "format_version": 1,
+               "corpora": [{"ref": 1, "name": "klingon", "lang": "xx"}, {"ref": 2, "name": "ok", "lang": "es"}],
+               "documents": [{"ref": 1, "corpus_ref": 2, "title": "fine", "text": ES_TEXT}]}
+    rep = client.post("/api/import", data={"dry_run": "true", "annotate": "false"},
+                      files={"file": ("p.json", json.dumps(payload).encode())}).json()
+    assert rep["created"]["corpora"] == 1 and rep["rejected"] == 1
+    msg = next(c["message"] for c in rep["conflicts"] if c["kind"] == "corpus")
+    assert "“xx”" in msg and "Languages screen" in msg
