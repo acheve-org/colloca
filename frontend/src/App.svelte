@@ -13,6 +13,7 @@
   import BaseCorpora from './screens/BaseCorpora.svelte';
   import Collocations from './screens/Collocations.svelte';
   import Concordance from './screens/Concordance.svelte';
+  import Dispersion from './screens/Dispersion.svelte';
   import Equivalents from './screens/Equivalents.svelte';
   import Frequency from './screens/Frequency.svelte';
   import CheckText from './screens/CheckText.svelte';
@@ -32,6 +33,7 @@
     base: BaseCorpora,
     concordance: Concordance,
     frequency: Frequency,
+    dispersion: Dispersion,
     collocations: Collocations,
     ngrams: Ngrams,
     keyness: Keyness,

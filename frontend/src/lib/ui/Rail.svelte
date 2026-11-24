@@ -27,6 +27,7 @@
         { id: 'collocations', label: 'nav.collocations' },
         { id: 'ngrams', label: 'nav.ngrams' },
         { id: 'frequency', label: 'nav.frequency' },
+        { id: 'dispersion', label: 'nav.dispersion' },
         { id: 'keyness', label: 'nav.keyness' },
         { id: 'cloud', label: 'nav.cloud' },
         { id: 'equivalents', label: 'nav.equivalents', visible: () => corpusStore.aligned },

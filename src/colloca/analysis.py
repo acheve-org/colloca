@@ -413,6 +413,41 @@ def concordance(conn, scope, q, unit="lemma", width=8, limit=300, sort="doc",
     return res
 
 
+MAX_MARKS = 2000    # marks sent per document; a word that frequent shows as a solid bar anyway
+
+
+def dispersion(conn, scope, q, unit="lemma", case_sensitive=False, any_order=False, advanced=False,
+               accent_insensitive=False):
+    """Where a query occurs across the documents of the scope (the AntConc "plot"). Same query options as the
+    concordance; `total` is the same number of hits. Each document of the scope is listed, also those without
+    a hit, with `at`, the relative position (0 to 1) of every hit, so the plot matches the concordance counts
+    document by document. `range` is the number of documents with at least one hit."""
+    scope = as_scope(scope)
+    _unit(unit)
+    hits, capped, parsed = search(conn, scope, q, unit, case_sensitive, any_order, advanced, accent_insensitive)
+    where, params = scope.where()
+    docs = conn.execute(f"SELECT d.id, d.title, d.n_tokens FROM documents d WHERE {where} ORDER BY d.id",
+                        params).fetchall()
+    length = {r[0]: r[1] for r in conn.execute(
+        "SELECT t.doc_id, MAX(t.pos)+1 FROM tokens t JOIN documents d ON d.id=t.doc_id "
+        f"WHERE {where} GROUP BY t.doc_id", params)}
+    by_doc: dict[int, list[dict]] = {}
+    for h in hits:
+        by_doc.setdefault(h["doc_id"], []).append(h)
+    rows = []
+    for d in docs:
+        mine = by_doc.get(d["id"], [])
+        n = max(length.get(d["id"], 0), 1)
+        marks = [{"pos": h["pos"], "span": h["span"], "at": round(h["pos"] / n, 5)} for h in mine[:MAX_MARKS]]
+        rows.append({"doc_id": d["id"], "title": d["title"], "words": d["n_tokens"], "length": n,
+                     "hits": len(mine), "per_million": round(len(mine) / d["n_tokens"] * 1_000_000, 1)
+                     if d["n_tokens"] else 0.0, "marks": marks})
+    res = {"total": len(hits), "range": sum(1 for r in rows if r["hits"]), "docs": rows}
+    if advanced:
+        res["parsed"], res["capped"] = parsed, capped
+    return res
+
+
 def examples(conn, scope, q, unit="lemma", limit=5):
     """Whole sentences containing `q`: the ones closest to a comfortable length come first."""
     scope = as_scope(scope)

@@ -847,6 +847,23 @@ def concordance(corpus_id: int, q: str, unit: str = "lemma", width: int = Query(
     return res
 
 
+@app.get("/api/corpora/{corpus_id}/dispersion")
+def dispersion(corpus_id: int, q: str, unit: str = "lemma", format: str = "json", case_sensitive: bool = False,
+               any_order: bool = False, advanced: bool = False, accent_insensitive: bool = False,
+               sq: ScopeQuery = Depends()):
+    """Where a query occurs across the documents (a "plot"): per document the hit count, the figure per million
+    words and the relative position of each hit. Takes the same query options as the concordance, so the
+    counts match it; documents without a hit are listed too. CSV: one row per document."""
+    with db.session() as conn:
+        _corpus(conn, corpus_id)
+        res = _run(analysis.dispersion, conn, sq.scope(corpus_id), q, unit, case_sensitive, any_order, advanced,
+                   accent_insensitive)
+    if format == "csv":
+        return _reply([{k: v for k, v in d.items() if k not in ("marks", "length")} for d in res["docs"]],
+                      format, "dispersion")
+    return res
+
+
 @app.get("/api/corpora/{corpus_id}/collocations")
 def collocations(corpus_id: int, q: str, left: int = Query(4, ge=0, le=15),
                  right: int = Query(4, ge=0, le=15), min_freq: int = 2, exclude_stop: bool = True,

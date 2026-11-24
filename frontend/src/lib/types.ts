@@ -201,6 +201,29 @@ export interface CollocationRow {
   ref_freq?: number;
   ref_per_million?: number;
 }
+/** /dispersion: where a query occurs across the documents. */
+export interface DispersionMark {
+  pos: number;
+  span: number;
+  /** relative position in the document, 0 to 1 */
+  at: number;
+}
+export interface DispersionDoc {
+  doc_id: number;
+  title: string;
+  words: number;
+  length: number;
+  hits: number;
+  per_million: number;
+  marks: DispersionMark[];
+}
+export interface DispersionResult {
+  total: number;
+  range: number;
+  docs: DispersionDoc[];
+  parsed?: string;
+  capped?: boolean;
+}
 /** /collocations returns { node_freq, corpus_size, rows } */
 export interface CollocationResult {
   node_freq: number;
