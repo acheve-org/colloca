@@ -361,6 +361,17 @@ def preview_url(body: UrlIn):
         raise HTTPException(502, f"Could not fetch URL: {exc}") from exc
 
 
+@app.post("/api/discover-links")
+def discover_links_endpoint(body: UrlIn):
+    """List the links of an index page or feed (nothing is fetched beyond that page, nothing is imported)."""
+    try:
+        return ingest.discover_links(body.url.strip())
+    except ingest.IngestError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except Exception as exc:  # network errors
+        raise HTTPException(502, f"Could not fetch URL: {exc}") from exc
+
+
 class UrlListIn(BaseModel):
     urls: list[str] = Field(max_length=500)   # one address each; blank lines and # comments are ignored
     tags: str | list[str] = ""

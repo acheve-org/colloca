@@ -1,4 +1,5 @@
 """Turn URLs and uploaded files into clean plain text."""
+import contextlib
 import io
 import ipaddress
 import os
@@ -8,7 +9,7 @@ import threading
 import time
 import unicodedata
 from collections import Counter
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin, urlparse, urlsplit, urlunsplit
 
 import httpx
 
@@ -22,6 +23,7 @@ USER_AGENT = "colloca/0.1 (personal terminology research)"
 URL_DELAY = float(os.environ.get("URL_DELAY_SECONDS", "1"))                  # between two requests to one host (lists)
 MAX_URL_LIST = int(os.environ.get("MAX_URL_LIST", "50"))                      # URLs in one list
 MAX_URLS_PER_HOST = int(os.environ.get("MAX_URLS_PER_HOST", "20"))            # of them, to the same host
+MAX_DISCOVERED = 2000                                                         # links listed from one index page
 
 
 class IngestError(ValueError):
@@ -103,8 +105,8 @@ def _pinned(url: str, ip: str) -> tuple[str, dict, dict]:
     return parsed._replace(netloc=netloc).geturl(), {"Host": host_header}, {"sni_hostname": host}
 
 
-def _download(url: str, polite: bool = False) -> tuple[bytes, str]:
-    """Fetch with redirect-by-redirect SSRF checks and a size cap.
+def _fetch(url: str, polite: bool = False) -> tuple[bytes, str, str]:
+    """Fetch (body, content type, final URL after redirects) with redirect-by-redirect SSRF checks and a size cap.
 
     Each hop resolves the host once, checks the answer, and then connects to that very address (DNS rebinding:
     a name that answers differently the second time cannot redirect the connection to an internal address)."""
@@ -128,8 +130,13 @@ def _download(url: str, polite: bool = False) -> tuple[bytes, str]:
                     if size > MAX_BYTES:
                         raise IngestError(f"Download larger than {MAX_BYTES // 1024 // 1024} MB")
                     chunks.append(chunk)
-                return b"".join(chunks), resp.headers.get("content-type", "").lower()
+                return b"".join(chunks), resp.headers.get("content-type", "").lower(), url
     raise IngestError("Too many redirects")
+
+
+def _download(url: str, polite: bool = False) -> tuple[bytes, str]:
+    data, ctype, _ = _fetch(url, polite)
+    return data, ctype
 
 
 def parse_url_list(raw: list[str]) -> tuple[list[str], list[dict]]:
@@ -157,6 +164,124 @@ def parse_url_list(raw: list[str]) -> tuple[list[str], list[dict]]:
             per_host[parsed.hostname.lower()] = per_host.get(parsed.hostname.lower(), 0) + 1
             urls.append(url)
     return urls, bad
+
+
+# --------------------------------------------------------------------------- catalogs
+_NON_ARTICLE_SEGMENTS = frozenset({
+    "login", "signin", "register", "signup", "search", "tag", "tags", "category", "categories", "author",
+    "authors", "cart", "privacy", "contact", "about", "terms", "cookies"})
+_TRACKING = ("utm_",)
+_TRACKING_EXACT = frozenset({"fbclid", "gclid"})
+_FEED_ROOTS = frozenset({"rss", "feed", "rdf"})
+
+
+def _clean_link(href: str, base: str) -> str | None:
+    """An absolute http(s) URL without fragment and tracking parameters, or None (also for a malformed address).
+    The query is only touched to drop tracking parameters; otherwise it stays exactly as written."""
+    try:
+        parts = urlsplit(urljoin(base, href.strip()))
+        if parts.scheme not in ("http", "https") or not parts.hostname:
+            return None
+    except ValueError:
+        return None
+    if parts.query:
+        pairs = parts.query.split("&")
+        keep = [p for p in pairs if not p.split("=", 1)[0].lower().startswith(_TRACKING)
+                and p.split("=", 1)[0].lower() not in _TRACKING_EXACT]
+        parts = parts._replace(query="&".join(keep))
+    return urlunsplit(parts._replace(fragment=""))
+
+
+def _local(tag) -> str:
+    return tag.rsplit("}", 1)[-1].lower() if isinstance(tag, str) else ""
+
+
+def _feed_links(root, base: str) -> tuple[str, list[tuple[str, str]]]:
+    title = ""
+    out: list[tuple[str, str]] = []
+    for el in root.iter():
+        name = _local(el.tag)
+        if name == "title" and not title and _local(el.getparent().tag) in ("channel", "feed"):
+            title = " ".join((el.text or "").split())
+        elif name in ("item", "entry"):
+            text, href = "", ""
+            for child in el:
+                cname = _local(child.tag)
+                if cname == "title":
+                    text = " ".join((child.text or "").split())
+                elif cname == "link":
+                    if child.get("href"):                         # Atom: prefer rel="alternate" (or none)
+                        if not href or child.get("rel", "alternate") == "alternate":
+                            href = child.get("href") or ""
+                    elif child.text and not href:                 # RSS
+                        href = child.text.strip()
+            if href:
+                out.append((href, text))
+    return title, out
+
+
+def parse_links(data: bytes, base_url: str) -> dict:
+    """The links of an index page (or the entries of an RSS/Atom feed): {title, links: [{url, text, same_host}]}.
+    Navigation, header, footer and aside links, account/search/tag-style paths, empty links and the page itself
+    are left out of HTML pages; fragments and tracking parameters are removed; duplicates are merged."""
+    from lxml import etree
+    from lxml import html as lxml_html
+    root = None
+    root = None
+    with contextlib.suppress(etree.XMLSyntaxError):
+        root = etree.fromstring(data, etree.XMLParser(recover=True, resolve_entities=False, no_network=True))
+    is_feed = root is not None and _local(root.tag) in _FEED_ROOTS
+    raw: list[tuple[str, str]]
+    if is_feed:
+        title, raw = _feed_links(root, base_url)
+    else:
+        try:
+            try:                                  # UTF-8 first; otherwise lxml reads the page's own charset
+                doc = lxml_html.fromstring(data.decode("utf-8"))
+            except (UnicodeDecodeError, ValueError):
+                doc = lxml_html.fromstring(data)
+        except (etree.ParserError, ValueError):
+            return {"title": "", "links": []}
+        title = " ".join(str(doc.xpath("string(//title)")).split())
+        bases = doc.xpath("//base/@href")
+        if bases:
+            with contextlib.suppress(ValueError):
+                base_url = urljoin(base_url, bases[0])
+        raw = []
+        for a in doc.xpath("//a[@href][not(ancestor::nav or ancestor::header or ancestor::footer "
+                           "or ancestor::aside)]"):
+            text = " ".join(a.text_content().split()) or (a.get("title") or "").strip()
+            if text:
+                raw.append((a.get("href"), text))
+    page = _clean_link(base_url, base_url)
+    host = (urlparse(base_url).hostname or "").lower()
+    found: dict[str, str] = {}
+    for href, text in raw:
+        url = _clean_link(href, base_url)
+        if not url or (not is_feed and (url == page or
+                                        _NON_ARTICLE_SEGMENTS & {s.lower() for s in urlparse(url).path.split("/")})):
+            continue
+        if len(text) > len(found.get(url, "")) or url not in found:
+            found[url] = text
+    links = [{"url": u, "text": t, "same_host": (urlparse(u).hostname or "").lower() == host}
+             for u, t in found.items()]
+    return {"title": title, "links": links}
+
+
+def discover_links(url: str) -> dict:
+    """Fetch an index page or feed and list the links on it (one request; nothing is imported)."""
+    data, ctype, url = _fetch(url)               # links resolve against the page we ended up on
+    head = data[:2048].lower()
+    media = ctype.split(";")[0].strip()
+    markup = media in ("text/html", "application/xhtml+xml", "text/xml", "application/xml") or \
+        media.endswith("+xml") or "rss" in media or "atom" in media
+    if not (markup or (not media.startswith(("application/", "image/", "audio/", "video/")) and
+                       any(m in head for m in (b"<html", b"<?xml", b"<rss", b"<feed", b"<!doctype html")))):
+        raise IngestError("Not a web page or a feed")
+    res = parse_links(data, url)
+    truncated = len(res["links"]) > MAX_DISCOVERED
+    return {"url": url, "title": res["title"] or urlparse(url).netloc, "links": res["links"][:MAX_DISCOVERED],
+            "truncated": truncated, "max_per_request": min(MAX_URL_LIST, MAX_URLS_PER_HOST)}
 
 
 # --------------------------------------------------------------------------- formats
@@ -254,15 +379,38 @@ def fetch_url(url: str, polite: bool = False) -> dict:
     extra: dict = {}
     if "pdf" in ctype or data[:5] == b"%PDF-":
         notes: list[str] = []
-        text, title = extract_pdf(data, None, notes, None, extra), ""
+        text, title, fmt = extract_pdf(data, None, notes, None, extra), "", "pdf"
         extra["warnings"] = notes
     elif "html" in ctype or "xml" in ctype or b"<html" in data[:2048].lower():
         title, text = extract_html(data)
+        fmt = "html"
     elif ctype.startswith("text/"):
-        text, title = decode_text(data), ""
+        text, title, fmt = decode_text(data), "", "text"
     else:
         raise IngestError(f"Unsupported content type: {ctype or 'unknown'}")
-    return {"url": url, "title": title or urlparse(url).netloc, "text": text, **extra}
+    return {"url": url, "title": title or urlparse(url).netloc, "text": text, "format": fmt, **extra}
+
+
+MIN_ARTICLE_CHARS = 300
+_BOILERPLATE = re.compile(
+    r"enable javascript|javascript (is )?(required|disabled)|accept (all )?cookies|we use cookies|"
+    r"subscribe to (read|continue)|sign in to (read|continue)|"
+    r"aceptar (las |todas las )?cookies|(activa|habilita|activar|habilitar) javascript|suscr[ií]bete para|"
+    r"accetta (i|tutti i) cookie|abilita javascript|abbonati per|"
+    r"cookies? (policy|consent)|política de cookies", re.IGNORECASE)
+
+
+def extraction_warnings(page: dict, url: str) -> list[str]:
+    """Reasons to doubt that a fetched page is an article (the document is imported anyway)."""
+    text, title = page["text"], page["title"].strip()
+    out = []
+    if len(text) < MIN_ARTICLE_CHARS:
+        out.append(f"Very short text ({len(text)} characters): the page may not be an article.")
+    if _BOILERPLATE.search(text[:500]):
+        out.append("The text starts with cookie, JavaScript or paywall boilerplate: check the extraction.")
+    if page.get("format", "html") == "html" and title.lower() == urlparse(url).netloc.lower():
+        out.append("The page has no title of its own (landing page or index?).")
+    return out
 
 
 READ_EXTENSIONS = (".docx", ".pdf", ".odt", ".rtf", ".xlsx", ".csv", ".tsv", ".xlf", ".xliff", ".srt", ".vtt",

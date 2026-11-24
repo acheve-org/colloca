@@ -26,6 +26,8 @@ let uploadReply: { status: number; body: unknown };
 let previewFileReply: Record<string, unknown>;
 let docsGate: Promise<void> | null;
 let previewGate: Promise<void> | null;
+let discovered: { links: { url: string; text: string; same_host: boolean }[]; max_per_request: number; truncated: boolean };
+let urlsReply: ((body: { urls: string[] }, n: number) => { status: number; body: unknown }) | null;
 
 const res = (status: number, body: unknown) => ({ ok: status < 400, status, statusText: 'x', json: async () => body });
 
@@ -33,6 +35,8 @@ beforeEach(() => {
   calls = [];
   docsGate = null;
   previewGate = null;
+  urlsReply = null;
+  discovered = { links: [], max_per_request: 20, truncated: false };
   docs = { status: 200, body: [doc(1), doc(2, { tags: [], text_type: 'manual' })] };
   jobList = [[]];
   uploadReply = { status: 202, body: [{ file: 'a.txt', ok: true, job_id: 7 }, { file: 'b.docx', ok: true, job_id: 8 }] };
@@ -61,6 +65,11 @@ beforeEach(() => {
     if (p === '/api/preview-url' && previewGate) await previewGate;
     if (p === '/api/preview-url') return res(200, { url: 'https://example.org/final', title: 'Fetched title', text: 'one two three' });
     if (p === '/api/corpora/1/upload') return res(uploadReply.status, uploadReply.body);
+    if (p === '/api/discover-links') return res(200, { url: 'https://news.example/', title: 'News', ...discovered });
+    if (p === '/api/corpora/1/urls' && urlsReply) {
+      const r = urlsReply(body as { urls: string[] }, calls.filter((c) => c.path === '/api/corpora/1/urls').length);
+      return res(r.status, r.body);
+    }
     if (p === '/api/preview-file') return res(200, previewFileReply);
     if (p === '/api/corpora/1/urls') {
       return res(202, [
@@ -173,6 +182,62 @@ describe('Sources', () => {
     expect(c.body).toMatchObject({ urls: ['ftp://x.example/', 'https://a.example/1'], tags: 'law', force_language: false });
     await waitFor(() => expect(messages.current?.text).toBe('1 queued; rejected: ftp://x.example/ (Not an http(s) address)'));
     expect((screen.getByLabelText('Addresses, one per line') as HTMLTextAreaElement).value).toBe('');
+  });
+
+  describe('catalog', () => {
+    const links = (n: number) =>
+      Array.from({ length: n }, (_, i) => ({ url: `https://news.example/2026/${i + 1}`, text: `Story ${i + 1}`, same_host: true }));
+    const urlCalls = () => calls.filter((c) => c.path === '/api/corpora/1/urls');
+    async function find(list: ReturnType<typeof links>, extra: Partial<typeof discovered> = {}) {
+      discovered = { links: list, max_per_request: 20, truncated: false, ...extra };
+      await ready();
+      await fireEvent.input(screen.getByLabelText('Index page address'), { target: { value: 'https://news.example/' } });
+      await fireEvent.click(screen.getByRole('button', { name: 'Find links' }));
+      await waitFor(() => expect(screen.getAllByRole('checkbox', { name: /^Story/ }).length).toBeGreaterThan(0));
+    }
+
+    it('lists the links found, all selected', async () => {
+      await find(links(3));
+      expect(screen.getAllByRole('checkbox', { name: /^Story/ }).every((c) => (c as HTMLInputElement).checked)).toBe(true);
+      expect(screen.getByText('3 of 3 selected')).toBeInTheDocument();
+    });
+
+    it('the filter hides rows and "Select all" applies only to the visible ones', async () => {
+      await find([...links(2), { url: 'https://news.example/blog/x', text: 'Story blog', same_host: true }]);
+      await fireEvent.click(screen.getByRole('button', { name: 'Select none' }));
+      await fireEvent.input(screen.getByLabelText('Filter links'), { target: { value: '/2026/' } });
+      expect(screen.getAllByRole('checkbox', { name: /^Story/ })).toHaveLength(2);
+      await fireEvent.click(screen.getByRole('button', { name: 'Select all' }));
+      expect(screen.getByText('2 of 3 selected')).toBeInTheDocument();
+    });
+
+    it('sends a long selection in requests of max_per_request addresses, in order, with the metadata', async () => {
+      await find(links(45));
+      await fireEvent.input(screen.getByLabelText('Tags'), { target: { value: 'news' } });
+      await fireEvent.click(screen.getByRole('button', { name: 'Import selected' }));
+      await waitFor(() => expect(urlCalls()).toHaveLength(3));
+      const sent = urlCalls().map((c) => (c.body as { urls: string[] }).urls);
+      expect(sent.map((u) => u.length)).toEqual([20, 20, 5]);
+      expect(sent.flat()).toEqual(links(45).map((l) => l.url));
+      expect(urlCalls()[0].body).toMatchObject({ tags: 'news', force_language: false });
+    });
+
+    it('a failing request is reported and the next ones are still sent', async () => {
+      urlsReply = (body, n) =>
+        n === 2 ? { status: 500, body: { detail: 'server down' } } : { status: 202, body: body.urls.map((u) => ({ url: u, ok: true, job_id: 1 })) };
+      await find(links(45));
+      await fireEvent.click(screen.getByRole('button', { name: 'Import selected' }));
+      await waitFor(() => expect(urlCalls()).toHaveLength(3));
+      await waitFor(() => expect(messages.current?.text).toMatch(/^25 queued; rejected: .*server down/));
+    });
+
+    it('nothing selected sends nothing and says so', async () => {
+      await find(links(2));
+      await fireEvent.click(screen.getByRole('button', { name: 'Select none' }));
+      await fireEvent.click(screen.getByRole('button', { name: 'Import selected' }));
+      await waitFor(() => expect(messages.current?.text).toBe('Select at least one link.'));
+      expect(urlCalls()).toHaveLength(0);
+    });
   });
 
   it('an empty list sends nothing', async () => {

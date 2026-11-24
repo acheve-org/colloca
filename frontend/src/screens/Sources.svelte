@@ -38,6 +38,8 @@
 <script lang="ts">
   import { onMount, tick, untrack } from 'svelte';
   import { del, get, patch, post, upload } from '../lib/api';
+  import { SvelteSet } from 'svelte/reactivity';
+  import { chunk, filterLinks, type Discovery } from '../lib/catalog';
   import { CORPUS_CHANGED, corpusStore } from '../lib/corpus.svelte';
   import { t, fmt } from '../lib/i18n';
   import { JOBS_DONE, jobLogs, trackJobs } from '../lib/jobs.svelte';
@@ -105,6 +107,15 @@
   let preview = $state<Preview | null>(null);
   let urlList = $state('');
   const previewWords = $derived(preview ? countWords(preview.text) : 0);
+
+  // Catalog: links found on an index page, chosen by the user and sent in batches
+  let catalogUrl = $state('');
+  let catalog = $state.raw<Discovery | null>(null);
+  const picked = new SvelteSet<string>();
+  let linkFilter = $state('');
+  let sameHostOnly = $state(true);
+  const visibleLinks = $derived(catalog ? filterLinks(catalog.links, linkFilter, sameHostOnly) : []);
+  const pickedCount = $derived(visibleLinks.filter((l) => picked.has(l.url)).length);
 
   // Upload card
   let files = $state.raw<File[]>([]);
@@ -432,6 +443,54 @@
       watch(true);
     });
 
+  const findLinks = () =>
+    act('catalog', async () => {
+      const u = catalogUrl.trim();
+      if (!u) {
+        messages.say(t('src.url.needed'), 'err');
+        return;
+      }
+      const found = await post<Discovery>('/api/discover-links', { url: u });
+      catalog = found;
+      picked.clear();
+      for (const l of filterLinks(found.links, '', true)) picked.add(l.url);
+      linkFilter = '';
+      sameHostOnly = true;
+      messages.say(found.links.length ? t('src.catalog.found', { n: found.links.length }) : t('src.catalog.none'), 'ok');
+    });
+
+  function pick(urls: string[], on: boolean): void {
+    for (const u of urls) {
+      if (on) picked.add(u);
+      else picked.delete(u);
+    }
+  }
+
+  const importSelected = () =>
+    act('catalog', async (id) => {
+      const urls = visibleLinks.filter((l) => picked.has(l.url)).map((l) => l.url);
+      if (!urls.length) {
+        messages.say(t('src.catalog.needed'), 'err');
+        return;
+      }
+      const results: UploadResult[] = [];
+      for (const part of chunk(urls, catalog?.max_per_request ?? 20)) {
+        try {
+          const res = await post<{ url: string; ok: boolean; error?: string }[]>(`/api/corpora/${id}/urls`, {
+            urls: part,
+            force_language: force,
+            ...metaParams(),
+          });
+          results.push(...res.map((r) => ({ file: r.url, ok: r.ok, error: r.error })));
+        } catch (err) {          // one failed request must not stop the next ones
+          results.push(...part.map((u) => ({ file: u, ok: false, error: errMsg(err) })));
+        }
+        if (!still(id)) return;
+      }
+      reportUpload(results);
+      watch(true);
+    });
+
   const uploadFiles = () =>
     act('upload', async (id) => {
       if (!files.length) {
@@ -713,6 +772,39 @@
             <span class="hint grow">{t('src.urls.hint')}</span>
             <Button variant="primary" disabled={busy !== null} onclick={addUrlList}>{t('src.urls.go')}</Button>
           </div>
+
+          <h3 class="sub">{t('src.catalog.title')}</h3>
+          <form class="row" onsubmit={(e) => { e.preventDefault(); findLinks(); }}>
+            <input class="grow" type="text" inputmode="url" bind:value={catalogUrl} placeholder="https://…" aria-label={t('src.catalog.address')} />
+            <Button type="submit" disabled={busy !== null}>{t('src.catalog.find')}</Button>
+          </form>
+          {#if catalog}
+            <div class="row">
+              <input class="grow" type="text" bind:value={linkFilter} placeholder={t('src.catalog.filterPlaceholder')} aria-label={t('src.catalog.filter')} />
+              <Toggle bind:checked={sameHostOnly} label={t('src.catalog.sameHost')} />
+            </div>
+            <div class="row">
+              <Button onclick={() => pick(visibleLinks.map((l) => l.url), true)}>{t('src.catalog.selectAll')}</Button>
+              <Button onclick={() => pick(visibleLinks.map((l) => l.url), false)}>{t('src.catalog.selectNone')}</Button>
+              <span class="hint grow">{t('src.catalog.count', { n: pickedCount, total: catalog.links.length })}</span>
+            </div>
+            <ul class="catalog-links">
+              {#each visibleLinks as l (l.url)}
+                <li>
+                  <label>
+                    <input type="checkbox" checked={picked.has(l.url)} onchange={(e) => pick([l.url], e.currentTarget.checked)} />
+                    <span class="ctext">{l.text}</span>
+                    <small class="curl">{l.url}</small>
+                  </label>
+                </li>
+              {/each}
+            </ul>
+            {#if catalog.truncated}<p class="hint">{t('src.catalog.truncated')}</p>{/if}
+            <div class="row">
+              <span class="hint grow">{t('src.catalog.hint')}</span>
+              <Button variant="primary" disabled={busy !== null} onclick={importSelected}>{t('src.catalog.import')}</Button>
+            </div>
+          {/if}
         </section>
 
         <section class="card" aria-labelledby="{uid}-up">
@@ -1038,6 +1130,28 @@
     justify-content: space-between;
     gap: var(--s-2);
     padding: var(--s-1) 0;
+  }
+  .catalog-links {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    max-height: 18rem;
+    overflow: auto;
+    border: 1px solid var(--line);
+  }
+  .catalog-links label {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--s-2);
+    padding: var(--s-1) var(--s-2);
+  }
+  .ctext {
+    overflow-wrap: anywhere;
+  }
+  .curl {
+    color: var(--muted);
+    overflow-wrap: anywhere;
   }
   .jobs {
     margin: 0;
