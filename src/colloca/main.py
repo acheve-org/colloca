@@ -1,6 +1,7 @@
 """FastAPI application: JSON API + static single-page UI."""
 import csv
 import io
+import json
 import os
 import sqlite3
 from contextlib import asynccontextmanager
@@ -26,6 +27,7 @@ from . import (
     termbase,
     termexport,
     termhits,
+    termimport,
 )
 
 
@@ -942,6 +944,47 @@ def export_terms(format: str = "tbx", project: str = "", src_lang: str = "", tgt
     media, ext = _EXPORTS[format]
     return Response(body, media_type=media,
                     headers={"Content-Disposition": f'attachment; filename="termbase.{ext}"'})
+
+
+# --------------------------------------------------------------------------- glossary import (T03)
+async def _import_input(file: UploadFile, project_id: int | None):
+    data = await file.read(termimport.MAX_BYTES + 1)
+    if project_id is not None:
+        with db.session() as conn:
+            _project(conn, project_id)
+    return data, file.filename or ""
+
+
+@app.post("/api/terms/import/preview")
+async def import_preview(file: UploadFile = File(...)):
+    """The first rows of a spreadsheet and a guessed column mapping (or just `kind: tbx`)."""
+    data, name = await _import_input(file, None)
+    try:
+        return termimport.preview(data, name)
+    except termimport.ImportFailure as exc:
+        raise _term_error(exc) from exc
+
+
+@app.post("/api/terms/import")
+async def import_terms(file: UploadFile = File(...), dry_run: bool = Form(True), project_id: int | None = Form(None),
+                       src_lang: str = Form(""), tgt_lang: str = Form(""), mapping: str = Form("{}"),
+                       header: bool = Form(True), default_status: str = Form("candidate")):
+    """Import a glossary (.xlsx, .csv, .tsv, .tbx). `dry_run` (the default) only reports what would be added,
+    skipped as duplicates and rejected; send the same request with dry_run=false to store the new rows.
+    `mapping` is JSON {field: column index (0-based)} for a spreadsheet; a TBX file needs none."""
+    data, name = await _import_input(file, project_id)
+    try:
+        columns = json.loads(mapping or "{}")
+        if not isinstance(columns, dict):
+            raise ValueError
+    except ValueError as exc:
+        raise HTTPException(400, "mapping must be a JSON object {field: column index}") from exc
+    try:
+        with db.session() as conn:
+            return termimport.run(conn, data, name, project_id=project_id, src_lang=src_lang, tgt_lang=tgt_lang,
+                                  mapping=columns, header=header, default_status=default_status, dry_run=dry_run)
+    except termimport.ImportFailure as exc:
+        raise _term_error(exc) from exc
 
 
 # --------------------------------------------------------------------------- check text (termbase hits)
