@@ -193,6 +193,79 @@ def test_export_endpoint(client):
     assert client.get("/api/terms/export", params={"project": "x"}).status_code == 400
 
 
+# --------------------------------------------------------------------------- T10: statuses, sort, filters, bulk
+def test_admitted_and_superseded_statuses(client):
+    assert term(client, tgt_term="contratto", status="admitted").status_code == 201
+    assert term(client, tgt_term="patto", status="superseded").status_code == 201
+    assert term(client, tgt_term="", status="admitted").status_code == 400        # needs a translation
+    assert term(client, tgt_term="", status="superseded").status_code == 400
+    assert term(client, tgt_term="x", status="proposed").status_code == 400
+    tid = term(client, src_term="plazo", tgt_term="", status="candidate").json()["id"]
+    assert client.patch(f"/api/terms/{tid}", json={"status": "admitted"}).status_code == 400
+
+
+def test_admitted_exports_as_admitted_and_candidate_has_no_status():
+    rows = [dict(ROWS[0], status="approved"), dict(ROWS[0], tgt_term="patto", status="admitted"),
+            dict(ROWS[0], tgt_term="vecchio", status="superseded"), dict(ROWS[0], tgt_term="nuovo", status="candidate")]
+    root = ET.fromstring(termexport.to_tbx(rows, 3))
+    secs = root.findall(f".//{NS3}langSec")[1].findall(f"{NS3}termSec")
+    status = [(s.find(f"{NS3}term").text, getattr(s.find(f"{NS3}termNote[@type='administrativeStatus']"), "text", None))
+              for s in secs]
+    assert status == [("contratto", "preferredTerm-admn-sts"), ("patto", "admittedTerm-admn-sts"),
+                      ("vecchio", "supersededTerm-admn-sts"), ("nuovo", None)]
+
+
+def test_export_default_includes_admitted(client):
+    term(client, src_term="a", tgt_term="b", status="approved")
+    term(client, src_term="c", tgt_term="d", status="admitted")
+    term(client, src_term="e", tgt_term="f", status="superseded")
+    csv_r = client.get("/api/terms/export", params={"format": "csv"}).text
+    assert "admitted" in csv_r and "superseded" not in csv_r
+
+
+def test_sort_and_filters(client):
+    pid = project(client)
+    term(client, project_id=pid, src_term="zeta", tgt_term="z", domain="Legal", pos="noun")
+    term(client, project_id=pid, src_term="Alfa", tgt_term="a", domain="tax", pos="verb", status="admitted")
+    term(client, project_id=pid, src_term="beta", tgt_term="b", domain="legal", pos="noun", status="candidate")
+
+    def names(**p):
+        return [t["src_term"] for t in client.get("/api/terms", params=p).json()]
+
+    assert names(sort="src_term") == ["Alfa", "beta", "zeta"]                  # case-insensitive
+    assert names(sort="src_term", dir="desc") == ["zeta", "beta", "Alfa"]
+    assert names(sort="tgt_term", dir="desc") == ["zeta", "beta", "Alfa"]
+    assert names(domain="legal", sort="src_term") == ["beta", "zeta"]          # exact, case-insensitive
+    assert names(pos="verb") == ["Alfa"]
+    assert names(status="admitted,candidate", sort="src_term") == ["Alfa", "beta"]
+    assert sorted(names(modified_since="2000-01-01")) == ["Alfa", "beta", "zeta"]
+    assert names(modified_since="2999-01-01") == []
+    assert client.get("/api/terms", params={"sort": "id; DROP TABLE terms"}).status_code == 400
+    assert client.get("/api/terms", params={"modified_since": "yesterday"}).status_code == 400
+    assert len(names(sort="status")) == 3                                      # nothing lost by sorting
+
+
+def test_bulk_update_and_delete(client):
+    a = term(client, src_term="a", tgt_term="x", status="candidate").json()["id"]
+    b = term(client, src_term="b", tgt_term="y", status="candidate").json()["id"]
+    c = term(client, src_term="c", tgt_term="", status="candidate").json()["id"]
+    r = client.patch("/api/terms", json={"ids": [a, b], "status": "admitted", "domain": " legal  "})
+    assert r.status_code == 200 and r.json() == {"updated": 2}
+    rows = {t["src_term"]: t for t in client.get("/api/terms").json()}
+    assert rows["a"]["status"] == rows["b"]["status"] == "admitted" and rows["a"]["domain"] == "legal"
+    assert rows["c"]["status"] == "candidate"
+    # all or nothing: c has no translation, so nothing changes
+    bad = client.patch("/api/terms", json={"ids": [a, c], "status": "approved"})
+    assert bad.status_code == 400 and "no translation" in bad.json()["detail"]
+    assert {t["src_term"]: t["status"] for t in client.get("/api/terms").json()}["a"] == "admitted"
+    assert client.patch("/api/terms", json={"ids": [], "status": "approved"}).status_code == 400
+    assert client.patch("/api/terms", json={"ids": [a]}).status_code == 400
+    assert client.patch("/api/terms", json={"ids": [a], "status": "bogus"}).status_code == 400
+    assert client.post("/api/terms/delete", json={"ids": [a, c]}).json() == {"deleted": 2}
+    assert [t["src_term"] for t in client.get("/api/terms").json()] == ["b"]
+    assert client.post("/api/terms/delete", json={"ids": []}).status_code == 400
+
+
 # --------------------------------------------------------------------------- migration
 def test_v4_database_upgrades_to_v5(tmp_path):
     conn = sqlite3.connect(tmp_path / "v4.db")

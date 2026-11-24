@@ -745,12 +745,16 @@ def _term_error(exc: Exception) -> HTTPException:
 
 @app.get("/api/terms")
 def list_terms(project: str = "", src_lang: str = "", tgt_lang: str = "", status: str = "", q: str = "",
-               limit: int = Query(5000, le=20000)):
-    """Termbase entries. project: '' (all), 'none' (general termbase) or a project id. status: comma list."""
+               limit: int = Query(5000, le=20000), sort: str = "", dir: str = "asc", domain: str = "",
+               pos: str = "", modified_since: str = ""):
+    """Termbase entries. project: '' (all), 'none' (general termbase) or a project id. status: comma list.
+    sort: a column name (src_term, tgt_term, pos, status, domain, updated...), dir: asc or desc;
+    domain, pos and modified_since (YYYY-MM-DD) filter."""
     try:
         with db.session() as conn:
             return termbase.list_terms(conn, project, src_lang, tgt_lang,
-                                       tuple(x for x in status.split(",") if x), q, limit)
+                                       tuple(x for x in status.split(",") if x), q, limit, sort=sort,
+                                       desc=dir == "desc", domain=domain, pos=pos, modified_since=modified_since)
     except termbase.TermError as exc:
         raise _term_error(exc) from exc
 
@@ -777,6 +781,35 @@ def create_term(body: TermIn):
         except sqlite3.IntegrityError as exc:
             raise HTTPException(409, _TERM_CONFLICT) from exc
         return {"id": cur.lastrowid}
+
+
+class TermBulk(BaseModel):
+    ids: list[int] = Field(max_length=20000)
+    status: str | None = None
+    domain: str | None = None
+
+
+@app.patch("/api/terms")
+def bulk_update_terms(body: TermBulk):
+    """Set the status and/or domain of the selected entries (all or nothing)."""
+    try:
+        with db.session() as conn:
+            return {"updated": termbase.bulk_update(conn, body.ids, status=body.status, domain=body.domain)}
+    except termbase.TermError as exc:
+        raise _term_error(exc) from exc
+
+
+class TermIds(BaseModel):
+    ids: list[int] = Field(max_length=20000)
+
+
+@app.post("/api/terms/delete")
+def bulk_delete_terms(body: TermIds):
+    try:
+        with db.session() as conn:
+            return {"deleted": termbase.bulk_delete(conn, body.ids)}
+    except termbase.TermError as exc:
+        raise _term_error(exc) from exc
 
 
 @app.patch("/api/terms/{term_id}")
@@ -816,9 +849,9 @@ _EXPORTS = {"csv": ("text/csv; charset=utf-8", "csv"), "xlsx": (
 
 @app.get("/api/terms/export")
 def export_terms(format: str = "tbx", project: str = "", src_lang: str = "", tgt_lang: str = "",
-                 status: str = "approved", ids: str = ""):
+                 status: str = "approved,admitted", ids: str = ""):
     """Download the termbase as `tbx` (ISO 30042:2019), `tbx2` (ISO 30042:2008, most CAT tools),
-    `xlsx` or `csv`. By default only approved entries; pass status=approved,candidate to include candidates.
+    `xlsx` or `csv`. By default approved and admitted entries; add `candidate` to status to include candidates.
     `ids=1,2,3` exports exactly those entries (any status), e.g. the glossary of an analysed job."""
     if format not in _EXPORTS:
         raise HTTPException(400, f"format must be one of {', '.join(_EXPORTS)}")

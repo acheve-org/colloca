@@ -7,7 +7,7 @@ import type { Example, Languages } from './types';
 export interface TermDraft {
   src_term: string;
   tgt_term: string;
-  status: 'candidate' | 'approved' | 'forbidden';
+  status: 'candidate' | 'approved' | 'admitted' | 'superseded' | 'forbidden';
   pos: string;
   domain: string;
   definition: string;

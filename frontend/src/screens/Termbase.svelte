@@ -1,5 +1,6 @@
 <script module lang="ts">
-  const STATUSES = ['candidate', 'approved', 'forbidden'] as const;
+  const STATUSES = ['candidate', 'approved', 'admitted', 'superseded', 'forbidden'] as const;
+  type Status = (typeof STATUSES)[number];
 
   /** `project` in the URL: 'all' stands for the empty value, which `go()` would drop. */
   const toUrlScope = (s: string) => (s === '' ? 'all' : s);
@@ -8,17 +9,18 @@
 
 <script lang="ts">
   import { onMount, tick, untrack } from 'svelte';
-  import { del, get, patch, qs } from '../lib/api';
+  import { SvelteSet } from 'svelte/reactivity';
+  import { del, get, patch, post, qs } from '../lib/api';
   import { CORPUS_CHANGED, corpusStore } from '../lib/corpus.svelte';
   import { t } from '../lib/i18n';
   import { messages } from '../lib/messages.svelte';
   import { go, route } from '../lib/router.svelte';
-  import { openTerm, TERM_SAVED, termStore } from '../lib/term.svelte';
+  import { openTerm, TERM_POS, TERM_SAVED, termStore } from '../lib/term.svelte';
   import type { Project, Term } from '../lib/types';
   import Badge from '../lib/ui/Badge.svelte';
   import Button from '../lib/ui/Button.svelte';
   import DataTable from '../lib/ui/DataTable.svelte';
-  import { cellValue, type Column } from '../lib/ui/DataTable.types';
+  import { cellValue, type Column, type SortState } from '../lib/ui/DataTable.types';
   import DetailStrip from '../lib/ui/DetailStrip.svelte';
   import Dialog from '../lib/ui/Dialog.svelte';
   import EmptyState from '../lib/ui/EmptyState.svelte';
@@ -35,7 +37,18 @@
   let pinned = hasScopeParam;
   let status = $state(STATUSES.includes(initial.status as (typeof STATUSES)[number]) ? initial.status : '');
   let q = $state(initial.q ?? '');
+  let domain = $state(initial.domain ?? '');
+  let pos = $state(initial.pos ?? '');
+  let since = $state(initial.since ?? '');
+  let sort = $state<SortState | null>(null);
   let includeCandidates = $state(false);
+  // Entries ticked for the bulk actions (ids; a new Set per change).
+  const checked = new SvelteSet<number>();
+  let bulkStatus = $state('');
+  let bulkDomain = $state('');
+  let bulkConfirmOpen = $state(false);
+  // Every domain seen while no domain filter narrowed the list, so the filter keeps its choices.
+  let domainChoices = $state.raw<string[]>([]);
 
   let terms = $state.raw<Term[]>([]);
   let projects = $state.raw<Project[]>([]);
@@ -75,7 +88,10 @@
   ];
 
   // The export ignores the status filter and the search, as the old tab did.
-  const exportBase = $derived({ project: scope, status: includeCandidates ? 'approved,candidate' : 'approved' });
+  const exportBase = $derived({
+    project: scope,
+    status: includeCandidates ? 'approved,admitted,candidate' : 'approved,admitted',
+  });
   const exportHref = (format: string) => `/api/terms/export?${qs({ ...exportBase, format })}`;
   const exports = [
     { format: 'tbx', label: t('tb.tbx'), title: undefined },
@@ -85,6 +101,7 @@
   ];
 
   const columns: Column<Term>[] = [
+    { key: 'sel', label: '', width: '2.5rem', sortable: false, value: () => '' },
     { key: 'src_term', label: t('tb.col.source'), width: 'minmax(10rem, 1.4fr)' },
     { key: 'tgt_term', label: t('tb.col.target'), width: 'minmax(8rem, 1.2fr)' },
     { key: 'pos', label: t('tb.col.pos'), width: '7rem' },
@@ -99,20 +116,44 @@
     { key: 'updated', label: t('tb.col.updated'), width: '10rem' },
   ];
 
+  const domainOptions = $derived([
+    { value: '', label: t('tb.domain.all') },
+    ...[...new Set([...domainChoices, ...(domain ? [domain] : [])])].sort().map((d) => ({ value: d, label: d })),
+  ]);
+  const posOptions = [{ value: '', label: t('tb.pos.all') }, ...TERM_POS.map((p) => ({ value: p, label: p }))];
+  const bulkOptions = [
+    { value: '', label: t('tb.bulkStatus') },
+    ...STATUSES.map((s) => ({ value: s, label: t(`badge.${s}`) })),
+  ];
+  const filtered = $derived(!!(status || domain || pos || since || q.trim()));
+
   const count = $derived(terms.length === 1 ? t('tb.count1') : t('tb.count', { n: terms.length }));
 
   async function load(): Promise<void> {
     const n = ++seq;
     loading = true; // previous rows stay visible (and selected) while loading
-    const params = { project: scope, status, q: q.trim() };
+    const params = {
+      project: scope,
+      status,
+      q: q.trim(),
+      domain,
+      pos,
+      modified_since: since,
+      sort: sort?.key ?? '',
+      dir: sort?.dir ?? '',
+    };
     try {
       const rows = await get<Term[]>('/api/terms', params);
       if (n !== seq) return;
       terms = rows;
-      termStore.domains = [...new Set(rows.map((x) => x.domain).filter(Boolean))].sort();
+      const seen = [...new Set(rows.map((x) => x.domain).filter(Boolean))].sort();
+      termStore.domains = seen;
+      if (!domain) domainChoices = seen;
+      const ids = new Set(rows.map((x) => x.id));
+      for (const id of [...checked]) if (!ids.has(id)) checked.delete(id);
       loadedOnce = true;
       // Persist only a load that worked.
-      go('termbase', { project: toUrlScope(scope), status, q: params.q });
+      go('termbase', { project: toUrlScope(scope), status, q: params.q, domain, pos, since });
     } catch (err) {
       if (n !== seq) return;
       messages.say(errMsg(err), 'err');
@@ -156,7 +197,7 @@
       source: r.src_term,
       target: r.tgt_term,
       pos: r.pos,
-      status: r.status as 'candidate' | 'approved' | 'forbidden',
+      status: r.status as Status,
       domain: r.domain,
       definition: r.definition,
       notes: r.notes,
@@ -185,6 +226,79 @@
     } finally {
       busyId = null;
     }
+  }
+
+  /** Inline edit of one field; on failure the control is put back to the stored value. */
+  async function inlineEdit(r: Term, field: 'status' | 'tgt_term', el: HTMLInputElement | HTMLSelectElement) {
+    const value = el.value.trim();
+    if (value === r[field] || busyId !== null) {
+      el.value = r[field];
+      return;
+    }
+    busyId = r.id;
+    seq++; // a list response still in flight predates this change
+    loading = false;
+    try {
+      await patch(`/api/terms/${r.id}`, { [field]: value });
+      const updated = { ...r, [field]: value };
+      terms = terms.map((x) => (x.id === r.id ? updated : x));
+      if (selected?.id === r.id) selected = updated;
+    } catch (err) {
+      el.value = r[field];
+      messages.say(errMsg(err), 'err');
+    } finally {
+      busyId = null;
+    }
+  }
+
+  function toggleRow(id: number, on: boolean): void {
+    if (on) checked.add(id);
+    else checked.delete(id);
+  }
+
+  function toggleAll(on: boolean): void {
+    checked.clear();
+    if (on) for (const x of terms) checked.add(x.id);
+  }
+
+  async function bulkApply(changes: { status?: string; domain?: string }): Promise<void> {
+    if (busyId !== null || !checked.size) return;
+    busyId = -1;
+    try {
+      const res = await patch<{ updated: number }>('/api/terms', { ids: [...checked], ...changes });
+      messages.say(t('tb.bulkDone', { n: res.updated }), 'ok');
+      bulkStatus = '';
+      bulkDomain = '';
+      await load();
+    } catch (err) {
+      bulkStatus = '';
+      messages.say(errMsg(err), 'err');
+    } finally {
+      busyId = null;
+    }
+  }
+
+  async function bulkDelete(): Promise<void> {
+    bulkConfirmOpen = false;
+    if (busyId !== null || !checked.size) return;
+    busyId = -1;
+    try {
+      const res = await post<{ deleted: number }>('/api/terms/delete', { ids: [...checked] });
+      checked.clear();
+      selected = null;
+      messages.say(t('tb.bulkDeleted', { n: res.deleted }), 'ok');
+      await load();
+    } catch (err) {
+      messages.say(errMsg(err), 'err');
+    } finally {
+      busyId = null;
+    }
+  }
+
+  function clearFilters(): void {
+    status = domain = pos = since = q = '';
+    clearTimeout(timer);
+    load();
   }
 
   function askDelete(r: Term): void {
@@ -225,6 +339,16 @@
     });
   });
 
+  // Sorting also goes to the server, so a termbase longer than the page limit is cut after sorting.
+  let sortSeen: string | undefined;
+  $effect(() => {
+    const key = sort ? `${sort.key}:${sort.dir}` : '';
+    untrack(() => {
+      if (sortSeen !== undefined && sortSeen !== key && loadedOnce) load();
+      sortSeen = key;
+    });
+  });
+
   onMount(() => {
     window.addEventListener(CORPUS_CHANGED, onCorpusChanged);
     window.addEventListener(TERM_SAVED, load);
@@ -244,10 +368,38 @@
       <b>{row.src_term}</b>
       <span class="muted">{row.src_lang}→{row.tgt_lang}{row.project ? ` · ${row.project}` : ''}</span>
     </span>
+  {:else if col.key === 'sel'}
+    <input
+      type="checkbox"
+      checked={checked.has(row.id)}
+      aria-label={t('tb.selectRow', { term: row.src_term })}
+      onclick={(e) => e.stopPropagation()}
+      onchange={(e) => toggleRow(row.id, e.currentTarget.checked)}
+    />
   {:else if col.key === 'tgt_term'}
-    {#if row.tgt_term}{row.tgt_term}{:else}<span class="muted">—</span>{/if}
+    <input
+      class="inline"
+      value={row.tgt_term}
+      placeholder="—"
+      aria-label={t('tb.editTarget', { term: row.src_term })}
+      disabled={busyId === row.id}
+      maxlength="200"
+      onclick={(e) => e.stopPropagation()}
+      onchange={(e) => inlineEdit(row, 'tgt_term', e.currentTarget)}
+    />
   {:else if col.key === 'status'}
-    <Badge kind={row.status as 'candidate' | 'approved' | 'forbidden'} />
+    <select
+      class="inline status {row.status}"
+      value={row.status}
+      aria-label={t('tb.editStatus', { term: row.src_term })}
+      disabled={busyId === row.id}
+      onclick={(e) => e.stopPropagation()}
+      onchange={(e) => inlineEdit(row, 'status', e.currentTarget)}
+    >
+      {#each STATUSES as s (s)}
+        <option value={s}>{t(`badge.${s}`)}</option>
+      {/each}
+    </select>
   {:else if col.key === 'context'}
     <span class="ctx" title={row.context_source}>{row.context}</span>
   {:else}
@@ -271,6 +423,15 @@
       <Field label={t('tb.status')}>
         <Select label={t('tb.status')} bind:value={status} options={statusOptions} onchange={load} />
       </Field>
+      <Field label={t('tb.domain')}>
+        <Select label={t('tb.domain')} bind:value={domain} options={domainOptions} onchange={load} />
+      </Field>
+      <Field label={t('tb.pos')}>
+        <Select label={t('tb.pos')} bind:value={pos} options={posOptions} onchange={load} />
+      </Field>
+      <Field label={t('tb.modified')}>
+        <input type="date" aria-label={t('tb.modified')} bind:value={since} onchange={load} />
+      </Field>
       <Field label={t('tb.search')}>
         <input
           class="search"
@@ -282,6 +443,7 @@
         />
       </Field>
       <Button type="submit">{t('tb.reload')}</Button>
+      {#if filtered}<Button onclick={clearFilters}>{t('tb.clearFilters')}</Button>{/if}
     </Toolbar>
   </form>
   <div class="export" role="group" aria-label={t('tb.exportGroup')}>
@@ -296,6 +458,14 @@
 
   {#if loadedOnce}
     <div class="strip">
+      <input
+        type="checkbox"
+        checked={terms.length > 0 && checked.size === terms.length}
+        disabled={!terms.length || !!filter.trim()}
+        aria-label={t('tb.selectAll')}
+        title={t('tb.selectAll')}
+        onchange={(e) => toggleAll(e.currentTarget.checked)}
+      />
       <span class="count">{count}</span>
       {#if terms.length}
         <input
@@ -309,6 +479,32 @@
     </div>
   {/if}
 
+  {#if checked.size}
+    <div class="bulk" role="group" aria-label={t('tb.bulk')}>
+      <b>{t('tb.selected', { n: checked.size })}</b>
+      <Select
+        label={t('tb.bulkStatus')}
+        bind:value={bulkStatus}
+        options={bulkOptions}
+        disabled={busyId !== null}
+        onchange={(v) => v && bulkApply({ status: v })}
+      />
+      <input
+        class="bulk-domain"
+        bind:value={bulkDomain}
+        placeholder={t('tb.bulkDomainPlaceholder')}
+        aria-label={t('tb.bulkDomain')}
+        maxlength="80"
+      />
+      <Button disabled={busyId !== null} onclick={() => bulkApply({ domain: bulkDomain })}>
+        {t('tb.bulkApply')}
+      </Button>
+      <Button variant="danger" disabled={busyId !== null} onclick={() => (bulkConfirmOpen = true)}>
+        {t('tb.bulkDelete')}
+      </Button>
+    </div>
+  {/if}
+
   <div class="table" bind:this={tableEl}>
     {#if loadedOnce && !terms.length && !loading}
       <EmptyState title={t('tb.empty')} hint={t('tb.emptyHint')} />
@@ -319,6 +515,7 @@
         rowKey={(r) => r.id}
         bind:selected
         bind:filter
+        bind:sort
         {loading}
         {cell}
         onactivate={edit}
@@ -345,7 +542,7 @@
           <dt>{t('tb.languages')}</dt>
           <dd>{r.src_lang}→{r.tgt_lang}{r.project ? ` · ${r.project}` : ''}</dd>
           <dt>{t('tb.col.status')}</dt>
-          <dd><Badge kind={r.status as 'candidate' | 'approved' | 'forbidden'} /></dd>
+          <dd><Badge kind={r.status as Status} /></dd>
           {#if r.pos}<dt>{t('tb.col.pos')}</dt><dd>{r.pos}</dd>{/if}
           {#if r.domain}<dt>{t('tb.col.domain')}</dt><dd>{r.domain}</dd>{/if}
           {#if r.definition}<dt>{t('tb.definition')}</dt><dd>{r.definition}</dd>{/if}
@@ -371,6 +568,14 @@
   {#snippet footer()}
     <Button onclick={() => (confirmOpen = false)}>{t('common.cancel')}</Button>
     <Button variant="danger" onclick={confirmDelete}>{t('tb.delete')}</Button>
+  {/snippet}
+</Dialog>
+
+<Dialog bind:open={bulkConfirmOpen} title={t('tb.bulkConfirmTitle')}>
+  <p class="confirm">{t('tb.bulkConfirmBody', { n: checked.size })}</p>
+  {#snippet footer()}
+    <Button onclick={() => (bulkConfirmOpen = false)}>{t('common.cancel')}</Button>
+    <Button variant="danger" onclick={bulkDelete}>{t('tb.bulkDelete')}</Button>
   {/snippet}
 </Dialog>
 
@@ -407,6 +612,37 @@
   }
   .count {
     font-weight: 600;
+  }
+  .bulk {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--s-2);
+    padding: var(--s-1) var(--s-3);
+    font-size: var(--fs-small);
+    background: var(--surface);
+    border-bottom: 1px solid var(--line);
+  }
+  .bulk-domain {
+    width: 10rem;
+  }
+  .inline {
+    width: 100%;
+    min-width: 0;
+  }
+  select.status.approved,
+  select.status.admitted {
+    color: var(--status-approved);
+  }
+  select.status.candidate {
+    color: var(--status-candidate);
+  }
+  select.status.forbidden {
+    color: var(--status-forbidden);
+  }
+  select.status.superseded {
+    color: var(--muted);
+    font-style: italic;
   }
   .filter {
     width: 14rem;

@@ -23,8 +23,9 @@ COLUMNS = [
 ]
 _FORMULA_START = ("=", "+", "-", "@", "\t", "\r")
 _XML_LANG = "{http://www.w3.org/XML/1998/namespace}lang"
-_ADMIN_STATUS = {"approved": "preferredTerm-admn-sts", "candidate": "admittedTerm-admn-sts",
-                 "forbidden": "deprecatedTerm-admn-sts"}
+# A candidate has no TBX-Basic equivalent (the value list has no "proposed"), so it is exported without a status.
+_ADMIN_STATUS = {"approved": "preferredTerm-admn-sts", "admitted": "admittedTerm-admn-sts",
+                 "superseded": "supersededTerm-admn-sts", "forbidden": "deprecatedTerm-admn-sts"}
 # TBX-Basic partOfSpeech is limited to noun, verb, adjective, adverb and other: a proper noun is exported as noun.
 _TBX_POS = {"properNoun": "noun"}
 
@@ -130,7 +131,8 @@ def to_tbx(rows: list[dict], version: int = 3, title: str = "Colloca termbase") 
                 el(sec, "term", r["tgt_term"])
                 if r.get("pos"):
                     el(sec, "termNote", _TBX_POS.get(r["pos"], r["pos"]), type="partOfSpeech")
-                el(sec, "termNote", _ADMIN_STATUS[r["status"]], type="administrativeStatus")
+                if r["status"] in _ADMIN_STATUS:
+                    el(sec, "termNote", _ADMIN_STATUS[r["status"]], type="administrativeStatus")
                 if r.get("notes"):
                     el(sec, "note", r["notes"])
     ET.indent(root)

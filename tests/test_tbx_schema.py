@@ -34,6 +34,10 @@ MORE_ROWS = ROWS + [
          status="approved", domain="", definition="", notes="", context="", context_source="")
     for name, pos in [("Madrid", "properNoun"), ("firmar", "verb"), ("válido", "adjective"),
                       ("hoy", "adverb"), ("etc", "other")]
+] + [
+    dict(project_id=1, project="Acme", src_lang="es", tgt_lang="it", src_term="plazo", tgt_term=tgt, pos="noun",
+         status=status, domain="", definition="", notes="", context="", context_source="")
+    for tgt, status in [("termine", "admitted"), ("scadenza", "superseded"), ("durata", "candidate")]
 ]
 
 
