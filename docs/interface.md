@@ -7,13 +7,13 @@ Colour, contrast and screen-reader notes: [accessibility.md](accessibility.md).
 | Area | Content |
 |---|---|
 | Left rail | Working-context block: corpus, project, language badge, a *Change* link to *Projects* and a quick switch to another corpus (grouped by project). |
-| Rail groups | **Setup** (Languages, Projects) · **Corpus** (Sources) · **Explore** (Concordance, Collocations, N-grams, Frequency list, Dispersion plot, Keyness, Word cloud, Equivalents) · **Terms** (Termbase) · **Job**. |
+| Rail groups | **Setup** (Languages, Projects) · **Corpus** (Sources) · **Explore** (Concordance, Collocations, N-grams, Frequency list, Dispersion plot, Keyness, Word cloud, Related terms; Equivalents and Segment lookup for aligned corpora) · **Terms** (Termbase, Candidates, Check text) · **Job** · **Data** (Backup and Trash). |
 | Rail foot | Theme (Auto, Light, Dark), language (EN, ES, IT), *Log out* when a password is set. |
 | Context bar | Breadcrumb above work screens: language › project › corpus (each links to *Languages* or *Projects*). Hidden on *Languages* and *Projects*. |
 | Work area | Toolbar (options, document filter) → result strip (counts, *Filter in results*) → sortable table → detail strip with actions for the selected row. |
 | Status line | Top of the window: messages, active model per language. |
 
-- First run: a fresh load lands on *Projects* (or *Languages* when no language is set up); empty screens point to the next step.
+- First run: with an empty address and no working corpus selected, the app opens on *Projects* (or *Languages* when no language is configured). A deep link opens its screen with a "set up first" message instead; empty screens point to the next step.
 - Creating, renaming, moving and deleting corpora and projects is done on *Projects*.
 - Screen and options live in the address (`#/concordance?q=...`): reload and bookmarks restore the search; the rail returns each screen to its last search.
 - Back/forward between searches on one screen changes the address without re-running the search.
