@@ -135,3 +135,44 @@ def test_discover_endpoint_network_error_is_502(client, serve):
     serve["error"] = httpx.ConnectError("boom")
     r = client.post("/api/discover-links", json={"url": "https://news.example/"})
     assert r.status_code == 502
+
+
+# --------------------------------------------------------------------------- review fixes
+def test_a_malformed_link_does_not_break_the_others():
+    html = ('<a href="http://[object Object]/x">Broken</a><a href="http://[broken">Worse</a>'
+            '<a href="/2026/ok">Fine</a>')
+    assert urls(parse(html)) == ["https://news.example/2026/ok"]
+    assert urls(parse('<base href="http://[bad"><a href="a1">One</a>')) == ["https://news.example/section/a1"]
+    feed = "<rss><channel><item><title>T</title><link>http://[bad</link></item></channel></rss>"
+    assert parse(feed)["links"] == []
+
+
+def test_query_without_tracking_parameters_is_kept_as_written():
+    html = ('<a href="/noticia.asp?12345">Old CMS</a><a href="/i.php?/articulo/x">Path in query</a>'
+            '<a href="/p?q=a%20b&utm_source=x">Mixed</a>')
+    assert urls(parse(html)) == ["https://news.example/noticia.asp?12345", "https://news.example/i.php?/articulo/x",
+                                 "https://news.example/p?q=a%20b"]
+
+
+def test_relative_links_follow_redirects(client, serve, monkeypatch):
+    def handler(request: httpx.Request) -> httpx.Response:
+        host = request.headers["host"]
+        if host == "news.example" and request.url.path == "/section":
+            return httpx.Response(301, headers={"location": "/section/"})
+        if host == "news.example" and request.url.path == "/":
+            return httpx.Response(301, headers={"location": "https://www.news.example/"})
+        return httpx.Response(200, headers={"content-type": "text/html"},
+                              content=b"<html><body><a href='a1'>One story</a></body></html>")
+
+    monkeypatch.setattr(ingest, "_transport", httpx.MockTransport(handler))
+    body = client.post("/api/discover-links", json={"url": "https://news.example/section"}).json()
+    assert [x["url"] for x in body["links"]] == ["https://news.example/section/a1"]
+    assert body["url"] == "https://news.example/section/"
+    body = client.post("/api/discover-links", json={"url": "https://news.example/"}).json()
+    assert [(x["url"], x["same_host"]) for x in body["links"]] == [("https://www.news.example/a1", True)]
+
+
+def test_discover_endpoint_rejects_an_office_document(client, serve):
+    docx = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    serve.update(body=b"PK\x03\x04 zipped", ctype=docx)
+    assert client.post("/api/discover-links", json={"url": "https://news.example/a.docx"}).status_code == 422

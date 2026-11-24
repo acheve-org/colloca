@@ -347,9 +347,10 @@ def import_url(corpus_id: int, url: str, meta: dict, force_language: bool,
         warnings = [*result.get("warnings", []), *ingest.extraction_warnings(page, url)]
         host = (urlparse(url).hostname or "").lower()
         with db.session() as conn:
-            same = [r for r in conn.execute(
-                "SELECT source FROM documents WHERE corpus_id=? AND kind='url' AND title=? AND id<>? "
-                "AND deleted_at IS NULL", (corpus_id, page["title"], result.get("id")))
+            same = [] if page["title"].lower() == urlparse(url).netloc.lower() else [   # untitled: the host name
+                r for r in conn.execute(
+                    "SELECT source FROM documents WHERE corpus_id=? AND kind='url' AND title=? AND id<>? "
+                    "AND deleted_at IS NULL", (corpus_id, page["title"], result.get("id")))
                 if (urlparse(r["source"]).hostname or "").lower() == host]
         if same:
             warnings.append(f"Same title as {same[0]['source']}: the page may be a landing or listing page.")

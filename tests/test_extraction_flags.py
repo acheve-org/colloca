@@ -50,7 +50,8 @@ def serve(monkeypatch):
 
     def handler(request: httpx.Request) -> httpx.Response:
         key = f"{request.headers['host']}{request.url.path}"
-        return httpx.Response(200, headers={"content-type": "text/html"}, content=pages[key])
+        ctype = "text/plain" if request.url.path.endswith(".txt") else "text/html"
+        return httpx.Response(200, headers={"content-type": ctype}, content=pages[key])
 
     monkeypatch.setattr(ingest, "_transport", httpx.MockTransport(handler))
     monkeypatch.setattr(ingest, "ALLOW_PRIVATE", False)
@@ -87,3 +88,18 @@ def test_same_title_on_same_host_is_flagged(client, serve):
     jobs = warnings_by_url(client, cid, ["https://a.example/dos", "https://b.example/tres"])
     assert any("same title" in w.lower() for w in jobs["https://a.example/dos"]["result"]["warnings"])
     assert not any("same title" in w.lower() for w in jobs["https://b.example/tres"]["result"]["warnings"])
+
+
+def test_untitled_pdf_or_text_is_not_a_landing_page():
+    page = {"url": "https://news.example/a.pdf", "title": "news.example", "text": LONG, "format": "pdf"}
+    assert ingest.extraction_warnings(page, page["url"]) == []
+    assert any("landing" in w.lower() for w in ingest.extraction_warnings({**page, "format": "html"}, page["url"]))
+
+
+def test_untitled_documents_of_one_host_are_not_flagged_as_repeated_titles(client, serve):
+    serve["a.example/uno.txt"] = LONG.encode()
+    serve["a.example/dos.txt"] = (LONG.replace("empresa", "sociedad")).encode()
+    cid = make_corpus(client, "es", "plain")
+    jobs = warnings_by_url(client, cid, ["https://a.example/uno.txt", "https://a.example/dos.txt"])
+    assert all(j["status"] == "done" for j in jobs.values())
+    assert not any("same title" in w.lower() for j in jobs.values() for w in j["result"]["warnings"])

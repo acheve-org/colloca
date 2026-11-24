@@ -9,7 +9,7 @@ import threading
 import time
 import unicodedata
 from collections import Counter
-from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlsplit, urlunsplit
+from urllib.parse import urljoin, urlparse, urlsplit, urlunsplit
 
 import httpx
 
@@ -105,8 +105,8 @@ def _pinned(url: str, ip: str) -> tuple[str, dict, dict]:
     return parsed._replace(netloc=netloc).geturl(), {"Host": host_header}, {"sni_hostname": host}
 
 
-def _download(url: str, polite: bool = False) -> tuple[bytes, str]:
-    """Fetch with redirect-by-redirect SSRF checks and a size cap.
+def _fetch(url: str, polite: bool = False) -> tuple[bytes, str, str]:
+    """Fetch (body, content type, final URL after redirects) with redirect-by-redirect SSRF checks and a size cap.
 
     Each hop resolves the host once, checks the answer, and then connects to that very address (DNS rebinding:
     a name that answers differently the second time cannot redirect the connection to an internal address)."""
@@ -130,8 +130,13 @@ def _download(url: str, polite: bool = False) -> tuple[bytes, str]:
                     if size > MAX_BYTES:
                         raise IngestError(f"Download larger than {MAX_BYTES // 1024 // 1024} MB")
                     chunks.append(chunk)
-                return b"".join(chunks), resp.headers.get("content-type", "").lower()
+                return b"".join(chunks), resp.headers.get("content-type", "").lower(), url
     raise IngestError("Too many redirects")
+
+
+def _download(url: str, polite: bool = False) -> tuple[bytes, str]:
+    data, ctype, _ = _fetch(url, polite)
+    return data, ctype
 
 
 def parse_url_list(raw: list[str]) -> tuple[list[str], list[dict]]:
@@ -171,13 +176,20 @@ _FEED_ROOTS = frozenset({"rss", "feed", "rdf"})
 
 
 def _clean_link(href: str, base: str) -> str | None:
-    """An absolute http(s) URL without fragment and tracking parameters, or None."""
-    parts = urlsplit(urljoin(base, href.strip()))
-    if parts.scheme not in ("http", "https") or not parts.hostname:
+    """An absolute http(s) URL without fragment and tracking parameters, or None (also for a malformed address).
+    The query is only touched to drop tracking parameters; otherwise it stays exactly as written."""
+    try:
+        parts = urlsplit(urljoin(base, href.strip()))
+        if parts.scheme not in ("http", "https") or not parts.hostname:
+            return None
+    except ValueError:
         return None
-    query = urlencode([(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True)
-                       if not k.lower().startswith(_TRACKING) and k.lower() not in _TRACKING_EXACT])
-    return urlunsplit((parts.scheme, parts.netloc, parts.path, query, ""))
+    if parts.query:
+        pairs = parts.query.split("&")
+        keep = [p for p in pairs if not p.split("=", 1)[0].lower().startswith(_TRACKING)
+                and p.split("=", 1)[0].lower() not in _TRACKING_EXACT]
+        parts = parts._replace(query="&".join(keep))
+    return urlunsplit(parts._replace(fragment=""))
 
 
 def _local(tag) -> str:
@@ -233,7 +245,8 @@ def parse_links(data: bytes, base_url: str) -> dict:
         title = " ".join(str(doc.xpath("string(//title)")).split())
         bases = doc.xpath("//base/@href")
         if bases:
-            base_url = urljoin(base_url, bases[0])
+            with contextlib.suppress(ValueError):
+                base_url = urljoin(base_url, bases[0])
         raw = []
         for a in doc.xpath("//a[@href][not(ancestor::nav or ancestor::header or ancestor::footer "
                            "or ancestor::aside)]"):
@@ -257,10 +270,13 @@ def parse_links(data: bytes, base_url: str) -> dict:
 
 def discover_links(url: str) -> dict:
     """Fetch an index page or feed and list the links on it (one request; nothing is imported)."""
-    data, ctype = _download(url)
+    data, ctype, url = _fetch(url)               # links resolve against the page we ended up on
     head = data[:2048].lower()
-    if not (any(k in ctype for k in ("html", "xml", "rss", "atom")) or
-            any(m in head for m in (b"<html", b"<?xml", b"<rss", b"<feed", b"<!doctype html"))):
+    media = ctype.split(";")[0].strip()
+    markup = media in ("text/html", "application/xhtml+xml", "text/xml", "application/xml") or \
+        media.endswith("+xml") or "rss" in media or "atom" in media
+    if not (markup or (not media.startswith(("application/", "image/", "audio/", "video/")) and
+                       any(m in head for m in (b"<html", b"<?xml", b"<rss", b"<feed", b"<!doctype html")))):
         raise IngestError("Not a web page or a feed")
     res = parse_links(data, url)
     truncated = len(res["links"]) > MAX_DISCOVERED
@@ -350,14 +366,15 @@ def decode_text(data: bytes) -> str:
 def fetch_url(url: str, polite: bool = False) -> dict:
     data, ctype = _download(url, polite)
     if "pdf" in ctype or data[:5] == b"%PDF-":
-        text, title = extract_pdf(data), ""
+        text, title, fmt = extract_pdf(data), "", "pdf"
     elif "html" in ctype or "xml" in ctype or b"<html" in data[:2048].lower():
         title, text = extract_html(data)
+        fmt = "html"
     elif ctype.startswith("text/"):
-        text, title = decode_text(data), ""
+        text, title, fmt = decode_text(data), "", "text"
     else:
         raise IngestError(f"Unsupported content type: {ctype or 'unknown'}")
-    return {"url": url, "title": title or urlparse(url).netloc, "text": text}
+    return {"url": url, "title": title or urlparse(url).netloc, "text": text, "format": fmt}
 
 
 MIN_ARTICLE_CHARS = 300
@@ -377,7 +394,7 @@ def extraction_warnings(page: dict, url: str) -> list[str]:
         out.append(f"Very short text ({len(text)} characters): the page may not be an article.")
     if _BOILERPLATE.search(text[:500]):
         out.append("The text starts with cookie, JavaScript or paywall boilerplate: check the extraction.")
-    if title.lower() == (urlparse(url).hostname or "").lower():
+    if page.get("format", "html") == "html" and title.lower() == urlparse(url).netloc.lower():
         out.append("The page has no title of its own (landing page or index?).")
     return out
 
