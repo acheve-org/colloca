@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
+  import ContextBar from './ContextBar.svelte';
   import Rail from './Rail.svelte';
   import StatusLine from './StatusLine.svelte';
 
@@ -10,6 +11,7 @@
   <Rail />
   <div class="main">
     <StatusLine />
+    <ContextBar />
     <main id="main">{@render children()}</main>
   </div>
 </div>

@@ -17,9 +17,17 @@ describe('Rail', () => {
     expect(screen.getByRole('navigation')).toBeInTheDocument();
     const links = screen.getAllByRole('link').map((a) => a.textContent?.trim());
     expect(links).toEqual([
-      'Languages', 'Projects', 'Sources', 'Concordance', 'Collocations', 'N-grams', 'Frequency list',
+      'Change', 'Languages', 'Projects', 'Sources', 'Concordance', 'Collocations', 'N-grams', 'Frequency list',
       'Dispersion plot', 'Keyness', 'Word cloud', 'Related terms', 'Termbase', 'Candidates', 'Check text', 'Job', 'Backup and Trash',
     ]);
+  });
+
+  it('has the working context block and no project filter or New/Delete buttons', () => {
+    render(Rail);
+    expect(screen.getByText('Working in')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'New corpus' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Delete' })).toBeNull();
+    expect(screen.queryByRole('combobox', { name: 'Project' })).toBeNull();
   });
 
   it('marks only the active route with aria-current', () => {
