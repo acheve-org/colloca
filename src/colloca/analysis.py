@@ -1,5 +1,6 @@
 """Corpus analyses: frequency, concordance, collocations, n-grams, keyness."""
 import math
+import random
 import sqlite3
 from collections import Counter, defaultdict
 from dataclasses import dataclass
@@ -159,42 +160,117 @@ def lemma_counts(conn, scope) -> dict[str, int]:
 
 
 # --------------------------------------------------------------------------- concordance
-def _parse_query(q: str) -> list[str]:
-    terms = q.lower().split()
+SORTS = ("doc", "left", "right", "l1", "l2", "r1", "r2")   # whole left/right context, or the 1st/2nd word to one side
+MIN_WILDCARD_LITERALS = 3
+MAX_ANY_ORDER_ROWS = 50_000
+
+
+def _parse_query(q: str, case_sensitive: bool = False, wild: bool = False) -> list[str]:
+    """The words of a query. `*` (only with `wild`) may start and/or end a word: `contrat*`, `*miento`."""
+    terms = (q if case_sensitive else q.lower()).split()
     if not terms or len(terms) > 6:
         raise ValueError("Query must have 1-6 words")
+    if wild:
+        for term in terms:
+            if "*" not in term:
+                continue
+            if "*" in term.strip("*"):
+                raise ValueError("The wildcard * can only start or end a word, as in contrat* or *miento")
+            if len(term.strip("*")) < MIN_WILDCARD_LITERALS:
+                raise ValueError(f"A word with a wildcard needs at least {MIN_WILDCARD_LITERALS} letters besides *")
     return terms
 
 
-def _find_hits(conn, scope, terms, col):
-    """Positions where the word sequence `terms` occurs (matching on lemma or form)."""
+def _glob(term: str) -> str:
+    """Escape GLOB's own special characters (? [) in the literal part of a word; `*` stays a wildcard."""
+    return term.replace("[", "[[]").replace("?", "[?]")
+
+
+def _term_cond(alias: str, col: str, term: str, case_sensitive: bool, wild: bool) -> tuple[str, list]:
+    """SQL condition and parameters matching one word on `alias`.`col`. Case-sensitive matching compares the
+    written `form`; the lower-cased column is still tested first so its index narrows the search."""
+    if case_sensitive:
+        lowered = term.lower()
+        if wild and "*" in term:
+            return (f"{alias}.norm GLOB ? AND {alias}.form GLOB ?", [_glob(lowered), _glob(term)])
+        return (f"{alias}.norm=? AND {alias}.form=?", [lowered, term])
+    if wild and "*" in term:
+        return f"{alias}.{col} GLOB ?", [_glob(term)]       # GLOB is case-sensitive: uses the index for a prefix
+    return f"{alias}.{col}=?", [term]
+
+
+def _find_hits(conn, scope, terms, col, case_sensitive=False, any_order=False, wild=False):
+    """Hits of the word sequence `terms` (matching on lemma or form): dicts with doc_id, pos (first token),
+    sent, span (tokens from the first to the last matched word) and ps (positions of the matched words).
+    With `any_order` the words may come in any
+    order inside one sentence, and `span` covers everything between the first and last of them."""
     w, scope_params = as_scope(scope).where()
     joins, conds, params = [], [], list(scope_params)
     for i, term in enumerate(terms):
         if i:
-            joins.append(f"JOIN tokens t{i} ON t{i}.doc_id=t0.doc_id AND t{i}.pos=t0.pos+{i}")
-        conds.append(f"t{i}.{col}=?")
-        params.append(term)
-    sql = (f"SELECT t0.doc_id, t0.pos, t0.sent FROM tokens t0 {' '.join(joins)} "
-           f"JOIN documents d ON d.id=t0.doc_id WHERE {w} AND {' AND '.join(conds)} "
-           "ORDER BY t0.doc_id, t0.pos")
-    return conn.execute(sql, params).fetchall()
+            if any_order:
+                joins.append(f"JOIN tokens t{i} ON t{i}.doc_id=t0.doc_id AND t{i}.sent=t0.sent "
+                             f"AND t{i}.pos BETWEEN t0.pos-60 AND t0.pos+60 "
+                             + "".join(f"AND t{i}.pos<>t{j}.pos " for j in range(i)))
+            else:
+                joins.append(f"JOIN tokens t{i} ON t{i}.doc_id=t0.doc_id AND t{i}.pos=t0.pos+{i}")
+        cond, p = _term_cond(f"t{i}", col, term, case_sensitive, wild)
+        conds.append(cond)
+        params += p
+    select = "t0.doc_id, t0.sent, " + ", ".join(f"t{i}.pos AS p{i}" for i in range(len(terms)))
+    sql = (f"SELECT {select} FROM tokens t0 {' '.join(joins)} JOIN documents d ON d.id=t0.doc_id "
+           f"WHERE {w} AND {' AND '.join(conds)} ORDER BY t0.doc_id, t0.pos")
+    if any_order:
+        sql += f" LIMIT {MAX_ANY_ORDER_ROWS}"
+    out, seen = [], set()
+    for r in conn.execute(sql, params):
+        ps = [r[f"p{i}"] for i in range(len(terms))]
+        if any_order:
+            key = (r["doc_id"], frozenset(ps))
+            if key in seen:
+                continue
+            seen.add(key)
+        first, last = min(ps), max(ps)
+        out.append({"doc_id": r["doc_id"], "pos": first, "sent": r["sent"], "span": last - first + 1,
+                    "ps": sorted(ps)})
+    if any_order:
+        out.sort(key=lambda h: (h["doc_id"], h["pos"]))
+    return out
 
 
 def _join(rows) -> str:
     return "".join(r["form"] + (" " if r["sp"] else "") for r in rows).strip()
 
 
-def concordance(conn, scope, q, unit="lemma", width=8, limit=300, sort="doc"):
+def _sort_key(sort: str):
+    """Key over a line's reversed left words `_l` and right words `_r` (all lower-cased)."""
+    if sort in ("left", "right"):
+        side = "_l" if sort == "left" else "_r"
+        return lambda x: x[side]
+    side, k = ("_l" if sort[0] == "l" else "_r"), int(sort[1]) - 1
+    return lambda x: (x[side][k:k + 1], x[side])
+
+
+def concordance(conn, scope, q, unit="lemma", width=8, limit=300, sort="doc",
+                case_sensitive=False, any_order=False, sample=None):
+    """KWIC lines. `case_sensitive` matches the written form exactly, `*` is a wildcard at the start or end of
+    a word, `any_order` finds the words anywhere in one sentence, and `sample` (a seed) returns a reproducible
+    random selection of `limit` hits instead of the first ones. `total` is always the number of hits found."""
     scope = as_scope(scope)
+    if sort not in SORTS:
+        raise ValueError(f"sort must be one of {', '.join(SORTS)}")
     col = _unit(unit)
-    terms = _parse_query(q)
-    hits = _find_hits(conn, scope, terms, col)
-    n = len(terms)
+    terms = _parse_query(q, case_sensitive, wild=True)
+    hits = _find_hits(conn, scope, terms, col, case_sensitive, any_order, wild=True)
+    total = len(hits)
+    if sample is not None and total > limit:
+        keep = sorted(random.Random(sample).sample(range(total), limit))   # context is fetched for these only
+        hits = [hits[i] for i in keep]
     titles = {r["id"]: r["title"] for r in
               conn.execute("SELECT id,title FROM documents WHERE corpus_id=?", (scope.corpus_id,))}
     lines = []
     for h in hits[:limit * 5 if sort != "doc" else limit]:
+        n = h["span"]
         ctx = conn.execute(
             "SELECT pos, form, sp FROM tokens WHERE doc_id=? AND pos BETWEEN ? AND ? ORDER BY pos",
             (h["doc_id"], h["pos"] - width, h["pos"] + n - 1 + width)).fetchall()
@@ -202,17 +278,15 @@ def concordance(conn, scope, q, unit="lemma", width=8, limit=300, sort="doc"):
         node = [r for r in ctx if h["pos"] <= r["pos"] < h["pos"] + n]
         right = [r for r in ctx if r["pos"] >= h["pos"] + n]
         lines.append({"doc_id": h["doc_id"], "doc": titles.get(h["doc_id"], ""), "pos": h["pos"],
-                      "left": _join(left), "node": _join(node), "right": _join(right),
+                      "matches": h["ps"], "left": _join(left), "node": _join(node), "right": _join(right),
                       "_l": [r["form"].lower() for r in reversed(left)],
                       "_r": [r["form"].lower() for r in right]})
-    if sort == "left":
-        lines.sort(key=lambda x: x["_l"])
-    elif sort == "right":
-        lines.sort(key=lambda x: x["_r"])
+    if sort != "doc":
+        lines.sort(key=_sort_key(sort))
     lines = lines[:limit]
     for ln in lines:
         ln.pop("_l"), ln.pop("_r")
-    return {"total": len(hits), "lines": lines}
+    return {"total": total, "lines": lines}
 
 
 def examples(conn, scope, q, unit="lemma", limit=5):

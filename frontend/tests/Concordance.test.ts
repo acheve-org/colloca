@@ -154,6 +154,53 @@ describe('Concordance', () => {
     expect(csvLimit()).toEqual(['/api/corpora/1/bilingual', '500', 'csv']);
   });
 
+  it('does not send the new options unless they are on', async () => {
+    render(Concordance);
+    await search('casa');
+    const p = searches()[0].params;
+    expect(p.has('case_sensitive') || p.has('any_order') || p.has('sample')).toBe(false);
+  });
+
+  it('sends case, any order, limit and a sample seed, and the CSV link keeps them', async () => {
+    render(Concordance);
+    await fireEvent.click(screen.getByRole('switch', { name: 'Case sensitive' }));
+    await fireEvent.click(screen.getByRole('switch', { name: 'Any order' }));
+    await fireEvent.click(screen.getByRole('switch', { name: 'Random sample' }));
+    await fireEvent.change(screen.getByRole('combobox', { name: 'Hits' }), { target: { value: '100' } });
+    await fireEvent.change(screen.getByRole('combobox', { name: 'Sort' }), { target: { value: 'r2' } });
+    await search('contrat*');
+    const p = searches()[0].params;
+    expect(p.get('q')).toBe('contrat*');
+    expect([p.get('case_sensitive'), p.get('any_order'), p.get('limit'), p.get('sort')]).toEqual([
+      'true', 'true', '100', 'r2',
+    ]);
+    const seed = p.get('sample');
+    expect(Number(seed)).toBeGreaterThan(0);
+    const href = new URL(screen.getAllByRole('link', { name: 'CSV' })[0].getAttribute('href')!, 'http://x');
+    expect(href.searchParams.get('sample')).toBe(seed);
+    expect(href.searchParams.get('case_sensitive')).toBe('true');
+    await fireEvent.click(screen.getByRole('button', { name: 'New sample' }));
+    await waitFor(() => expect(searches()).toHaveLength(2));
+    expect(searches()[1].params.get('q')).toBe('contrat*');
+  });
+
+  it('narrows the loaded lines by left and right context without a new request', async () => {
+    conc.body = {
+      total: 3,
+      lines: [line(1, { left: 'el gran', right: 'nuevo' }), line(2, { left: 'la pequeña', right: 'viejo' }),
+        line(3, { left: 'el GRAN', right: 'viejo' })],
+    };
+    render(Concordance);
+    await search('casa');
+    expect(bodyRows()).toHaveLength(3);
+    await fireEvent.input(screen.getByRole('searchbox', { name: 'Left context contains' }), { target: { value: 'gran' } });
+    expect(bodyRows()).toHaveLength(2);
+    await fireEvent.input(screen.getByRole('searchbox', { name: 'Right context contains' }), { target: { value: 'VIEJO' } });
+    expect(bodyRows()).toHaveLength(1);
+    expect(screen.getByText('(1 match the filters)')).toBeInTheDocument();
+    expect(searches()).toHaveLength(1);
+  });
+
   it('renders results in order with the node highlighted and counts', async () => {
     render(Concordance);
     await search('casa');
