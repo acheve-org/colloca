@@ -157,6 +157,26 @@ searches use, and is written back on export (switch it off for plain text). Impo
 several partner corpora choose one (`partner_corpus_id`); the document filter narrows the documents. The structure is checked by the tests
 against the content model of the TMX 1.4b DTD, but the official DTD file has not been used and no CAT tool has opened an export yet.
 
+## Segment lookup (match percentages)
+
+*Explore > Segment lookup* (visible when the corpus has aligned documents; `POST /api/corpora/{id}/segment-lookup`) takes a source segment and
+lists the stored source segments that resemble it, best first, each with a **match percentage**, its band (100, 95 to 99, 85 to 94, 75 to 84,
+below 75), the **aligned translation** and the difference word by word: blue and underlined = words only the stored segment has, struck through
+= words only yours has; *Open* shows the document at that segment. It works on the corpus you are in, as the source side (select the Italian
+corpus to look up Italian segments).
+
+How the percentage is computed: both segments are cut into words and numbers with the corpus's tokenizer; case, punctuation and inline tags
+(`<b>`, `{1}`, `%s`) are ignored; the percentage is the share of words not changed by the fewest insertions, deletions and replacements
+(Levenshtein distance over words), rounded down, so **100 means the same words** (*identical* is shown when the writing is the same too). A
+number that differs is an ordinary changed word, flagged *numbers differ* when it is the only difference. Candidates come from the word index
+(segments that share words with yours, the most shared first, at most 400 scored), so a lookup takes milliseconds to a second even in a large
+corpus; a segment that shares no word with yours is not found. It is a lookup aid over the texts in Colloca: the figure is not the one your
+CAT tool would give, and nothing is written to a corpus.
+
+The **Job** screen can use it for a leverage estimate: tick *estimate leverage from aligned texts* and the report adds the share of the text's
+words in sentences with a 75% or better match, with the number of sentences per band in its tooltip (`leverage=true` on `analyse-job`; up to
+1,500 sentences are looked up, which can take a while).
+
 ## Analyse a job before translating
 
 The **Job** screen takes the text you are about to translate (a DOCX, PDF, TXT or HTML file, or pasted text) and reports,

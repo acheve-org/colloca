@@ -33,9 +33,11 @@ describe('Rail', () => {
   it('hides Equivalents unless the corpus is aligned', async () => {
     render(Rail);
     expect(screen.queryByRole('link', { name: 'Equivalents' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Segment lookup' })).toBeNull();
     corpusStore.aligned = true;
     await tick();
     expect(screen.getByRole('link', { name: 'Equivalents' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Segment lookup' })).toBeInTheDocument();
   });
 
   it('links each screen with the params it was last on', async () => {

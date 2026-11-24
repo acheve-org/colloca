@@ -319,6 +319,36 @@ export interface JobSummary {
   termbase_size: number;
   /** "base" when the key terms are ranked against a base corpus. */
   reference: "base" | null;
+  /** Only when asked for: how much of the text the aligned documents already translate. */
+  leverage?: JobLeverage | null;
+}
+export interface JobLeverage {
+  segments: number;
+  words: number;
+  covered_pct: number;
+  truncated: boolean;
+  bands: Record<string, { segments: number; words: number }>;
+}
+/** POST /segment-lookup */
+export interface LookupMatch {
+  doc_id: number;
+  doc: string;
+  seg: number;
+  pos: number;
+  span: number;
+  percent: number;
+  band: string;
+  exact: boolean;
+  numbers_differ: boolean;
+  only_numbers_differ: boolean;
+  source: string;
+  target: string;
+  diff: { text: string; kind: "same" | "extra" | "missing"; sp: boolean }[];
+}
+export interface LookupResult {
+  query_words: number;
+  found: number;
+  matches: LookupMatch[];
 }
 export interface JobTranslation {
   id: number;

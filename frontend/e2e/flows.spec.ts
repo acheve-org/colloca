@@ -49,3 +49,22 @@ test('job analysis: paste a text and read the coverage report', async ({ page })
   await expect(page.getByText('words', { exact: true }).first()).toBeVisible({ timeout: 60_000 });
   await expect(page.getByRole('link', { name: /csv/i }).first()).toBeVisible();
 });
+
+test('segment lookup: a segment with one word changed finds its stored match and translation', async ({ page }) => {
+  await newCorpus(page, 'Memoria');
+  await page.getByLabel('Aligned file').setInputFiles(join(import.meta.dirname, 'aligned.tsv'));
+  await page.getByLabel('Translations go to').selectOption({ label: '+ new corpus…' });
+  await page.getByLabel('Name of the new corpus').fill('Memoria IT');
+  await page.getByRole('button', { name: 'Import', exact: true }).click();
+  await expect(page.getByRole('row', { name: /aligned/ })).toBeVisible({ timeout: 60_000 });
+
+  await page.getByRole('navigation').getByRole('link', { name: 'Segment lookup' }).click();
+  await page.getByLabel('Segment to look up').fill('El parque eólico de la sierra es antiguo.');
+  await page.getByLabel('At least').selectOption('70');
+  await page.getByRole('button', { name: 'Look up' }).click();
+  const first = page.getByRole('list', { name: 'Similar segments' }).getByRole('listitem').first();
+  await expect(first).toContainText('%');
+  await expect(first).toContainText('Il parco eolico della sierra è nuovo.');
+  await expect(first.locator('.extra')).toHaveText('nuevo');
+  await expect(first.locator('.missing')).toHaveText('antiguo');
+});

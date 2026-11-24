@@ -41,6 +41,7 @@
   let minCorpus = $state<number | null>(3);
   let force = $state(false);
   let keepText = $state(false);
+  let leverage = $state(false);
 
   const report = $derived(analysis.report);
   const busy = $derived(analysis.busy);
@@ -78,6 +79,7 @@
         min_corpus_freq: toInt(minCorpus, 3),
         force_language: force,
         keep_text: keepText,
+        leverage,
         ...scopeParams(),
       },
       source: file?.name ?? '',
@@ -86,6 +88,15 @@
 
   // ------------------------------------------------------------------ report
   const pct = (v: number) => `${v}%`;
+  const leverageHint = (l: { segments: number; bands: Record<string, { segments: number }> }) =>
+    t('job.stat.leverageHint', {
+      n: l.segments,
+      b100: l.bands['100']?.segments ?? 0,
+      b95: l.bands['95-99']?.segments ?? 0,
+      b85: l.bands['85-94']?.segments ?? 0,
+      b75: l.bands['75-84']?.segments ?? 0,
+      none: l.bands.below75?.segments ?? 0,
+    });
   const sectionUrl = (name: string) => `${analysis.resultPath}?${qs({ section: name, format: 'csv' })}`;
   const workbookUrl = $derived(`${analysis.resultPath}?${qs({ format: 'xlsx' })}`);
 
@@ -335,6 +346,9 @@
       </Field>
       <div class="force"><Toggle bind:checked={force} label={t('job.force')} /></div>
       <div class="force" title={t('job.keepTextHint')}><Toggle bind:checked={keepText} label={t('job.keepText')} /></div>
+      {#if corpusStore.aligned}
+        <div class="force" title={t('job.leverageHint')}><Toggle bind:checked={leverage} label={t('job.leverage')} /></div>
+      {/if}
       <div class="actions">
         <Button variant="primary" disabled={busy} onclick={analyse}>{t('job.go')}</Button>
         <span class="progress" aria-live="polite">
@@ -418,6 +432,9 @@
           {@render stat(t('job.stat.seen'), pct(summary.coverage_seen_pct), t('job.stat.seenHint'))}
           {@render stat(t('job.stat.gaps'), summary.uncovered_types, t('job.stat.gapsHint'))}
           {@render stat(t('job.stat.terms'), `${summary.termbase_terms_found} / ${summary.termbase_size}`)}
+          {#if summary.leverage}
+            {@render stat(t('job.stat.leverage'), pct(summary.leverage.covered_pct), leverageHint(summary.leverage))}
+          {/if}
         </div>
         {#if !summary.corpus_words}<p class="error">{t('job.emptyCorpus')}</p>{/if}
         {#if summary.language_check === 'uncertain'}<p class="muted">{t('job.uncertain')}</p>{/if}

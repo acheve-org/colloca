@@ -42,14 +42,14 @@ The T-numbers are stable labels used for cross-references; the **row order is th
 | T08 | Align two documents automatically when no TMX exists | High | L | P1 | New |
 | T09 | Keyboard-first layer | High | M | P1 | Research #2 |
 | T10 | Termbase table: sort, filter, inline edit, `admitted` and `superseded` statuses | Medium | M | P2 | Research #4, #5 |
-| T11 | Job report: save and reopen, whole report as one Excel file (**done**; leverage figure waits for T18) | Medium | M | P2 | New |
+| T11 | Job report: save and reopen, whole report as one Excel file (**done**, with the leverage figure from T18) | Medium | M | P2 | New |
 | T12 | Input formats: OCR for scanned PDFs, XLIFF, ODT, RTF, XLSX, SRT | Medium | L | P2 | Roadmap 12 |
 | T13 | Advanced query language: regex, lemma + part of speech, distance patterns, accent-insensitive (**done**, `docs/query-language.md`) | Medium | L | P2 | Roadmap 11 |
 | T14 | Project backup and restore, undo for deletes (**done**) | Medium | M | P2 | Audit, New |
 | T15 | Termbase hits and forbidden terms marked inside concordance lines, "check text" box | Medium | M | P2 | Research #6 |
 | T16 | Near-duplicate document detection (**done**) | Medium | M | P2 | Roadmap 13 |
 | T17 | Query performance for large corpora | Medium | M | P2 | Roadmap 16 |
-| T18 | Segment lookup with match percentages (fuzzy matching against aligned texts) | Medium | L | P2 | Research #9 |
+| T18 | Segment lookup with match percentages (fuzzy matching against aligned texts) (**done**) | Medium | L | P2 | Research #9 |
 | T28 | Engineering health: browser tests, split `app.js`, logging, type checking (**partly done**: browser tests, UI split) | Medium | M | P2 | Audit |
 | T19 | Term entry model: several terms per language, term-level notes, gender and number | Medium | L | P3 | Research #11 |
 | T20 | TMX export of aligned corpora, keep TMX inline markup (**done**, not yet checked against the official DTD or a CAT tool) | Low | M | P3 | Research #10 |
@@ -519,6 +519,10 @@ lemma table and runs one SQL query per hit. A base corpus of several million wor
 ### T18. Segment lookup with match percentages (fuzzy matching against aligned texts)
 
 **Priority** P2 · **Value** Medium · **Effort** L · **Source** Research #9
+
+**Status: done** (`segmentlookup.py`, *Explore > Segment lookup*, `leverage` in the job report): token-level edit distance over candidates from the word index (`idx_tokens_norm`),
+bands, aligned target, word-level difference, numbers flagged; no new table (an index of word shingles was not needed: the existing token index finds the candidates).
+Checked on small synthetic memories, not timed on a large one; see the README for how the percentage is defined and what it is not.
 
 **Why it matters.** The shared vocabulary of CAT tools is the match percentage (100 exact, 75+ useful). Colloca holds aligned segments but cannot be queried with
 a whole segment. The translator's own CAT tool already does this, so the value is in applying it to corpora that are not in the CAT tool.
