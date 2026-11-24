@@ -158,4 +158,49 @@ describe('Kwic', () => {
     await fireEvent.click(bodyRows()[1]);
     expect(onselect).toHaveBeenCalledWith(lines[1]);
   });
+
+  it('marks termbase hits with the approved translation on hover, and forbidden ones with a warning', () => {
+    const mark = (start: number, end: number, over = {}) => ({
+      start, end, kind: 'term' as const, term: 'casa', of: '', translations: ['casa'], forbidden: [], ids: [1], ...over,
+    });
+    render(Kwic, {
+      lines: [
+        line(1, {
+          source: 'La casa es grande.',
+          target: 'La dimora è grande.',
+          source_terms: [mark(3, 7)],
+          target_terms: [mark(3, 9, { kind: 'forbidden', term: 'dimora', translations: ['casa'] })],
+        }),
+      ],
+      mode: 'bilingual',
+      query: 'casa',
+      selected: null,
+    });
+    const row = bodyRows()[0];
+    // the query word is also a term: it keeps the query look, gains the term underline and the tooltip
+    const q = row.querySelector('.src .hit-query');
+    expect(q).toHaveClass('in-term');
+    expect(q).toHaveAttribute('title', expect.stringContaining('Approved translation: casa'));
+    const bad = row.querySelector('.tgt .hit-forbidden');
+    expect(bad?.textContent).toBe('dimora');
+    expect(bad).toHaveAttribute('title', expect.stringContaining('Forbidden translation'));
+    expect(bad).toHaveAttribute('title', expect.stringContaining('Use: casa'));
+  });
+
+  it('marks terms in KWIC context columns', () => {
+    render(Kwic, {
+      lines: [
+        line(1, {
+          right: 'de arrendamiento',
+          right_terms: [{ start: 0, end: 16, kind: 'term', term: 'x', of: '', translations: [], forbidden: ['y'], ids: [1] }],
+        }),
+      ],
+      mode: 'kwic',
+      query: 'casa',
+      selected: null,
+    });
+    const t = bodyRows()[0].querySelector('.hit-term');
+    expect(t?.textContent).toBe('de arrendamiento');
+    expect(t).toHaveAttribute('title', expect.stringContaining('Avoid: y'));
+  });
 });

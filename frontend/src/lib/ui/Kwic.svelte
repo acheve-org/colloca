@@ -14,7 +14,7 @@
 
 <script lang="ts">
   import { t } from '../i18n';
-  import { sourceRanges, targetIsGuess, targetRanges } from '../highlight';
+  import { sourceRanges, targetIsGuess, targetRanges, termRanges } from '../highlight';
   import DataTable from './DataTable.svelte';
   import type { Column } from './DataTable.types';
   import Highlight from './Highlight.svelte';
@@ -80,11 +80,11 @@
   {#if col.key === 'n'}
     {num(l)}
   {:else if col.key === 'left'}
-    <span class="left"><span>{l.left}</span></span>
+    <span class="left"><span><Highlight text={l.left} ranges={termRanges(l.left_terms)} /></span></span>
   {:else if col.key === 'node'}
-    <span class="node"><span class="hit-query">{l.node}</span></span>
+    <span class="node"><span class="hit-query"><Highlight text={l.node} ranges={termRanges(l.node_terms)} /></span></span>
   {:else if col.key === 'right'}
-    {l.right}
+    <Highlight text={l.right} ranges={termRanges(l.right_terms)} />
   {:else if col.key === 'source'}
     <span class="seg src" data-side="source"><Highlight text={l.source ?? ''} ranges={sourceRanges(l)} /></span>
   {:else if col.key === 'target'}

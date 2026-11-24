@@ -28,7 +28,7 @@
   import { get } from '../lib/api';
   import { CORPUS_CHANGED, corpusStore, scopeParams } from '../lib/corpus.svelte';
   import { csvUrl } from '../lib/csv';
-  import { sourceRanges, targetIsGuess, targetRanges } from '../lib/highlight';
+  import { sourceRanges, targetIsGuess, targetRanges, termRanges } from '../lib/highlight';
   import { t } from '../lib/i18n';
   import { messages } from '../lib/messages.svelte';
   import { go, route } from '../lib/router.svelte';
@@ -279,7 +279,7 @@
 </script>
 
 {#snippet context(l: ConcLine)}
-  {l.left}{l.left ? ' ' : ''}<span class="hit-query">{l.node}</span>{l.right ? ' ' : ''}{l.right}
+  <Highlight text={l.left} ranges={termRanges(l.left_terms)} />{l.left ? ' ' : ''}<span class="hit-query"><Highlight text={l.node} ranges={termRanges(l.node_terms)} /></span>{l.right ? ' ' : ''}<Highlight text={l.right} ranges={termRanges(l.right_terms)} />
 {/snippet}
 
 <div class="cc">

@@ -16,7 +16,7 @@ from dataclasses import replace
 from defusedxml import DefusedXmlException
 from defusedxml import ElementTree as SafeET
 
-from . import analysis, db, importer, ingest
+from . import analysis, db, importer, ingest, termhits
 
 PAIRS_PER_DOC = 5000              # translation units per stored document pair
 MAX_SEGMENT_CHARS = 3000          # longer segments are skipped (they are paragraphs, not translation units)
@@ -286,6 +286,8 @@ def bilingual_concordance(conn, scope, q, unit="lemma", width=8, limit=300, sort
                        key=lambda r: len(os.path.commonprefix([r["item"], q_norm])))
             guesses.append(([pick["item"].lower()], pick["dice"], True))
     cache: dict = {}
+    corpus = conn.execute("SELECT lang, project_id FROM corpora WHERE id=?", (scope.corpus_id,)).fetchone()
+    partner_lang: dict[int, str] = {}
     for line in res["lines"]:
         seg = segment_at(conn, line["doc_id"], line["pos"])
         partner = _pair_of(conn, cache, line["doc_id"])
@@ -309,6 +311,14 @@ def bilingual_concordance(conn, scope, q, unit="lemma", width=8, limit=300, sort
             if tmarks:
                 break
         line["target_marks"] = sorted(tmarks, key=lambda m: m["start"])
+        # termbase hits (forms and lemmas, multi-word) and forbidden translations, as offsets too
+        line["source_terms"] = termhits.find(conn, corpus["project_id"], corpus["lang"], src_toks)
+        if partner not in partner_lang:
+            row = conn.execute("SELECT c.lang FROM documents d JOIN corpora c ON c.id=d.corpus_id WHERE d.id=?",
+                               (partner,)).fetchone() if partner else None
+            partner_lang[partner] = row["lang"] if row else ""
+        line["target_terms"] = (termhits.find(conn, corpus["project_id"], partner_lang[partner], tgt_toks)
+                                if partner_lang[partner] else [])
     return res
 
 

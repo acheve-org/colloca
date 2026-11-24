@@ -278,7 +278,7 @@ def concordance(conn, scope, q, unit="lemma", width=8, limit=300, sort="doc",
         node = [r for r in ctx if h["pos"] <= r["pos"] < h["pos"] + n]
         right = [r for r in ctx if r["pos"] >= h["pos"] + n]
         lines.append({"doc_id": h["doc_id"], "doc": titles.get(h["doc_id"], ""), "pos": h["pos"],
-                      "matches": h["ps"], "left": _join(left), "node": _join(node), "right": _join(right),
+                      "span": n, "matches": h["ps"], "left": _join(left), "node": _join(node), "right": _join(right),
                       "_l": [r["form"].lower() for r in reversed(left)],
                       "_r": [r["form"].lower() for r in right]})
     if sort != "doc":

@@ -32,7 +32,11 @@
         { id: 'equivalents', label: 'nav.equivalents', visible: () => corpusStore.aligned },
       ],
     },
-    { group: 'nav.group.terms', items: [{ id: 'termbase', label: 'nav.termbase' }] },
+    { group: 'nav.group.terms', items: [
+        { id: 'termbase', label: 'nav.termbase' },
+        { id: 'check', label: 'nav.check' },
+      ],
+    },
     { group: 'nav.group.job', items: [{ id: 'job', label: 'nav.job' }] },
   ];
 </script>

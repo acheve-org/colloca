@@ -12,7 +12,20 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import analysis, db, docview, importer, ingest, jobanalysis, metadata, nlp, parallel, termbase, termexport
+from . import (
+    analysis,
+    db,
+    docview,
+    importer,
+    ingest,
+    jobanalysis,
+    metadata,
+    nlp,
+    parallel,
+    termbase,
+    termexport,
+    termhits,
+)
 
 
 @asynccontextmanager
@@ -443,7 +456,7 @@ def bilingual(corpus_id: int, q: str, unit: str = "lemma", width: int = Query(8,
         res = _run(parallel.bilingual_concordance, conn, sq.scope(corpus_id), q, unit, width, limit, sort,
                    case_sensitive, any_order, sample)
     if format == "csv":
-        hidden = ("pos", "doc_id", "matches", "source_marks", "target_marks")
+        hidden = ("pos", "doc_id", "span", "matches", "source_marks", "target_marks", "source_terms", "target_terms")
         return _reply([{k: v for k, v in ln.items() if k not in hidden} for ln in res["lines"]],
                       format, "bilingual")
     return res
@@ -645,8 +658,10 @@ def concordance(corpus_id: int, q: str, unit: str = "lemma", width: int = Query(
         _corpus(conn, corpus_id)
         res = _run(analysis.concordance, conn, sq.scope(corpus_id), q, unit, width, limit, sort,
                    case_sensitive, any_order, sample)
+        termhits.mark_kwic(conn, corpus_id, res["lines"], width)
     if format == "csv":
-        return _reply([{k: v for k, v in ln.items() if k not in ("pos", "matches")} for ln in res["lines"]],
+        hidden = ("pos", "matches", "span", "left_terms", "node_terms", "right_terms")
+        return _reply([{k: v for k, v in ln.items() if k not in hidden} for ln in res["lines"]],
                       format, "concordance")
     return res
 
@@ -874,6 +889,26 @@ def export_terms(format: str = "tbx", project: str = "", src_lang: str = "", tgt
     media, ext = _EXPORTS[format]
     return Response(body, media_type=media,
                     headers={"Content-Disposition": f'attachment; filename="termbase.{ext}"'})
+
+
+# --------------------------------------------------------------------------- check text (termbase hits)
+class CheckTextIn(BaseModel):
+    text: str = Field(max_length=termhits.MAX_CHECK_CHARS)
+    lang: str = ""            # language of the text: the corpus's (a source segment) or the other (a draft translation)
+
+
+@app.post("/api/corpora/{corpus_id}/check-text")
+def check_text(corpus_id: int, body: CheckTextIn):
+    """Mark the termbase hits of the corpus's project (and the general termbase) in a pasted source segment or
+    draft translation, and flag forbidden translations. Returns the text per line with character offsets."""
+    with db.session() as conn:
+        corpus = _corpus(conn, corpus_id)
+        lang = body.lang or corpus["lang"]
+        if lang not in nlp.SUPPORTED:
+            raise HTTPException(400, f"lang must be one of {', '.join(nlp.SUPPORTED)}")
+        if not body.text.strip():
+            raise HTTPException(400, "Paste the text to check")
+        return termhits.check(conn, corpus["project_id"], lang, body.text)
 
 
 _UI_MISSING = (

@@ -1,5 +1,7 @@
 // Minimal shapes of the API responses the UI reads (see src/colloca/main.py).
 
+import type { TermMark } from './highlight';
+
 export interface Project {
   id: number;
   name: string;
@@ -106,13 +108,29 @@ export interface BilingualLine extends ConcordanceLine {
   source_marks?: { start: number; end: number }[];
   /** Character offsets into `target`: the likely equivalent (`guess` = statistical, else a termbase term). */
   target_marks?: { start: number; end: number; score: number; guess: boolean }[];
+  /** Termbase hits and forbidden translations (offsets into `source` / `target`). */
+  source_terms?: TermMark[];
+  target_terms?: TermMark[];
 }
 export interface BilingualResult {
   total: number;
   lines: BilingualLine[];
 }
 /** A concordance line from either endpoint; `source`/`target` only in bilingual results. */
-export type ConcLine = ConcordanceLine & Partial<Pick<BilingualLine, 'source' | 'target' | 'source_marks' | 'target_marks'>>;
+export type ConcLine = ConcordanceLine &
+  Partial<Pick<BilingualLine, 'source' | 'target' | 'source_marks' | 'target_marks' | 'source_terms' | 'target_terms'>> & {
+    /** KWIC lines: termbase marks as offsets into `left`, `node`, `right`. */
+    left_terms?: TermMark[];
+    node_terms?: TermMark[];
+    right_terms?: TermMark[];
+  };
+
+/** Result of POST /check-text. */
+export interface CheckTextResult {
+  lang: string;
+  lines: { text: string; marks: TermMark[] }[];
+  summary: { hits: number; forbidden: number };
+}
 
 export interface CollocationRow {
   item: string;
