@@ -18,7 +18,9 @@ docker compose up               # first start downloads the spaCy models into `~
 The image does not bundle the spaCy models; they live in `~/.spacy` on the host (mounted at `/models`), which keeps the
 image small and lets you swap sizes without rebuilding: set `SPACY_SIZE` (sm|md|lg) for the `colloca` service in
 `docker-compose.yml`; missing models are downloaded on start (`docker compose run --rm colloca download-models`
-prefetches them). Data lives in the
+prefetches them). The compose file sets `SPACY_SIZE: lg`, so **Docker uses the large (`lg`) models by default**; this is
+the recommended setup for real work. The active model per language is shown in the status line at the top of the
+window, with a warning when a language runs on a small (`sm`) model. Data lives in the
 `colloca-data` volume; back it up with `docker run --rm -v colloca-data:/d -v $PWD:/b alpine tar czf /b/colloca-backup.tgz -C /d .`.
 
 ## Workflow
@@ -156,13 +158,16 @@ Tooling: [mise](https://mise.jdx.dev) (Python 3.14 + uv) and [uv](https://docs.a
 
 ```bash
 mise install                  # Python 3.14 and uv
-mise run sync                 # uv sync: dependencies + small spaCy models (dev group)
+mise run sync                 # uv sync: dependencies + the small (sm) spaCy models, for development and tests only
 mise run test                 # uv run pytest
 mise run lint                 # uv run ruff check . (CI runs lint + tests on every push and PR)
 mise run dev                  # uvicorn with auto-reload on http://localhost:8000
 ```
 
-The loader falls back to whichever installed model size is available (`SPACY_SIZE` sets the preferred one).
+The loader falls back to whichever installed model size is available (`SPACY_SIZE` sets the preferred one; without
+it the order is `md`, `sm`, `lg`). So a local `uv sync` run uses `sm`, which is fine for tests but not for judging
+lemma quality: install `md` or `lg` (`uv pip install` the wheel from the spacy-models releases, or `python -m spacy
+download es_core_news_lg it_core_news_lg`) and set `SPACY_SIZE`. `GET /api/status` reports what is in use.
 Add dependencies with `uv add <pkg>`; `uv.lock` is committed.
 
 Layout (`src` layout): `src/colloca/ingest.py` (URL/DOCX/PDF → text), `nlp.py` (spaCy),
@@ -227,7 +232,7 @@ mise run ui:e2e               # builds the UI and runs the Playwright end-to-end
 - No OCR: scanned PDFs are rejected. No JavaScript rendering for URLs (pages that need it fail to extract).
 - Extraction is heuristic: always review the preview. URL fetching respects no robots.txt (you choose the URLs);
   it blocks private/internal addresses (`ALLOW_PRIVATE_URLS=1` to override). No authentication: bind to localhost only.
-- Small spaCy models make lemma/POS errors; use `md`/`lg` for better quality. A document in the
+- Small spaCy models make lemma/POS errors; use `lg` (the Docker default) for better quality. A document in the
   wrong language is only caught when the check is confident (see Safeguards).
 - No synonym/related-term module yet (planned: thesaurus + embeddings, labelled as "related terms").
 - Jobs are kept in memory: a server restart forgets their status (documents already imported stay).

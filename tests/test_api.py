@@ -321,3 +321,19 @@ def test_reannotate_outdated_documents(client):
             break
         time.sleep(0.05)
     assert jobs[1]["result"] == {"updated": 0}
+
+
+def test_status_reports_model_per_language(client):
+    body = client.get("/api/status").json()
+    assert set(body["models"]) == {"es", "it"}
+    for lang, m in body["models"].items():
+        assert m["name"].startswith(f"{lang}_core_news_")
+        assert m["size"] == m["name"].rsplit("_", 1)[1]
+        assert m["version"]
+        assert m["small"] == (m["size"] == "sm")
+
+
+def test_status_without_models(client, monkeypatch):
+    monkeypatch.setattr("spacy.util.get_installed_models", lambda: [])
+    m = client.get("/api/status").json()["models"]["es"]
+    assert m == {"name": None, "version": None, "size": None, "small": False}

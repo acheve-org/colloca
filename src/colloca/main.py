@@ -6,6 +6,7 @@ import sqlite3
 from contextlib import asynccontextmanager
 from dataclasses import asdict
 
+import spacy
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -180,6 +181,12 @@ class CorpusPatch(BaseModel):
 @app.get("/api/languages")
 def languages():
     return nlp.SUPPORTED
+
+
+@app.get("/api/status")
+def status():
+    """The spaCy model in use for each language (name, version, size), without loading it."""
+    return {"spacy": spacy.__version__, "models": nlp.status()}
 
 
 _CORPUS_STATS = """SELECT c.*, COUNT(d.id) AS docs, COALESCE(SUM(d.n_tokens),0) AS tokens

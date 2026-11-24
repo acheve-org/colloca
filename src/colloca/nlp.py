@@ -30,6 +30,25 @@ def load_model(lang: str):
                            "In Docker: docker compose run --rm colloca download-models")
 
 
+def status() -> dict[str, dict]:
+    """The model each language would use, from what is installed (nothing is loaded, so this is fast).
+
+    Per language: package name, version, size (sm|md|lg) and `small`; all None when no model is installed.
+    """
+    installed = set(spacy.util.get_installed_models())
+    out: dict[str, dict] = {}
+    for lang in SUPPORTED:
+        info: dict = {"name": None, "version": None, "size": None, "small": False}
+        for size in dict.fromkeys(_SIZES):
+            name = f"{lang}_core_news_{size}"
+            if name in installed:
+                info = {"name": name, "version": spacy.util.get_package_version(name), "size": size,
+                        "small": size == "sm"}
+                break
+        out[lang] = info
+    return out
+
+
 def pipeline_name(lang: str) -> str:
     nlp = load_model(lang)
     return f"{nlp.meta['lang']}_{nlp.meta['name']} {nlp.meta['version']} (spaCy {spacy.__version__})"
