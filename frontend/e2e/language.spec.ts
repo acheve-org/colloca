@@ -15,6 +15,7 @@ test('the interface switches between English, Spanish and Italian and remembers 
 
   await page.getByRole('button', { name: 'Italiano' }).click();
   await expect(nav.getByRole('link', { name: 'Fonti' })).toBeVisible();
+  await page.goto('/#/projects');
   await expect(page.getByRole('button', { name: 'New corpus' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Nuovo corpus' })).toBeVisible();
 

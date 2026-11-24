@@ -1,14 +1,6 @@
 import { join } from 'node:path';
-import { expect, test, type Page } from '@playwright/test';
-
-async function newCorpus(page: Page, name: string): Promise<void> {
-  await page.goto('/');
-  await page.getByRole('button', { name: 'New corpus' }).click();
-  const dialog = page.getByRole('dialog');
-  await dialog.getByLabel('Name').fill(name);
-  await dialog.getByRole('button', { name: 'Create' }).click();
-  await expect(dialog).toBeHidden();
-}
+import { expect, test } from '@playwright/test';
+import { newCorpus } from './helpers';
 
 test('aligned texts: import a two-column file, then search source + target', async ({ page }) => {
   await newCorpus(page, 'Alineados');

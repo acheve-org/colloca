@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { newProject, unique } from './helpers';
 
 test('the Languages screen adds a language from the catalog and removes it again', async ({ page }) => {
   await page.goto('/');
@@ -19,7 +20,8 @@ test('the Languages screen adds a language from the catalog and removes it again
   await expect(fr.getByText('Model not installed')).toBeVisible();
 
   // the new language is offered when creating a corpus
-  await page.getByRole('navigation').getByRole('link', { name: 'Sources' }).click();
+  await page.getByRole('navigation').getByRole('link', { name: 'Projects' }).click();
+  await newProject(page);
   await page.getByRole('button', { name: 'New corpus' }).click();
   await expect(page.getByRole('dialog').getByRole('option', { name: 'French' })).toHaveCount(1);
   await page.keyboard.press('Escape');
@@ -31,7 +33,10 @@ test('the Languages screen adds a language from the catalog and removes it again
 });
 
 test('a language with a corpus cannot be removed', async ({ page, request }) => {
-  const made = await request.post('/api/corpora', { data: { name: 'lang-e2e', lang: 'it' } });
+  const project = await request.post('/api/projects', { data: { name: unique('Lang project') } });
+  expect(project.ok()).toBeTruthy();
+  const { id: project_id } = await project.json();
+  const made = await request.post('/api/corpora', { data: { name: 'lang-e2e', lang: 'it', project_id } });
   expect(made.ok()).toBeTruthy();
   await page.goto('/#/languages');
   const it = page.getByRole('region', { name: 'Italian' });

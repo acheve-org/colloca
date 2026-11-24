@@ -1,12 +1,8 @@
 import { expect, test } from '@playwright/test';
+import { newCorpus } from './helpers';
 
 test('a long concordance renders a window of rows and still scrolls to the end', async ({ page }) => {
-  await page.goto('/');
-  await page.getByRole('button', { name: 'New corpus' }).click();
-  const dialog = page.getByRole('dialog');
-  await dialog.getByLabel('Name').fill('Larga');
-  await dialog.getByRole('button', { name: 'Create' }).click();
-  await expect(dialog).toBeHidden();
+  await newCorpus(page, 'Larga');
 
   const sentence = 'El contrato número N se firma hoy en la oficina del cliente con todos los socios presentes.';
   const text = Array.from({ length: 1200 }, (_, i) => sentence.replace('N', String(i))).join(' ');
