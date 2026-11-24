@@ -15,6 +15,7 @@ dependencies = [
     "spacy>=3.7,<3.9",
     "openpyxl>=3.1.5",
     "defusedxml>=0.7.1",
+    "numpy>=1.26",      # near-duplicate sketches (already installed with spaCy)
     "striprtf>=0.0.35",
 ]
 

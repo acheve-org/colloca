@@ -158,7 +158,14 @@ CREATE INDEX idx_tokens_norm_ascii ON tokens(colloca_ascii(norm));
 CREATE INDEX idx_tokens_lemma_ascii ON tokens(colloca_ascii(lemma));
 """
 
-MIGRATIONS: list[tuple[int, str]] = [(1, _V1), (2, _V2), (3, _V3), (4, _V4), (5, _V5), (6, _V6), (7, _V7), (8, _V8)]
+# --- v9: near-duplicate detection (T16). `fingerprint` is the MinHash sketch of the text (see dedup.py). It is NULL
+# for documents imported before this version; dedup.ensure_fingerprints computes it lazily (SQL cannot).
+_V9 = """
+ALTER TABLE documents ADD COLUMN fingerprint BLOB;
+"""
+
+MIGRATIONS: list[tuple[int, str]] = [(1, _V1), (2, _V2), (3, _V3), (4, _V4), (5, _V5), (6, _V6), (7, _V7), (8, _V8),
+                                     (9, _V9)]
 SCHEMA_VERSION = MIGRATIONS[-1][0]
 
 

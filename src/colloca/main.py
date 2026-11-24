@@ -8,6 +8,7 @@ import sqlite3
 import time
 from contextlib import asynccontextmanager
 from dataclasses import asdict
+from typing import Literal
 
 import spacy
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, UploadFile
@@ -21,6 +22,7 @@ from . import (
     analysis,
     candidates,
     db,
+    dedup,
     docview,
     importer,
     ingest,
@@ -310,6 +312,9 @@ def delete_corpus(corpus_id: int):
 
 
 # --------------------------------------------------------------------------- documents
+Similar = Literal["warn", "import", "replace"]   # what an import does with a near-duplicate
+
+
 class UrlIn(BaseModel):
     url: str
 
@@ -334,7 +339,8 @@ class DocPatch(BaseModel):
 
 
 def _rejected(exc: importer.ImportRejected) -> HTTPException:
-    return HTTPException(exc.status, exc.message)
+    return HTTPException(exc.status, {"message": exc.message, "code": exc.code, **exc.details}
+                         if exc.details else exc.message)
 
 
 @app.post("/api/preview-url")
@@ -374,27 +380,35 @@ def list_documents(corpus_id: int):
 
 
 @app.post("/api/corpora/{corpus_id}/documents", status_code=201)
-def add_document(corpus_id: int, body: DocIn, background: bool = False, force_language: bool = False):
-    """Add a text. With ?background=true it is queued and answered at once with 202 + a job."""
+def add_document(corpus_id: int, body: DocIn, background: bool = False, force_language: bool = False,
+                 similar: Similar = "warn"):
+    """Add a text. With ?background=true it is queued and answered at once with 202 + a job.
+
+    A text very similar to one already in the corpus is answered with 409 (`code: near_duplicate`, the matches
+    and what overlaps in the body); send it again with `similar=import` to add it anyway or `similar=replace`
+    to replace the most similar older document."""
     meta = _meta(body.tags, body.text_type, body.doc_date, body.author)
     with db.session() as conn:
         corpus = _corpus(conn, corpus_id)
         if not background:
             try:
                 return importer.add_document(conn, corpus, body.title, body.text, body.source,
-                                             body.kind, meta, force_language)
+                                             body.kind, meta, force_language, similar=similar)
             except importer.ImportRejected as exc:
                 raise _rejected(exc) from exc
-    job = importer.submit(corpus_id, "import", body.title or "Pasted text",
-                          importer.import_text(corpus_id, body.title, body.text, body.source,
-                                               body.kind, meta, force_language))
+
+    def build(policy: str):
+        return importer.import_text(corpus_id, body.title, body.text, body.source, body.kind, meta,
+                                    force_language, policy)
+    job = importer.submit(corpus_id, "import", body.title or "Pasted text", build(similar), build)
     return JSONResponse({"job_id": job.id}, status_code=202)
 
 
 @app.post("/api/corpora/{corpus_id}/upload", status_code=202)
 async def upload(corpus_id: int, files: list[UploadFile] = File(...), tags: str = "",
                  text_type: str = "", doc_date: str = "", author: str = "",
-                 force_language: bool = False, sentences: bool = False, columns: str = ""):
+                 force_language: bool = False, sentences: bool = False, columns: str = "",
+                 similar: Similar = "warn"):
     """Queue each file as a background job. Per-file answers: {file, ok, job_id} or {file, ok:false, error}.
 
     With ?sentences=true a file is read as one sentence per line (Leipzig Corpora Collection files work as
@@ -415,8 +429,9 @@ async def upload(corpus_id: int, files: list[UploadFile] = File(...), tags: str 
             results.append({"file": name, "ok": False,
                             "error": f"File is larger than {limit_mb} MB (set MAX_UPLOAD_MB to change)"})
             continue
-        job = importer.submit(corpus_id, "import", name,
-                              importer.import_file(corpus_id, name, data, meta, force_language, sentences, columns))
+        def build(policy: str, name=name, data=data):
+            return importer.import_file(corpus_id, name, data, meta, force_language, sentences, columns, policy)
+        job = importer.submit(corpus_id, "import", name, build(similar), build)
         results.append({"file": name, "ok": True, "job_id": job.id})
     return results
 
@@ -587,6 +602,29 @@ def get_job(job_id: int):
     return asdict(job)
 
 
+class ResolveIn(BaseModel):
+    action: Literal["import", "replace", "skip"]
+
+
+@app.post("/api/jobs/{job_id}/resolve", status_code=202)
+def resolve_job(job_id: int, body: ResolveIn):
+    """Decide a held import (a job that failed with code `near_duplicate`): import it anyway, replace the
+    older document, or skip it. Import and replace queue a new job and answer `{job_id}`."""
+    job = importer.resolve_near_duplicate(job_id, body.action)
+    if not job:
+        raise HTTPException(404, "Nothing is waiting for a decision on this job (the server may have restarted)")
+    return {"job_id": job.id}
+
+
+@app.get("/api/corpora/{corpus_id}/near-duplicates")
+def near_duplicates(corpus_id: int, threshold: float = Query(dedup.THRESHOLD, ge=0.5, le=1.0)):
+    """Pairs of documents of this corpus whose wording overlaps at least `threshold` (0.5 to 1). Documents
+    imported before fingerprints existed are fingerprinted on the first call."""
+    with db.session() as conn:
+        _corpus(conn, corpus_id)
+        return dedup.report(conn, corpus_id, threshold)
+
+
 @app.post("/api/corpora/{corpus_id}/analyse-job", status_code=202)
 async def analyse_job(corpus_id: int, file: UploadFile | None = File(None), text: str = Form(""),
                       min_freq: int = Query(2, ge=1), min_corpus_freq: int = Query(3, ge=1),
@@ -673,7 +711,9 @@ def get_document(doc_id: int):
         if not row:
             raise HTTPException(404, "Document not found")
         tags = [r[0] for r in conn.execute("SELECT tag FROM doc_tags WHERE doc_id=? ORDER BY tag", (doc_id,))]
-        return {**dict(row), "tags": tags}
+        doc = dict(row)
+        doc.pop("fingerprint")      # internal: a binary sketch, not for the API
+        return {**doc, "tags": tags}
 
 
 @app.get("/api/documents/{doc_id}/context")

@@ -16,7 +16,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field
 from typing import ClassVar
 
-from . import db, ingest, langcheck, metadata, nlp
+from . import db, dedup, ingest, langcheck, metadata, nlp
 
 log = logging.getLogger("colloca.importer")
 
@@ -30,17 +30,20 @@ LANG_WARNINGS = {
 class ImportRejected(Exception):
     """A document that cannot be added; `status` is the HTTP code the API should answer with."""
 
-    def __init__(self, status: int, message: str, code: str = "rejected"):
+    def __init__(self, status: int, message: str, code: str = "rejected", details: dict | None = None):
         super().__init__(message)
-        self.status, self.message, self.code = status, message, code
+        self.status, self.message, self.code, self.details = status, message, code, details or {}
 
 
 # --------------------------------------------------------------------------- documents
 def add_document(conn, corpus, title: str, text: str, source: str, kind: str, meta: dict | None = None,
                  force_language: bool = False, progress: Callable[[float], None] | None = None,
-                 segmented: bool = False) -> dict:
+                 segmented: bool = False, similar: str = "warn", threshold: float | None = None) -> dict:
     """Annotate and store a text. `segmented`: every line is a segment of a parallel text (its token span
-    is recorded so the segment can be paired with its translation)."""
+    is recorded so the segment can be paired with its translation). `similar` is what to do when the corpus
+    already holds a near-duplicate: "warn" rejects with code `near_duplicate` (the matches are in `details`),
+    "import" adds it anyway, "replace" deletes the most similar older document first. Sentence files and
+    aligned texts are never compared."""
     meta = meta or {}   # validated by metadata.clean_meta/normalize_tags: tags, text_type, doc_date, author
     text = ingest.normalize_text(text)
     if len(text) < MIN_CHARS:
@@ -52,6 +55,9 @@ def add_document(conn, corpus, title: str, text: str, source: str, kind: str, me
     if conn.execute("SELECT 1 FROM documents WHERE corpus_id=? AND text_hash=?",
                     (corpus["id"], digest)).fetchone():
         raise ImportRejected(409, "An identical document is already in this corpus", "duplicate")
+    fingerprint = dedup.sketch(text)
+    replaced = None if dedup.exempt(kind, segmented) else _near_duplicates(
+        conn, corpus, text, fingerprint, similar, dedup.THRESHOLD if threshold is None else threshold)
     check = langcheck.check(text, corpus["lang"])
     if check["verdict"] == "mismatch" and not force_language:
         raise ImportRejected(
@@ -67,13 +73,15 @@ def add_document(conn, corpus, title: str, text: str, source: str, kind: str, me
     if segmented and (len(spans) != len(text.split("\n")) or any(a == b for a, b in spans)):
         raise ImportRejected(500, "A segment produced no tokens, so the alignment would be off", "alignment")
     n_alpha = sum(t[6] for t in tokens)
+    if replaced:
+        conn.execute("DELETE FROM documents WHERE id=?", (replaced["id"],))
     cur = conn.execute(
         """INSERT INTO documents (corpus_id,title,source,kind,text,text_hash,n_tokens,pipeline,lang_check,
-                                  text_type,doc_date,author,segmented)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                                  text_type,doc_date,author,segmented,fingerprint)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (corpus["id"], title.strip() or "Untitled", source, kind, text, digest, n_alpha,
          pipeline, check["verdict"], meta.get("text_type", ""), meta.get("doc_date", ""),
-         meta.get("author", ""), int(segmented)))
+         meta.get("author", ""), int(segmented), fingerprint))
     doc_id = cur.lastrowid
     metadata.set_tags(conn, doc_id, meta.get("tags", []))
     conn.executemany("INSERT INTO tokens VALUES (?,?,?,?,?,?,?,?,?,?)", ((doc_id,) + t for t in tokens))
@@ -83,8 +91,36 @@ def add_document(conn, corpus, title: str, text: str, source: str, kind: str, me
     warnings = [LANG_WARNINGS[check["verdict"]]] if check["verdict"] in LANG_WARNINGS else []
     if check["verdict"] == "mismatch":
         warnings = [f"Imported although it looks {nlp.SUPPORTED[check['detected']]}."]
-    return {"id": doc_id, "title": title, "tokens": n_alpha, "lang_check": check["verdict"],
-            "warnings": warnings}
+    result = {"id": doc_id, "title": title, "tokens": n_alpha, "lang_check": check["verdict"],
+              "warnings": warnings}
+    if replaced:
+        result["replaced"] = replaced["title"]
+    return result
+
+
+def _near_duplicates(conn, corpus, text: str, fingerprint: bytes, policy: str, threshold: float) -> dict | None:
+    """Compare a new text with the corpus. Returns the document to replace (policy "replace"), raises
+    `near_duplicate` for policy "warn", and returns None when nothing is close or the policy is "import"."""
+    dedup.ensure_fingerprints(conn, corpus["id"])
+    known = [(r["id"], r["fingerprint"]) for r in conn.execute(
+        "SELECT id, fingerprint FROM documents WHERE corpus_id=? AND segmented=0 AND kind<>'sentences' "
+        "AND fingerprint IS NOT NULL", (corpus["id"],))]
+    found = dedup.find_similar(fingerprint, known, threshold)
+    if not found:
+        return None
+    best = conn.execute("SELECT id, title FROM documents WHERE id=?", (found[0][0],)).fetchone()
+    if policy == "replace":
+        return dict(best)
+    if policy != "warn":
+        return None
+    matches = []
+    for doc_id, score in found[:5]:
+        row = conn.execute("SELECT id, title, source, added, text FROM documents WHERE id=?", (doc_id,)).fetchone()
+        matches.append({"id": row["id"], "title": row["title"], "source": row["source"], "added": row["added"],
+                        "similarity": round(score, 3), **dedup.overlap(text, row["text"])})
+    raise ImportRejected(
+        409, f"Very similar to “{matches[0]['title']}” ({round(found[0][1] * 100)}% of its wording), "
+             "already in this corpus", "near_duplicate", {"matches": matches, "threshold": threshold})
 
 
 def reannotate_document(conn, doc_id: int, progress: Callable[[float], None] | None = None) -> bool:
@@ -184,7 +220,7 @@ class Job:
     progress: float = 0.0
     error: str = ""
     code: str = ""
-    result: dict = field(default_factory=dict)
+    result: dict = field(default_factory=dict)      # a `near_duplicate` error carries its matches here
     # A big result a job wants to hand back (e.g. an analysis report). Not a dataclass field, so it never
     # travels in the job lists the UI polls; fetch it with GET /api/jobs/{id}/result.
     payload: ClassVar[dict | None] = None
@@ -200,7 +236,14 @@ _lock = threading.Lock()
 KEEP_FINISHED = 200
 
 
-def submit(corpus_id: int, kind: str, label: str, fn: Callable[[Job], dict]) -> Job:
+# Imports stopped by a near-duplicate warning stay resumable: job id -> builder of the same import with the
+# user's decision ("import" or "replace"). Held in memory (with the file's bytes) until resolved or forgotten.
+_held: dict[int, Callable[[str], Callable[[Job], dict]]] = {}
+KEEP_HELD = 20
+
+
+def submit(corpus_id: int, kind: str, label: str, fn: Callable[[Job], dict],
+           rerun: Callable[[str], Callable[[Job], dict]] | None = None) -> Job:
     with _lock:
         job = Job(next(_ids), corpus_id, kind, label)
         _jobs[job.id] = job
@@ -208,11 +251,24 @@ def submit(corpus_id: int, kind: str, label: str, fn: Callable[[Job], dict]) -> 
         for old in finished[:-KEEP_FINISHED]:
             _jobs.pop(old.id, None)
     log.info("Job %s queued: %s %s (corpus %s)", job.id, kind, label, corpus_id)
-    _executor.submit(_run, job, fn)
+    _executor.submit(_run, job, fn, rerun)
     return job
 
 
-def _run(job: Job, fn: Callable[[Job], dict]) -> None:
+def resolve_near_duplicate(job_id: int, action: str) -> Job | None:
+    """Act on a held import: "import" it anyway, "replace" the older document, or "skip" it. Returns the new
+    job for the first two; None when there is nothing held under that id."""
+    with _lock:
+        rerun, job = _held.pop(job_id, None), _jobs.get(job_id)
+    if rerun is None or job is None:
+        return None
+    job.code, job.result = ("skipped" if action == "skip" else "resolved"), {}
+    if action == "skip":
+        return job
+    return submit(job.corpus_id, job.kind, job.label, rerun(action), rerun)
+
+
+def _run(job: Job, fn: Callable[[Job], dict], rerun: Callable[[str], Callable[[Job], dict]] | None = None) -> None:
     job.status = "running"
     log.info("Job %s started: %s %s (corpus %s)", job.id, job.kind, job.label, job.corpus_id)
     t0 = time.perf_counter()
@@ -221,7 +277,12 @@ def _run(job: Job, fn: Callable[[Job], dict]) -> None:
         job.progress, job.status = 1.0, "done"
         log.info("Job %s done in %.1f s", job.id, time.perf_counter() - t0)
     except ImportRejected as exc:
-        job.status, job.error, job.code = "error", exc.message, exc.code
+        job.status, job.error, job.code, job.result = "error", exc.message, exc.code, exc.details
+        if exc.code == "near_duplicate" and rerun:
+            with _lock:
+                _held[job.id] = rerun
+                while len(_held) > KEEP_HELD:
+                    _held.pop(next(iter(_held)))
         log.warning("Job %s rejected (%s): %s", job.id, exc.code, exc.message)
     except ingest.IngestError as exc:
         job.status, job.error, job.code = "error", str(exc), "unreadable"
@@ -240,6 +301,7 @@ def forget_jobs(corpus_id: int) -> None:
     with _lock:
         for job_id in [j.id for j in _jobs.values() if j.corpus_id == corpus_id]:
             del _jobs[job_id]
+            _held.pop(job_id, None)
 
 
 def jobs_for(corpus_id: int) -> list[dict]:
@@ -249,19 +311,20 @@ def jobs_for(corpus_id: int) -> list[dict]:
 
 # Work units executed inside the worker thread -------------------------------------------------
 def import_text(corpus_id: int, title: str, text: str, source: str, kind: str, meta: dict,
-                force_language: bool) -> Callable[[Job], dict]:
+                force_language: bool, similar: str = "warn") -> Callable[[Job], dict]:
     def work(job: Job) -> dict:
         with db.session() as conn:
             corpus = conn.execute("SELECT * FROM corpora WHERE id=?", (corpus_id,)).fetchone()
             if not corpus:
                 raise ImportRejected(404, "Corpus no longer exists", "gone")
             return add_document(conn, corpus, title, text, source, kind, meta, force_language,
-                                job.set_progress)
+                                job.set_progress, similar=similar)
     return work
 
 
 def import_file(corpus_id: int, filename: str, data: bytes, meta: dict,
-                force_language: bool, sentences: bool = False, columns: str = "") -> Callable[[Job], dict]:
+                force_language: bool, sentences: bool = False, columns: str = "",
+                similar: str = "warn") -> Callable[[Job], dict]:
     def work(job: Job) -> dict:
         if sentences:
             lines = list(parse_sentences(ingest.decode_bytes(data).splitlines()))
@@ -275,7 +338,7 @@ def import_file(corpus_id: int, filename: str, data: bytes, meta: dict,
             raise ImportRejected(404, "Corpus no longer exists", "gone")
         parsed = ingest.read_file(filename, data, row["lang"], columns, lambda f: job.set_progress(f * 0.3))
         result = import_text(corpus_id, parsed["title"], parsed["text"], filename, "file", meta,
-                             force_language)(job)
+                             force_language, similar)(job)
         return {**result, "warnings": parsed["warnings"]} if parsed["warnings"] else result
     return work
 

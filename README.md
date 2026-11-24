@@ -351,6 +351,15 @@ mise run ui:e2e               # builds the UI and runs the Playwright end-to-end
 - **Language check**: every import is compared with the corpus language (Spanish/Italian stopword profile).
   A clear mismatch is rejected unless you tick “import even if the language looks wrong”; unclear or very
   short texts are imported with a warning badge. The result is stored per document (`lang_check`).
+- **Near-duplicates**: besides byte-identical texts, an import is compared with the corpus by a MinHash sketch of
+  its 5-word shingles (case, punctuation and whitespace ignored; stored in `documents.fingerprint`, schema v9). At
+  85% or more (`NEAR_DUP_THRESHOLD`, 0.5 to 1) the import stops and the Sources page shows the older document, how
+  many paragraphs they share and a few new or changed ones, with *Import anyway*, *Replace* (the most similar older
+  document) and *Skip*; the held file stays in server memory until decided (up to 20, lost on restart). *Find
+  near-duplicates* lists the pairs already in a corpus (`GET /api/corpora/{id}/near-duplicates?threshold=`);
+  documents older than v9 are fingerprinted on first use. Sentence files and aligned texts are not compared. The
+  similarity is an estimate (about ±5 points for long texts) and measures shared wording, so a short text inside a
+  long one is not flagged. `scripts/bench_dedup.py` times it.
 - **Limits** (environment variables): `MAX_UPLOAD_MB` (25 per file), `MAX_UPLOAD_FILES` (50 per request),
   `MAX_PDF_PAGES` (1000), `MAX_TEXT_MB` (10 per document), `MAX_DOWNLOAD_MB` (15 per URL).
 - **CSV export** prefixes cells that start with `=`, `+`, `-`, `@` with `'`, so scraped text cannot run as a

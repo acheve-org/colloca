@@ -72,6 +72,33 @@ export interface Job {
   result: Record<string, unknown>;
 }
 
+/** One older document a new text is too similar to (the `result` of a job that failed with code `near_duplicate`). */
+export interface NearDupMatch {
+  id: number;
+  title: string;
+  source: string;
+  added: string;
+  similarity: number;
+  units: number;
+  shared_units: number;
+  changed: string[];
+}
+
+/** GET /api/corpora/{id}/near-duplicates */
+export interface NearDupDoc {
+  id: number;
+  title: string;
+  source: string;
+  added: string;
+  n_tokens: number;
+}
+export interface NearDupReport {
+  threshold: number;
+  documents: number;
+  fingerprinted_now: number;
+  pairs: { a: NearDupDoc; b: NearDupDoc; similarity: number }[];
+}
+
 /** /frequency (array) */
 export interface FrequencyRow {
   item: string;
