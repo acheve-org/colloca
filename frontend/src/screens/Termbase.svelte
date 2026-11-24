@@ -28,6 +28,7 @@
   import Select from '../lib/ui/Select.svelte';
   import Toggle from '../lib/ui/Toggle.svelte';
   import Toolbar from '../lib/ui/Toolbar.svelte';
+  import TermImport from './TermImport.svelte';
 
   // Form state, restored from the route so a reload keeps the filters.
   const initial = untrack(() => ({ ...route.params }));
@@ -63,6 +64,7 @@
   let seq = 0;
   let timer: ReturnType<typeof setTimeout> | undefined;
 
+  let importOpen = $state(false);
   let confirmOpen = $state(false);
   let toDelete = $state.raw<Term | null>(null);
 
@@ -447,6 +449,7 @@
     </Toolbar>
   </form>
   <div class="export" role="group" aria-label={t('tb.exportGroup')}>
+    <Button onclick={() => (importOpen = true)}>{t('imp.open')}</Button>
     <b>{t('tb.export')}</b>
     <span title={t('tb.includeHint')}>
       <Toggle bind:checked={includeCandidates} label={t('tb.includeCandidates')} />
@@ -562,6 +565,8 @@
     </div>
   {/if}
 </div>
+
+<TermImport bind:open={importOpen} {projects} {scope} onimported={load} />
 
 <Dialog bind:open={confirmOpen} title={t('tb.confirmTitle')}>
   <p class="confirm">{t('tb.confirmBody', { term: toDelete?.src_term ?? '' })}</p>

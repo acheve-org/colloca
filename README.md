@@ -258,6 +258,7 @@ mise run ui:e2e               # builds the UI and runs the Playwright end-to-end
 
 ## Safeguards
 
+- **Glossary import**: Termbase → Import glossary reads `.xlsx`, `.csv`/`.tsv` (map the columns, header row or not) and `.tbx` (2008 and 2019 structures; XML entities are refused). A check run lists what would be added, skipped as duplicates and rejected, with the reason per row; nothing is stored until you confirm. Status defaults to `candidate` unless the file carries one. Tested with files made from Colloca's own export and `docs/samples`; real CAT-tool exports have not been tried.
 - **Language check**: every import is compared with the corpus language (Spanish/Italian stopword profile).
   A clear mismatch is rejected unless you tick “import even if the language looks wrong”; unclear or very
   short texts are imported with a warning badge. The result is stored per document (`lang_check`).
