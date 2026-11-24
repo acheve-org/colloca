@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 
 from . import (
     analysis,
+    candidates,
     db,
     docview,
     importer,
@@ -522,6 +523,18 @@ async def analyse_job(corpus_id: int, file: UploadFile | None = File(None), text
 _JOB_SECTIONS = ("key_terms", "gaps", "known_terms", "phrases")
 
 
+def _annotated_report(job) -> dict:
+    """The stored report with `in_termbase` / `dropped` on its candidate tables, as of now (the termbase and
+    the stop list may have changed since the analysis ran)."""
+    report = dict(job.payload)
+    with db.session() as conn:
+        corpus = conn.execute("SELECT * FROM corpora WHERE id=?", (job.corpus_id,)).fetchone()
+        if corpus:
+            for name in ("key_terms", "gaps", "phrases"):
+                report[name] = candidates.annotate(conn, corpus, [dict(r) for r in report[name]])
+    return report
+
+
 @app.get("/api/jobs/{job_id}/result")
 def job_result(job_id: int, section: str = "", format: str = "json"):
     """The report of an analysis job; `section` + `format=csv` downloads one table."""
@@ -531,7 +544,7 @@ def job_result(job_id: int, section: str = "", format: str = "json"):
     if job.status != "done" or job.payload is None:
         raise HTTPException(409, "The job has no result (yet)")
     if not section:
-        return job.payload
+        return _annotated_report(job)
     if section not in _JOB_SECTIONS:
         raise HTTPException(400, f"section must be one of {', '.join(_JOB_SECTIONS)}")
     rows = job.payload[section]
@@ -643,6 +656,8 @@ def frequency(corpus_id: int, unit: str = "lemma", pos: str | None = None, min_f
                     exclude_stop, True, limit)
         if ref_id:
             analysis.add_reference_columns(conn, rows, ref_id, unit)
+        if format != "csv":
+            candidates.annotate(conn, corpus, rows)
     return _reply(rows, format, "frequency")
 
 
@@ -679,6 +694,8 @@ def collocations(corpus_id: int, q: str, left: int = Query(4, ge=0, le=15),
                    exclude_stop, _pos_list(pos), limit)
         if ref_id:
             analysis.add_reference_columns(conn, res["rows"], ref_id, "lemma")
+        if format != "csv":
+            candidates.annotate(conn, corpus, res["rows"])
     return _reply(res["rows"], format, "collocations") if format == "csv" else res
 
 
@@ -687,8 +704,10 @@ def ngrams(corpus_id: int, n: int = 3, unit: str = "form", min_freq: int = 2, mi
            edge_stop: bool = False, limit: int = Query(300, le=3000), format: str = "json",
            sq: ScopeQuery = Depends()):
     with db.session() as conn:
-        _corpus(conn, corpus_id)
+        corpus = _corpus(conn, corpus_id)
         rows = _run(analysis.ngrams, conn, sq.scope(corpus_id), n, unit, min_freq, min_docs, edge_stop, limit)
+        if format != "csv":
+            candidates.annotate(conn, corpus, rows)
     return _reply(rows, format, "ngrams")
 
 
@@ -710,6 +729,8 @@ def keyness(corpus_id: int, ref: int | None = None, unit: str = "lemma", min_fre
             raise HTTPException(400, "Reference corpus must have the same language")
         rows = _run(analysis.keyness, conn, sq.scope(corpus_id), ref, unit, min_freq, exclude_stop,
                     _pos_list(pos), limit, both_directions)
+        if format != "csv":
+            candidates.annotate(conn, c, rows)
     return _reply(rows, format, "keyness")
 
 
@@ -721,6 +742,38 @@ def examples(corpus_id: int, q: str, unit: str = "lemma", limit: int = Query(5, 
     with db.session() as conn:
         _corpus(conn, corpus_id)
         return _run(analysis.examples, conn, sq.scope(corpus_id), q, unit, limit)
+
+
+# --- candidate review: the stop list (T02)
+class RejectionIn(BaseModel):
+    terms: list[str] = Field(min_length=1, max_length=5000)
+
+
+@app.get("/api/corpora/{corpus_id}/rejections")
+def list_rejections(corpus_id: int):
+    """Terms dropped from this corpus's project and language (the stop list)."""
+    with db.session() as conn:
+        return candidates.list_rejections(conn, _corpus(conn, corpus_id))
+
+
+@app.post("/api/corpora/{corpus_id}/rejections")
+def reject_terms(corpus_id: int, body: RejectionIn):
+    with db.session() as conn:
+        return {"added": candidates.reject(conn, _corpus(conn, corpus_id), body.terms)}
+
+
+@app.post("/api/corpora/{corpus_id}/rejections/restore")
+def restore_terms(corpus_id: int, body: RejectionIn):
+    with db.session() as conn:
+        return {"restored": candidates.restore(conn, _corpus(conn, corpus_id), body.terms)}
+
+
+@app.post("/api/corpora/{corpus_id}/term-status")
+def term_status(corpus_id: int, body: RejectionIn):
+    """`in_termbase` and `dropped` for arbitrary terms (candidates kept on the client)."""
+    with db.session() as conn:
+        rows = [{"item": t} for t in body.terms]
+        return candidates.annotate(conn, _corpus(conn, corpus_id), rows)
 
 
 class TermIn(BaseModel):

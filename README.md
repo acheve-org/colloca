@@ -112,6 +112,13 @@ Turn what you find into terminology you can reuse and hand over:
   press **Ctrl/Cmd+E** (with text selected in the hit, the selection becomes the term, or the translation when it is
   in the target segment). The dialog pre-fills the term, its part of speech and the example sentence, and *Find
   examples* lists whole sentences from the current corpus (respecting the document filter) to pick an example from.
+- **Review candidates**: every candidate table (*Frequency*, *Collocations*, *N-grams*, *Keyness*, and the Job gaps, key
+  terms and phrases) shows an **In termbase** badge (single words match by lemma, phrases by their word forms; any
+  status counts) and has *Only not in termbase* and *Show dropped* switches. **Drop** puts a term on the project's
+  stop list (per project and language, case-insensitive), hiding it from those tables in that project only; **Restore**
+  takes it off, here or in the stop list at the foot of the *Candidates* screen. **→ Candidates** keeps a term in the
+  *Candidates* screen (stored in this browser, per project and language), where **Accept** saves it as `approved` when
+  a translation is typed, and otherwise opens the pre-filled add-term dialog.
 - **Entries** are (source term, translation) pairs with part of speech, status, domain, definition, notes and an
   example sentence. *Status*: `candidate` (to be reviewed; the translation may be empty), `approved` (the preferred term),
   `admitted` (an acceptable alternative), `superseded` (obsolete) or `forbidden` (a translation that must **not** be

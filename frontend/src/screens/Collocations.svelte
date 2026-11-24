@@ -109,6 +109,7 @@
       loading={runner.loading}
       summary={t('ex.colloc.summary', { q: result.query, n: result.nodeFreq })}
       unit="lemma"
+      review={{ origin: 'collocation', measure: 'log-likelihood', score: 'll' }}
       onterm={(r) => openTerm({ source: r.item, pos: r.pos, origin: 'collocation' })}
     />
   {:else}

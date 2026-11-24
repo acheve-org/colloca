@@ -135,7 +135,20 @@ CREATE TABLE segments (
 ) WITHOUT ROWID;
 """
 
-MIGRATIONS: list[tuple[int, str]] = [(1, _V1), (2, _V2), (3, _V3), (4, _V4), (5, _V5), (6, _V6)]
+# --- v7: the stop list of candidate review. A term dropped from the candidate tables of a project (NULL = no
+# project) in one language is lowercased here and no longer proposed there; other projects are unaffected.
+_V7 = """
+CREATE TABLE term_rejections (
+    id INTEGER PRIMARY KEY,
+    project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
+    lang TEXT NOT NULL,
+    term TEXT NOT NULL,                           -- lowercase, whitespace-normalised
+    created TEXT DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX idx_rejections_unique ON term_rejections (IFNULL(project_id, 0), lang, term);
+"""
+
+MIGRATIONS: list[tuple[int, str]] = [(1, _V1), (2, _V2), (3, _V3), (4, _V4), (5, _V5), (6, _V6), (7, _V7)]
 SCHEMA_VERSION = MIGRATIONS[-1][0]
 
 

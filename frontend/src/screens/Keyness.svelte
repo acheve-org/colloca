@@ -148,6 +148,7 @@
       summary={t('ex.freq.summary', { n: shown.length })}
       note={t('ex.ky.help') + (shownDir === 'over' ? '' : t('ex.ky.helpUnder'))}
       unit="lemma"
+      review={{ origin: 'keyness', measure: 'log-likelihood', score: 'll' }}
       onterm={(r) => openTerm({ source: r.item, pos: r.pos, origin: 'keyness' })}
     />
   {:else}

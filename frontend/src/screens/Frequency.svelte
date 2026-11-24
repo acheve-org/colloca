@@ -88,6 +88,7 @@
       loading={runner.loading}
       summary={t('ex.freq.summary', { n: rows.length })}
       unit={result.unit}
+      review={{ origin: 'frequency', measure: 'frequency', score: 'freq' }}
       onterm={(r) => openTerm({ source: r.item, pos: r.pos, origin: 'frequency' })}
     />
   {:else}

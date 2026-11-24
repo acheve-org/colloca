@@ -33,7 +33,7 @@ The T-numbers are stable labels used for cross-references; the **row order is th
 | # | Task | Value | Effort | Prio | Source |
 |---|---|---|---|---|---|
 | T01 | Highlight the query and the likely equivalent in aligned concordance lines | High | M | P1 | Research #1 |
-| T02 | Candidate review: accept / drop, "already in termbase" badge, stop list | High | M | P1 | Research #3 |
+| T02 | Candidate review: accept / drop, "already in termbase" badge, stop list (**done**) | High | M | P1 | Research #3 |
 | T03 | Glossary import (TBX, CSV, Excel) with column mapping and a duplicate report | High | M | P1 | Research #10 |
 | T04 | Concordance search options: case, wildcard, any order, limit, filter inside results, random sample | High | M | P1 | Roadmap 10, Research #7 |
 | T05 | Sortable analysis tables with a quick filter box (**done**, UI redesign) | High | S | P1 | Research #13 |

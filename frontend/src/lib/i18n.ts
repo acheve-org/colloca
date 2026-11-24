@@ -22,6 +22,7 @@ const en: Record<string, string> = {
   'nav.cloud': 'Word cloud',
   'nav.equivalents': 'Equivalents',
   'nav.termbase': 'Termbase',
+  'nav.candidates': 'Candidates',
   'nav.check': 'Check text',
   'th.forbidden': 'Forbidden translation: “{term}”',
   'th.forbiddenUse': 'Forbidden translation: “{term}”. Use: {use}',
@@ -580,6 +581,41 @@ const en: Record<string, string> = {
 };
 
 /** Look up a UI string; `{name}` placeholders are filled from vars. Unknown keys return the key. */
+Object.assign(en, {
+  'cand.inTermbase': 'In termbase',
+  'cand.dropped': 'Dropped',
+  'cand.onlyNew': 'Only not in termbase',
+  'cand.showDropped': 'Show dropped',
+  'cand.send': '→ Candidates',
+  'cand.sendHint': 'Keep this term in the Candidates table to review it later',
+  'cand.drop': 'Drop',
+  'cand.dropHint': 'Put the term on the stop list: it is hidden from candidate tables of this project',
+  'cand.restore': 'Restore',
+  'cand.restoreHint': 'Take the term off the stop list',
+  'cand.sent': 'Sent to Candidates ({n} new)',
+  'cand.already': 'Already in Candidates',
+  'cand.col.status': 'Status',
+  'cand.col.term': 'Term',
+  'cand.col.score': 'Score',
+  'cand.col.example': 'Example',
+  'cand.col.translation': 'Translation',
+  'cand.col.origin': 'From',
+  'cand.col.actions': 'Review',
+  'cand.accept': 'Accept',
+  'cand.acceptHint': 'Save with the typed translation, or open the add-term dialog when there is none',
+  'cand.remove': 'Remove',
+  'cand.toolbar': 'Candidates',
+  'cand.intro':
+    'Terms you sent here from Keyness, Frequency, N-grams, Collocations or the Job report. Accept adds one to the termbase (directly when a translation is typed); Drop puts it on the stop list of this project and language.',
+  'cand.summary': '{n} candidates',
+  'cand.empty': 'No candidates yet',
+  'cand.emptyHint': 'Use “→ Candidates” in an analysis table to collect terms here.',
+  'cand.stoplist': 'Stop list ({n})',
+  'cand.stoplistHint': 'Dropped terms of this project and language. Restore one to see it in the tables again.',
+  'cand.stoplistEmpty': 'Nothing dropped yet.',
+  'cand.measure': '{measure}: {score}',
+});
+
 export function t(key: string, vars?: Record<string, string | number>): string {
   const s = en[key];
   if (s === undefined) return key;
