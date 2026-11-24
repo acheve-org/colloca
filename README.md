@@ -32,6 +32,12 @@ window, with a warning when a language runs on a small (`sm`) model. Data lives 
    addresses* takes a list (one per line, no preview): each becomes a background job with its own result, with a pause
    between requests to the same site (`URL_DELAY_SECONDS`, 1 s), at most `MAX_URL_LIST` (50) addresses per list and
    `MAX_URLS_PER_HOST` (20) per site. API: `POST /api/corpora/{id}/urls`.
+   For a news section or catalog, *Import from an index page* takes the address of the index page (HTML or an
+   RSS/Atom feed), lists the links on it (navigation, footer and account/search/tag links are left out), lets you
+   filter and choose them, and imports the chosen ones like a list (in batches of at most 20, no preview). Very short
+   texts, cookie/JavaScript/paywall boilerplate, landing-page titles and repeated titles from one site are flagged in
+   the job report; the document is still added. Only that one page is read (no crawling, no "next page").
+   API: `POST /api/discover-links`.
    Or upload files (formats below). Exact duplicates are rejected.
 3. Explore with the screens of the left rail. Click any word in a table to jump to its concordance. Every table
    sorts by a click on its header, has a *Filter in results* box, and a CSV export. Long tables (over 400 rows) render only the rows
