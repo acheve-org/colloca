@@ -19,6 +19,7 @@
   import CheckText from './screens/CheckText.svelte';
   import Job from './screens/Job.svelte';
   import Keyness from './screens/Keyness.svelte';
+  import SegmentLookup from './screens/SegmentLookup.svelte';
   import Ngrams from './screens/Ngrams.svelte';
   import Sources from './screens/Sources.svelte';
   import Candidates from './screens/Candidates.svelte';
@@ -38,6 +39,7 @@
     ngrams: Ngrams,
     keyness: Keyness,
     equivalents: Equivalents,
+    lookup: SegmentLookup,
     cloud: WordCloud,
     termbase: Termbase,
     candidates: Candidates,

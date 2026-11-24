@@ -9,10 +9,12 @@ The text itself is analysed and forgotten: nothing is added to any corpus.
 """
 import math
 from collections import Counter, defaultdict
+from dataclasses import replace
 
-from . import analysis, importer, ingest, langcheck, nlp
+from . import analysis, importer, ingest, langcheck, nlp, segmentlookup
 
 MAX_PHRASES = 25
+MAX_LEVERAGE_SENTENCES = 1500       # sentences looked up for the leverage figure
 PHRASE_LENGTHS = (4, 3, 2)
 
 
@@ -105,7 +107,7 @@ def _contains(longer: tuple, shorter: tuple) -> bool:
 
 
 def analyse(conn, scope, corpus, text: str, *, min_freq: int = 2, min_corpus_freq: int = 3, limit: int = 200,
-            force_language: bool = False, progress=None) -> dict:
+            force_language: bool = False, leverage: bool = False, progress=None) -> dict:
     scope = analysis.as_scope(scope)
     text = ingest.normalize_text(text)
     if len(text) < importer.MIN_CHARS:
@@ -186,6 +188,10 @@ def analyse(conn, scope, corpus, text: str, *, min_freq: int = 2, min_corpus_fre
 
     known = _match_terms(tokens, sentences, terms)
     phrases = _phrases(conn, scope, tokens, sentences)
+    lev = None
+    if leverage and analysis.n_docs(conn, replace(scope, paired_only=True)):
+        lev = segmentlookup.leverage(conn, scope, lang, list(sentences.values())[:MAX_LEVERAGE_SENTENCES])
+        lev["truncated"] = len(sentences) > MAX_LEVERAGE_SENTENCES
     if progress:
         progress(1.0)
     return {
@@ -200,6 +206,7 @@ def analyse(conn, scope, corpus, text: str, *, min_freq: int = 2, min_corpus_fre
             "uncovered_types": len(gaps), "termbase_terms_found": len(known),
             "termbase_size": len(terms),
             "reference": "base" if ref_id else None,
+            "leverage": lev,
         },
         "key_terms": key_terms[:limit], "gaps": gaps[:limit], "known_terms": known[:limit],
         "phrases": phrases,

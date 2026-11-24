@@ -38,6 +38,7 @@ from . import (
     metadata,
     nlp,
     parallel,
+    segmentlookup,
     termbase,
     termexport,
     termhits,
@@ -629,6 +630,25 @@ async def upload_pairs(corpus_id: int, files: list[UploadFile] = File(...), part
     return results
 
 
+class LookupIn(BaseModel):
+    text: str = Field(max_length=segmentlookup.MAX_QUERY_CHARS * 2)
+    min_percent: int = Field(default=50, ge=10, le=100)
+    limit: int = Field(default=10, ge=1, le=50)
+
+
+@app.post("/api/corpora/{corpus_id}/segment-lookup")
+def segment_lookup(corpus_id: int, body: LookupIn, sq: ScopeQuery = Depends()):
+    """Paste a source segment, get the most similar source segments of this corpus's aligned documents, each with
+    a match percentage (token-level edit distance: 100 only for identical words; case, punctuation and inline tags
+    ignored), its band (100, 95-99, 85-94, 75-84, below 75), the aligned translation and the word-level
+    difference (`extra`: in the stored segment only, `missing`: in your segment only). A lookup aid, not a CAT
+    tool's match: see docs in the README."""
+    with db.session() as conn:
+        corpus = _corpus(conn, corpus_id)
+        return _run(segmentlookup.lookup, conn, sq.scope(corpus_id), corpus["lang"], body.text, body.min_percent,
+                    body.limit)
+
+
 @app.get("/api/corpora/{corpus_id}/aligned-partners")
 def aligned_partners(corpus_id: int, sq: ScopeQuery = Depends()):
     """The corpora that hold translations of this corpus's aligned documents (what a TMX export can pair it with)."""
@@ -818,11 +838,13 @@ def near_duplicates(corpus_id: int, threshold: float = Query(dedup.THRESHOLD, ge
 @app.post("/api/corpora/{corpus_id}/analyse-job", status_code=202)
 async def analyse_job(corpus_id: int, file: UploadFile | None = File(None), text: str = Form(""),
                       min_freq: int = Query(2, ge=1), min_corpus_freq: int = Query(3, ge=1),
-                      force_language: bool = False, keep_text: bool = False, sq: ScopeQuery = Depends()):
+                      force_language: bool = False, keep_text: bool = False, leverage: bool = False,
+                      sq: ScopeQuery = Depends()):
     """Analyse a text you are about to translate (an uploaded file, or `text`) against this corpus and its
     project's termbase. Runs as a job; fetch the report from GET /api/jobs/{id}/result. Nothing is stored unless
     you save the report (POST /api/jobs/{id}/save); the analysed text is kept with a saved report only when
-    `keep_text=true` was sent here."""
+    `keep_text=true` was sent here. `leverage=true` adds a rough figure of how much of the text the aligned documents
+    of the corpus already translate (`summary.leverage`, see segmentlookup.py)."""
     with db.session() as conn:
         corpus = dict(_corpus(conn, corpus_id))
     if corpus["is_reference"]:
@@ -838,6 +860,7 @@ async def analyse_job(corpus_id: int, file: UploadFile | None = File(None), text
     else:
         raise HTTPException(400, "Upload a file or paste the text to analyse")
     params = {"min_freq": min_freq, "min_corpus_freq": min_corpus_freq, "force_language": force_language,
+              "leverage": leverage,
               "tags": list(scope.tags), "text_type": scope.text_type, "date_from": scope.date_from,
               "date_to": scope.date_to, "docs": list(scope.doc_ids)}
 
@@ -848,7 +871,7 @@ async def analyse_job(corpus_id: int, file: UploadFile | None = File(None), text
         with db.session() as conn:
             job.payload = jobanalysis.analyse(conn, scope, corpus, body, min_freq=min_freq,
                                               min_corpus_freq=min_corpus_freq, force_language=force_language,
-                                              progress=job.set_progress)
+                                              leverage=leverage, progress=job.set_progress)
         job.meta = {"source": "" if data is None else name, "params": params}
         job.text = body if keep_text else None
         return {"summary": job.payload["summary"], "warnings": parsed["warnings"]}

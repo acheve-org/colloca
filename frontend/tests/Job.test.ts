@@ -513,3 +513,41 @@ describe('Job saved reports', () => {
     expect(screen.queryByText('87%')).toBeNull();
   });
 });
+
+describe('Job leverage', () => {
+  const withLeverage = () => report({
+    summary: { ...report().summary, leverage: { segments: 20, words: 400, covered_pct: 61.5, truncated: false,
+      bands: { '100': { segments: 4, words: 40 }, '95-99': { segments: 2, words: 30 }, '85-94': { segments: 3, words: 50 },
+               '75-84': { segments: 3, words: 126 }, below75: { segments: 8, words: 154 } } } },
+  });
+
+  it('offers the estimate only for a corpus with aligned texts, and sends the choice', async () => {
+    corpusStore.aligned = false;
+    const first = render(Job);
+    expect(screen.queryByLabelText('estimate leverage from aligned texts')).toBeNull();
+    first.unmount();
+    corpusStore.aligned = true;
+    render(Job);
+    await fireEvent.click(screen.getByLabelText('estimate leverage from aligned texts'));
+    await paste();
+    await fireEvent.click(analyse());
+    await vi.advanceTimersByTimeAsync(100);
+    expect(submitCalls()[0].params.get('leverage')).toBe('true');
+    corpusStore.aligned = false;
+  });
+
+  it('shows how much the aligned texts cover, with the bands as the hint', async () => {
+    result = withLeverage();
+    render(Job);
+    await runToReport();
+    const tile = screen.getByText('in aligned texts (≥75%)').closest('.stat')!;
+    expect(tile).toHaveTextContent('61.5%');
+    expect(tile.getAttribute('title')).toContain('Sentences: 20; 100%: 4; 95–99%: 2; 85–94%: 3; 75–84%: 3; none: 8');
+  });
+
+  it('has no leverage tile when it was not asked for', async () => {
+    render(Job);
+    await runToReport();
+    expect(screen.queryByText('in aligned texts (≥75%)')).toBeNull();
+  });
+});
