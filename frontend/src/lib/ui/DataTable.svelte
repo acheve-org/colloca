@@ -53,6 +53,7 @@
 
   const PAGE = 10;
   let wrap: HTMLElement | undefined = $state();
+  let headEl: HTMLElement | undefined = $state();
 
   // Searchable text per row, rebuilt only when rows/columns change.
   const haystack = $derived(
@@ -94,6 +95,90 @@
       return { row: rows[i], key, ek: n === 0 ? key : `${key}\u0000dup${n}` };
     });
   });
+
+  // --- Virtual scrolling (T26). Above VIRTUAL_MIN rows only the rows near the viewport are in the DOM,
+  // between two spacers that stand for the rest. Row heights are measured (a bilingual concordance line
+  // wraps), cached by row key, and estimated by their average until measured, so the scrollbar stays
+  // plausible and the rows never jump while they are being measured.
+  const VIRTUAL_MIN = 400;
+  const OVERSCAN = 8;
+  const FALLBACK_VIEW = 600; // no layout (tests): assume a viewport this tall
+  const FALLBACK_ROW = 28;
+  let scrollTop = $state(0);
+  let viewH = $state(0);
+  let measured = $state(0); // bumped when a new height was recorded, so the window is recomputed
+  const heights: Record<string, number> = {};
+  const virtual = $derived(view.length > VIRTUAL_MIN);
+
+  const estimate = (): number => {
+    const known = Object.values(heights);
+    return known.length ? known.reduce((a, b) => a + b, 0) / known.length : FALLBACK_ROW;
+  };
+
+  const windowOf = $derived.by(() => {
+    const n = view.length;
+    if (!virtual) return { start: 0, end: n, top: 0, bottom: 0 };
+    void measured;
+    const est = estimate();
+    const h = (i: number) => heights[view[i].ek] ?? est;
+    const vh = viewH || FALLBACK_VIEW;
+    const y0 = Math.max(0, scrollTop - est); // the sticky header covers the first row's worth
+    let first = 0;
+    let acc = 0;
+    while (first < n - 1 && acc + h(first) <= y0) acc += h(first++);
+    let last = first;
+    let bottom = acc;
+    while (last < n && bottom < y0 + vh) bottom += h(last++);
+    const start = Math.max(0, first - OVERSCAN);
+    const end = Math.min(n, last + OVERSCAN);
+    let top = 0;
+    for (let i = 0; i < start; i++) top += h(i);
+    let below = 0;
+    for (let i = end; i < n; i++) below += h(i);
+    return { start, end, top, bottom: below };
+  });
+  const shown = $derived(view.slice(windowOf.start, windowOf.end));
+
+  // The height of the scroll area (it changes with the window and the panes around it).
+  $effect(() => {
+    const el = wrap;
+    if (!el) return;
+    viewH = el.clientHeight;
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => (viewH = el.clientHeight));
+    ro.observe(el);
+    return () => ro.disconnect();
+  });
+
+  // Record the height of the rows now on screen.
+  $effect(() => {
+    if (!virtual || !wrap) return;
+    void shown;
+    let changed = false;
+    for (const el of wrap.querySelectorAll<HTMLElement>('.body[data-ek]')) {
+      const h = el.getBoundingClientRect().height;
+      const k = el.dataset.ek!;
+      if (h > 0 && Math.abs((heights[k] ?? 0) - h) > 0.5) {
+        heights[k] = h;
+        changed = true;
+      }
+    }
+    if (changed) untrack(() => measured++);
+  });
+
+  /** Scroll so the row at view index `index` is on screen (it may not be in the DOM yet). */
+  function scrollToIndex(index: number): void {
+    if (!wrap || !virtual) return;
+    const est = estimate();
+    let top = 0;
+    for (let i = 0; i < index; i++) top += heights[view[i].ek] ?? est;
+    const bottom = top + (heights[view[index].ek] ?? est);
+    const head = headEl?.offsetHeight || est;
+    const room = (wrap.clientHeight || FALLBACK_VIEW) - head;
+    if (top < wrap.scrollTop) wrap.scrollTop = top;
+    else if (bottom > wrap.scrollTop + room) wrap.scrollTop = bottom - room;
+    scrollTop = wrap.scrollTop;
+  }
 
   // Selection is tracked by key. A bindable prop assigned locally may be wrapped in a
   // reactive proxy, so object identity against `rows` is never relied on; callbacks
@@ -153,6 +238,7 @@
   }
 
   async function reveal(index: number) {
+    scrollToIndex(index);
     await tick();
     const el = wrap?.querySelector<HTMLElement>(`[data-index="${index}"]`);
     if (el && typeof el.scrollIntoView === 'function') el.scrollIntoView({ block: 'nearest' });
@@ -197,16 +283,23 @@
   }
 </script>
 
-<div class="dt" bind:this={wrap}>
+<div
+  class="dt"
+  bind:this={wrap}
+  onscroll={() => {
+    if (virtual && wrap) scrollTop = wrap.scrollTop;
+  }}
+>
   <div
     class="grid"
     role="grid"
     tabindex="0"
     aria-busy={loading}
     aria-rowcount={view.length + 1}
+    data-virtual={virtual || undefined}
     {onkeydown}
   >
-    <div class="row head" role="row" style:grid-template-columns={columns.map((c) => c.width ?? '1fr').join(' ')}>
+    <div class="row head" role="row" aria-rowindex={1} bind:this={headEl} style:grid-template-columns={columns.map((c) => c.width ?? '1fr').join(' ')}>
       {#each columns as col (col.key)}
         <div
           class="th"
@@ -229,7 +322,9 @@
         </div>
       {/each}
     </div>
-    {#each view as v, i (v.ek)}
+    {#if windowOf.top > 0}<div class="spacer" role="presentation" style:height="{windowOf.top}px"></div>{/if}
+    {#each shown as v, k (v.ek)}
+      {@const i = windowOf.start + k}
       <!-- Keyboard handling lives on the grid (roving selection), not on each row. -->
       <!-- svelte-ignore a11y_click_events_have_key_events, a11y_interactive_supports_focus -->
       <div
@@ -237,6 +332,8 @@
         class:selected={v.ek === selectedKey}
         role="row"
         data-index={i}
+        data-ek={v.ek}
+        aria-rowindex={i + 2}
         aria-selected={v.ek === selectedKey}
         style:grid-template-columns={columns.map((c) => c.width ?? '1fr').join(' ')}
         onclick={() => select(v.row, v.key)}
@@ -249,6 +346,7 @@
         {/each}
       </div>
     {/each}
+    {#if windowOf.bottom > 0}<div class="spacer" role="presentation" style:height="{windowOf.bottom}px"></div>{/if}
     {#if !view.length}
       <div class="status" role="row"><div role="gridcell">{loading ? t('table.loading') : (emptyText ?? t('common.noResults'))}</div></div>
     {/if}

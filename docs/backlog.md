@@ -58,7 +58,7 @@ The T-numbers are stable labels used for cross-references; the **row order is th
 | T23 | Optional authentication and encryption at rest | Low | M | P3 | Roadmap 15 |
 | T24 | PDF extraction robustness | Low | M | P3 | Audit |
 | T25 | URL fetching: DNS-rebinding hardening, import a list of URLs (**done**) | Low | S | P3 | Audit |
-| T26 | Virtual scrolling for very large tables | Low | M | P3 | Audit |
+| T26 | Virtual scrolling for very large tables (**done**) | Low | M | P3 | Audit |
 | T27 | Dispersion plot for a word across documents (**done**) | Low | S | P3 | Research #14 |
 | Q1 | Show the active spaCy model in the interface, fix the documented default | Medium | S | Quick | Roadmap Phase 1 item 5 |
 | Q2 | Keyness: also list words that are key only in the reference corpus | Medium | S | Quick | Audit |
@@ -651,6 +651,12 @@ that are fetched as background jobs with a per-URL report (the trimming step bec
 ### T26. Virtual scrolling for very large tables
 
 **Priority** P3 · **Value** Low · **Effort** M · **Source** Audit
+
+**Status: done** in the shared `DataTable` (no library). Above 400 rows only the rows near the viewport are in the DOM, between two spacers;
+heights are measured and cached per row (a bilingual concordance line wraps) and estimated by their average until then. Sorting, the filter,
+selection by key, the sticky header, `aria-rowcount` / `aria-rowindex` and the keyboard (End, Home, PageDown reach rows that are not rendered yet)
+work on the whole data. Checked in Chromium with a 1,200-line concordance (`e2e/virtual.spec.ts`) and in jsdom with 20,000 rows; a 20,000-row
+scroll was not timed on a slow machine.
 
 **Why it matters.** Tables render every row into the page (up to 5,000), which makes the browser slow for the largest results.
 
