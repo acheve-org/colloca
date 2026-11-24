@@ -1,6 +1,6 @@
 """Advanced concordance queries (T13): parser, plain-words description and SQL compiler.
 
-Grammar (documented with examples in docs/query-language.md):
+Grammar (documented with examples in docs/analysis.md, "Advanced query language"):
 
     query  := item+
     item   := token | gap
