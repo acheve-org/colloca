@@ -18,7 +18,7 @@ const SAME = new Set([
   'cand.measure', 'cc.csv', 'tb.csv', 'tb.tbx', 'tb.xlsx', 'job.csv', 'job.csvOf', 'job.glossary.csv', 'job.glossary.tbx',
   'job.glossary.xlsx', 'base.leipzig', 'proj.corpora1', 'bk.k.corpora', 'trash.corpora', 'proj.corpora', 'cc.unit.lemma',
   'ex.unit.lemma', 'ex.col.lemma', 'job.col.lemma', 'ex.col.basePerMillion', 'job.col.baseM', 'ex.col.perM', 'imp.file', 'job.excel', 'term.number.plural', 'term.number.singular', 'term.number.dual',
-  'lang.modelLine',
+  'lang.modelLine', 'proj.colCorpus',
 ]);
 const loose = (a: Record<string, string>, b: Record<string, string>) =>
   Object.keys(en).filter((k) => a[k] === b[k] && !SAME.has(k) && /[a-zà-ÿ]{4,}/i.test(a[k]));
