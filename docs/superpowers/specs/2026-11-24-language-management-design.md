@@ -10,6 +10,7 @@ add, edit and remove the languages they work with and, for each one, manage its 
 
 - A Languages screen: list, add (from a catalog), edit, remove.
 - Per language: install, change size of, and uninstall the spaCy model from the UI, with visible progress.
+- Per language: install and remove the Tesseract OCR data, and see whether OCR is ready.
 - Per language: see and manage the base corpus (create, fill, delete) on the same screen.
 - Everything that is hard-coded to es/it becomes registry-driven: model loading, language validation, language check,
   OCR language, CLI, backup import, the language pickers of the UI.
@@ -22,7 +23,8 @@ add, edit and remove the languages they work with and, for each one, manage its 
   collocations and keyness would be poor).
 - Japanese, Korean and Chinese in the first catalog: they are not space-delimited, and the language check and the
   word regex used for queries assume space-delimited text.
-- Installing Tesseract language data from the UI (the OCR code is only a setting; Tesseract data stays a system matter).
+- Installing the Tesseract program itself from the UI (it is a system package, installed at image build with
+  `WITH_OCR=1`). Only its per-language data is managed by the app.
 - Translating language names per UI locale (the catalog carries English names; the user can edit the display name).
 - Renaming a language code.
 
@@ -91,8 +93,19 @@ minus those of the other configured languages. Thresholds and verdicts are uncha
 
 ### OCR
 
-`ocr.TESSERACT_LANGS` is replaced by the `tesseract` column; an empty value falls back to trying every configured
-code, as today for unknown languages.
+`ocr.TESSERACT_LANGS` is replaced by the `tesseract` column of the registry (suggested from the catalog). Tesseract
+language data is one `<code>.traineddata` file, readable from any folder via `--tessdata-dir`, so the app manages it
+without root:
+
+- **Install** downloads `<code>.traineddata` from the official `tessdata_fast` set (only codes that come from catalog
+  entries) into `<models dir>/tessdata`, to a temporary file first and renamed on success. Offline: a folder of
+  `.traineddata` files named by `TESSDATA_FILES`, like `SPACY_WHEELS`. **Remove** deletes that file.
+- **Use**: when the language's data is in the app's folder, OCR passes `--tessdata-dir` with it; otherwise Tesseract's
+  default folder is used, so the `spa` and `ita` data installed by `apt` keeps working. The "try every configured
+  code" fallback (language unknown) only combines codes that live in the same folder.
+- **Status** per language: Tesseract program present or not (found on PATH), and data present (app folder or default
+  folder, from `tesseract --list-langs`). Without the program the OCR line says it needs a build with `WITH_OCR=1`.
+- Adding a language offers "also install OCR data", ticked by default.
 
 ### API
 
@@ -100,14 +113,14 @@ code, as today for unknown languages.
 - New: a management listing (per language: name, code, size, model name/version/state, corpus count, base corpus
   summary), `GET /api/language-catalog`, `POST /api/languages`, `PATCH /api/languages/{code}`,
   `DELETE /api/languages/{code}`, `POST /api/languages/{code}/model` (install / change size),
-  `DELETE /api/languages/{code}/model`. Exact names are the builder's call.
+  `DELETE /api/languages/{code}/model`, and the same pair for `/ocr`. Exact names are the builder's call.
 - `POST /api/corpora` and `/api/references` validate against the registry.
 - Backup import with a language not in the registry fails with a message naming the language and saying to add it.
 
 ### Frontend
 
 - New rail entry and screen *Languages*. One card per language: name and code, model line (name, version, size,
-  state), actions Install / Change size / Uninstall, Edit, Remove, and the base corpus block (what *Base corpora* has
+  state), an OCR line (engine, data), actions Install / Change size / Uninstall for each, Edit, Remove, and the base corpus block (what *Base corpora* has
   today). The base-corpora screen becomes a section of this one; its route redirects here.
 - Add dialog: searchable catalog list and a size choice, with a note on disk size and on needing internet or
   `SPACY_WHEELS`.
@@ -119,13 +132,13 @@ code, as today for unknown languages.
 
 `docker/entrypoint.sh` stops hard-coding `es it`: `download-models` takes language codes as arguments (default: the
 seeded es and it), the automatic download at start is removed because the app now installs from the UI. README
-documents the screen, the offline route and `COLLOCA_MODELS_DIR`. The Dockerfile's Tesseract data stays spa/ita; the
-README says how to add more.
+documents the screen, the offline route and `COLLOCA_MODELS_DIR`. The Dockerfile's apt Tesseract data stays spa/ita; other
+languages come from the screen.
 
 ### Tests
 
-pytest: registry CRUD and its rules (remove refused with corpora), catalog integrity, install state machine with the
-installer faked, size fallback, generic language check including the unchanged es/it cases, backup with unknown
+pytest: registry CRUD and its rules (remove refused with corpora), catalog integrity, install state machine (spaCy and OCR data) with the
+installer faked, `--tessdata-dir` selection, size fallback, generic language check including the unchanged es/it cases, backup with unknown
 language. Vitest: Languages screen states (installing, failed, missing, remove refused). Playwright: add a language,
 remove an empty one.
 
