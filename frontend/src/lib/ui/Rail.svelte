@@ -137,7 +137,8 @@
   .brand {
     padding: var(--s-3) var(--s-3) var(--s-2);
     font-weight: 700;
-    font-size: 14px;
+    font-size: 22px;
+    letter-spacing: -0.01em;
   }
   nav {
     flex: 1;
