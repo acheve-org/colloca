@@ -1,7 +1,12 @@
 """Link discovery on an index page or feed: parsing and the endpoint."""
+import socket
+
+import httpx
 import pytest
 
 from colloca import ingest
+
+from .test_url_fetching import PRIVATE, PUBLIC, answers
 
 BASE = "https://news.example/section/"
 
@@ -78,3 +83,55 @@ def test_page_without_links_gives_empty_list():
 def test_title_is_the_page_title():
     html = "<html><head><title> Noticias del día </title></head><body></body></html>"
     assert parse(html)["title"] == "Noticias del día"
+
+
+# --------------------------------------------------------------------------- endpoint
+INDEX = ("<html><head><title>Noticias</title></head><body><article><a href='/2026/uno'>Primera noticia</a>"
+         "<a href='/2026/dos'>Segunda noticia</a><a href='https://otro.example/tres'>Tercera</a></article>"
+         "<footer><a href='/aviso'>Aviso legal</a></footer></body></html>")
+
+
+@pytest.fixture()
+def serve(monkeypatch):
+    """Serve `body` with `ctype` for every request; every host resolves to a public address."""
+    state = {"body": INDEX.encode(), "ctype": "text/html; charset=utf-8", "error": None}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if state["error"]:
+            raise state["error"]
+        return httpx.Response(200, headers={"content-type": state["ctype"]}, content=state["body"])
+
+    monkeypatch.setattr(ingest, "_transport", httpx.MockTransport(handler))
+    monkeypatch.setattr(ingest, "ALLOW_PRIVATE", False)
+    monkeypatch.setattr(socket, "getaddrinfo", answers(PUBLIC))
+    for k in ("HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy"):
+        monkeypatch.delenv(k, raising=False)
+    return state
+
+
+def test_discover_endpoint_lists_links(client, serve):
+    r = client.post("/api/discover-links", json={"url": "https://news.example/"})
+    assert r.status_code == 200
+    body = r.json()
+    assert [x["url"] for x in body["links"]] == ["https://news.example/2026/uno", "https://news.example/2026/dos",
+                                                 "https://otro.example/tres"]
+    assert [x["same_host"] for x in body["links"]] == [True, True, False]
+    assert body["title"] == "Noticias" and body["max_per_request"] == 20 and body["truncated"] is False
+
+
+def test_discover_endpoint_refuses_internal_address(client, serve, monkeypatch):
+    monkeypatch.setattr(socket, "getaddrinfo", answers(PRIVATE))
+    r = client.post("/api/discover-links", json={"url": "https://news.example/"})
+    assert r.status_code == 422 and "private" in r.json()["detail"]
+
+
+def test_discover_endpoint_rejects_a_pdf(client, serve):
+    serve.update(body=b"%PDF-1.4 binary", ctype="application/pdf")
+    r = client.post("/api/discover-links", json={"url": "https://news.example/a.pdf"})
+    assert r.status_code == 422 and "Not a web page or a feed" in r.json()["detail"]
+
+
+def test_discover_endpoint_network_error_is_502(client, serve):
+    serve["error"] = httpx.ConnectError("boom")
+    r = client.post("/api/discover-links", json={"url": "https://news.example/"})
+    assert r.status_code == 502
