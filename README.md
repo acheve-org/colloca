@@ -29,7 +29,7 @@ window, with a warning when a language runs on a small (`sm`) model. Data lives 
    **project** (the *…* button next to the project selector at the top of the left rail opens *Manage projects*);
    the project selector narrows the corpus list.
 2. **Sources**: paste a URL → *Fetch & preview* → trim noise in the text box → *Add*.
-   Or upload DOCX / PDF (text layer) / TXT / HTML. Exact duplicates are rejected.
+   Or upload files (formats below). Exact duplicates are rejected.
 3. Explore with the screens of the left rail. Click any word in a table to jump to its concordance. Every table
    sorts by a click on its header, has a *Filter in results* box, and a CSV export.
 4. **Keyness**: compares your corpus with the language's **base corpus** (below) by default, or with any other
@@ -50,14 +50,46 @@ window, with a warning when a language runs on a small (`sm`) model. Data lives 
   match a date filter. The API takes the same filter as query parameters on every analysis endpoint:
   `tags=a,b&text_type=contract&date_from=2022&date_to=2024-06&docs=1,2`.
 
+## Input formats
+
+Upload (*Sources*) and *Analyse a job* accept:
+
+| Format | What is imported |
+| --- | --- |
+| `.docx`, `.odt`, `.rtf` | Body text and tables (ODT: footnotes and comments are left out). |
+| `.pdf` | The text layer; a PDF without one is read with **OCR** (below). |
+| `.xlsx`, `.csv`, `.tsv` | The text columns, one cell per line (all sheets of an XLSX). They are detected (columns of words, not numbers, codes or dates); the *Spreadsheet columns* field overrides it with numbers or header names, e.g. `2,4` or `Texto`. A header row is skipped. |
+| `.xlf`, `.xliff` (1.2 and 2.x) | Plain text of the side written in the corpus language (target if it is the corpus language, else source), inline codes removed. For translation pairs use *Import aligned texts*. |
+| `.srt`, `.vtt` | Cue text, one line per cue; numbers, timings, tags, VTT notes and styles are dropped. |
+| `.txt`, `.md`, `.html` | As before. |
+
+XML formats are parsed with `defusedxml` (no external entities). The size and page limits below apply to all of them.
+
+### OCR for scanned PDFs (optional)
+
+PDFs with no text layer are OCRed when the optional extra and Tesseract are installed; otherwise the upload fails
+with a message that says what to install (no stack trace). Pages are rendered with `pypdfium2` and read with the
+`tesseract` program in the corpus language (`spa` or `ita`).
+
+```bash
+uv sync --extra ocr                                              # pypdfium2 + Pillow
+brew install tesseract tesseract-lang                            # macOS
+sudo apt install tesseract-ocr tesseract-ocr-spa tesseract-ocr-ita   # Debian/Ubuntu
+docker build --build-arg WITH_OCR=1 -t colloca .                 # Docker image with OCR (about 100 MB larger)
+```
+
+The job result reports the pages read and the mean word confidence, and warns when it is under 70 % (`OCR_MIN_CONFIDENCE`)
+— check such text before trusting lemmas. Limits: `MAX_OCR_PAGES` (100), `OCR_PAGE_TIMEOUT` (120 s per page).
+`OCR_ENABLED=0` switches OCR off. OCR is slow (seconds per page) and runs as a background job like any import.
+
 ## Aligned texts (translation memories)
 
 Previous translations are the best evidence of how a client wants things said. Import them as **aligned texts**
 and search them side by side:
 
-- **Import** (*Sources* → *Import aligned texts*): a **TMX** file, or two columns (source | target) as `.tsv`,
+- **Import** (*Sources* → *Import aligned texts*): a **TMX** or **XLIFF** (1.2 or 2.x, `.xlf`/`.xliff`) file, or two columns (source | target) as `.tsv`,
   `.csv` (comma, semicolon or tab) or a table in a `.docx`. The corpus you are in receives the first language, the
-  other-language texts go to a corpus you pick (or create). TMX is matched by its language codes (`es`, `es-ES`,
+  other-language texts go to a corpus you pick (or create). TMX and XLIFF are matched by their language codes (XLIFF: `source-language`/`target-language`, or `srcLang`/`trgLang`; units without a target are skipped) (`es`, `es-ES`,
   `it_IT`…), inline markup is dropped, units missing one language are skipped. Two-column files use column order;
   tick *this corpus is the second column* if yours is the other way round. Files over 5000 units are stored in parts.
 - **Each side is a normal corpus** in its own language (so frequency, keyness, collocations, the termbase… all work
@@ -335,7 +367,7 @@ mise run ui:e2e               # builds the UI and runs the Playwright end-to-end
 
 ## Known limitations
 
-- No OCR: scanned PDFs are rejected. No JavaScript rendering for URLs (pages that need it fail to extract).
+- OCR is optional (see *Input formats*) and its accuracy depends on the scan. No JavaScript rendering for URLs (pages that need it fail to extract).
 - Extraction is heuristic: always review the preview. URL fetching respects no robots.txt (you choose the URLs);
   it blocks private/internal addresses (`ALLOW_PRIVATE_URLS=1` to override). No authentication: bind to localhost only.
 - Small spaCy models make lemma/POS errors; use `lg` (the Docker default) for better quality. A document in the

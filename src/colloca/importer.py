@@ -323,7 +323,8 @@ def import_text(corpus_id: int, title: str, text: str, source: str, kind: str, m
 
 
 def import_file(corpus_id: int, filename: str, data: bytes, meta: dict,
-                force_language: bool, sentences: bool = False, similar: str = "warn") -> Callable[[Job], dict]:
+                force_language: bool, sentences: bool = False, columns: str = "",
+                similar: str = "warn") -> Callable[[Job], dict]:
     def work(job: Job) -> dict:
         if sentences:
             lines = list(parse_sentences(ingest.decode_bytes(data).splitlines()))
@@ -331,9 +332,14 @@ def import_file(corpus_id: int, filename: str, data: bytes, meta: dict,
                 raise ImportRejected(400, "File contains no sentences")
             return import_sentence_chunks(corpus_id, chunk_sentences(lines), filename, filename,
                                           force_language, count_chunks(len(lines)), job.set_progress)
-        parsed = ingest.read_file(filename, data)
-        return import_text(corpus_id, parsed["title"], parsed["text"], filename, "file", meta,
-                           force_language, similar)(job)
+        with db.session() as conn:
+            row = conn.execute("SELECT lang FROM corpora WHERE id=?", (corpus_id,)).fetchone()
+        if not row:
+            raise ImportRejected(404, "Corpus no longer exists", "gone")
+        parsed = ingest.read_file(filename, data, row["lang"], columns, lambda f: job.set_progress(f * 0.3))
+        result = import_text(corpus_id, parsed["title"], parsed["text"], filename, "file", meta,
+                             force_language, similar)(job)
+        return {**result, "warnings": parsed["warnings"]} if parsed["warnings"] else result
     return work
 
 

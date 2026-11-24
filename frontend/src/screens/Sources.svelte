@@ -18,8 +18,8 @@
   }
   type EditForm = Meta & { title: string };
 
-  const UPLOAD_ACCEPT = '.docx,.pdf,.txt,.md,.html,.htm';
-  const PAIRS_ACCEPT = '.tmx,.tsv,.csv,.docx';
+  const UPLOAD_ACCEPT = '.docx,.pdf,.odt,.rtf,.xlsx,.csv,.tsv,.xlf,.xliff,.srt,.vtt,.txt,.md,.html,.htm';
+  const PAIRS_ACCEPT = '.tmx,.xlf,.xliff,.tsv,.csv,.docx';
   const LANG_BADGE: Record<string, string> = { mismatch: 'src.check.mismatch', uncertain: 'src.check.uncertain' };
 
   const emptyFacets = () => ({ tags: [], text_types: [], date_min: '', date_max: '' });
@@ -77,6 +77,7 @@
   // Metadata applied to the documents added next, and the language override.
   let meta = $state<Meta>({ tags: '', text_type: '', doc_date: '', author: '' });
   let force = $state(false);
+  let textColumns = $state('');
   const metaSummary = $derived(
     [
       meta.tags.trim() && t('src.meta.sumTags', { v: meta.tags.trim() }),
@@ -387,7 +388,7 @@
       }
       const fd = new FormData();
       for (const f of files) fd.append('files', f);
-      const res = await upload<UploadResult[]>(`/api/corpora/${id}/upload`, fd, { force_language: force, ...metaParams() });
+      const res = await upload<UploadResult[]>(`/api/corpora/${id}/upload`, fd, { force_language: force, columns: textColumns.trim(), ...metaParams() });
       if (!still(id)) return;
       files = [];
       if (fileInput) fileInput.value = '';
@@ -677,6 +678,10 @@
             aria-label={t('src.upload.files')}
             onchange={(e) => (files = [...(e.currentTarget.files ?? [])])}
           />
+          <label class="field">
+            {t('src.upload.columns')}
+            <input type="text" bind:value={textColumns} placeholder={t('src.upload.columnsHint')} />
+          </label>
           <div class="row">
             <span class="hint grow">{t('src.upload.hint')}</span>
             <Button variant="primary" disabled={busy !== null} onclick={uploadFiles}>{t('src.upload.go')}</Button>

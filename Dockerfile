@@ -8,6 +8,10 @@ COPY frontend/ ./
 RUN npm run build
 
 FROM python:3.14-slim
+
+# Optional OCR for scanned PDFs: docker build --build-arg WITH_OCR=1 .   (adds Tesseract with Spanish and Italian
+# data, about 100 MB, and the `ocr` Python extra)
+ARG WITH_OCR=0
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 ENV PYTHONUNBUFFERED=1 UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy \
@@ -18,13 +22,15 @@ WORKDIR /srv
 # Dependencies first (cached layer). spaCy models are NOT bundled: they are mounted at /models and
 # downloaded on first start by docker/entrypoint.sh.
 COPY pyproject.toml uv.lock README.md ./
-RUN uv sync --frozen --no-dev --no-install-project
+RUN if [ "$WITH_OCR" = "1" ]; then apt-get update && apt-get install -y --no-install-recommends \
+        tesseract-ocr tesseract-ocr-spa tesseract-ocr-ita && rm -rf /var/lib/apt/lists/*; fi
+RUN uv sync --frozen --no-dev --no-install-project $([ "$WITH_OCR" = "1" ] && echo --extra ocr)
 
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY src ./src
 # The UI is git-ignored and never in the build context: it comes from the ui stage.
 COPY --from=ui /ui/src/colloca/static/ ./src/colloca/static/
-RUN uv sync --frozen --no-dev
+RUN uv sync --frozen --no-dev $([ "$WITH_OCR" = "1" ] && echo --extra ocr)
 
 RUN useradd -m colloca && mkdir -p /data /models && chown colloca /data /models
 USER colloca

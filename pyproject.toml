@@ -16,10 +16,17 @@ dependencies = [
     "openpyxl>=3.1.5",
     "defusedxml>=0.7.1",
     "numpy>=1.26",      # near-duplicate sketches (already installed with spaCy)
+    "striprtf>=0.0.35",
 ]
 
 [project.scripts]
 colloca-import-reference = "colloca.cli:main"
+
+[project.optional-dependencies]
+ocr = [
+    "pillow>=13.0.0",
+    "pypdfium2>=5.15.2",
+]
 
 [dependency-groups]
 # spaCy models are not on PyPI (spaCy releases). The Docker image does not bundle them: they are
@@ -32,6 +39,8 @@ dev = [
     "lxml>=5",     # RELAX NG validation of the TBX export (tests/test_tbx_schema.py)
     "mypy>=2.4.1",
     "pytest-cov>=7.1.0",
+    "pypdfium2>=5.15.2",
+    "pillow>=13.0.0",
 ]
 
 [build-system]
