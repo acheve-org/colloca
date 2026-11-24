@@ -253,5 +253,6 @@ def test_v3_database_upgrades_and_old_tags_become_filterable(tmp_path):
     assert db.migrate(conn) == db.SCHEMA_VERSION
     tags = [tuple(r) for r in conn.execute("SELECT doc_id, tag FROM doc_tags ORDER BY tag")]
     assert tags == [(1, "cliente x"), (1, "contrato")]
-    assert conn.execute("SELECT project_id FROM corpora").fetchone()[0] is None
+    general = conn.execute("SELECT id FROM projects WHERE name = 'General'").fetchone()[0]
+    assert conn.execute("SELECT project_id FROM corpora").fetchone()[0] == general    # v15: project-less -> General
     assert conn.execute("SELECT text_type, doc_date, author FROM documents").fetchone()[:] == ("", "", "")
