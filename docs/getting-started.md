@@ -19,7 +19,7 @@ docker compose up
 
 ## Workflow
 
-1. **New corpus**: name + language (es, it). Group a client's corpora under a **project** (the *…* button beside the project selector).
+1. **Project and corpus** (*Projects*): create a **project** for the client or job, then *New corpus* (name + language, e.g. es, it) inside it. Every working corpus belongs to a project. On first run the empty screens lead you through Languages → Projects → Sources.
 2. **Add sources** (*Sources*):
 
    | Method | Behaviour |
@@ -42,9 +42,10 @@ Screen details: [analysis.md](analysis.md).
 ## Projects, document details and filters
 
 - **Project**: groups a client's corpora.
-  - A corpus belongs to at most one project (change under *Sources*).
-  - Deleting a project keeps its corpora.
+  - Every working corpus belongs to exactly one project (`POST /api/corpora` needs `project_id`). Move a corpus to another project from the *Move* menu on the *Projects* screen; it cannot be taken out of a project.
+  - A project can be deleted only when it has no corpora, trashed ones included. *Projects* offers to move its live corpora elsewhere first; for corpora in the Trash, restore or empty them in *Backup and Trash*.
   - Base corpora have no project.
+  - The first start of a version with mandatory projects creates a project named `General` for corpora that had none ([operations.md](operations.md#database-upgrades)).
 - **Document details**:
 
   | Field | Format |
