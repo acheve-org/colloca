@@ -44,15 +44,24 @@ def _row(r) -> Language:
     return Language(r["code"], r["name"], r["model_size"], r["tesseract"])
 
 
+_cache: list[Language] | None = None     # the registry is read often (every validation), changed rarely
+
+
+def _invalidate() -> None:
+    global _cache
+    _cache = None
+
+
 def all_languages() -> list[Language]:
-    with _session() as conn:
-        return [_row(r) for r in conn.execute("SELECT * FROM languages ORDER BY added, code")]
+    global _cache
+    if _cache is None:
+        with _session() as conn:
+            _cache = [_row(r) for r in conn.execute("SELECT * FROM languages ORDER BY added, code")]
+    return list(_cache)
 
 
 def get(code: str) -> Language | None:
-    with _session() as conn:
-        r = conn.execute("SELECT * FROM languages WHERE code=?", (code,)).fetchone()
-    return _row(r) if r else None
+    return next((lang for lang in all_languages() if lang.code == code), None)
 
 
 def add(code: str, name: str, model_size: str | None, tesseract: str) -> Language:
@@ -61,6 +70,7 @@ def add(code: str, name: str, model_size: str | None, tesseract: str) -> Languag
             raise ValueError(f"Language '{code}' is already set up")
         conn.execute("INSERT INTO languages (code,name,model_size,tesseract) VALUES (?,?,?,?)",
                      (code, name, model_size, tesseract))
+    _invalidate()
     return Language(code, name, model_size, tesseract)
 
 
@@ -75,6 +85,7 @@ def update(code: str, *, name: str | None = None, model_size: "str | None | _Uns
             conn.execute("UPDATE languages SET model_size=? WHERE code=?", (model_size, code))
         if tesseract is not None:
             conn.execute("UPDATE languages SET tesseract=? WHERE code=?", (tesseract, code))
+    _invalidate()
     return get(code)
 
 
@@ -89,8 +100,10 @@ def remove(code: str) -> None:
     if n:
         raise LanguageInUse(n)
     with _session() as conn:
-        if conn.execute("DELETE FROM languages WHERE code=?", (code,)).rowcount == 0:
-            raise KeyError(code)
+        gone = conn.execute("DELETE FROM languages WHERE code=?", (code,)).rowcount
+    _invalidate()
+    if gone == 0:
+        raise KeyError(code)
 
 
 class _Registry(Mapping):

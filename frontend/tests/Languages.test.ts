@@ -92,6 +92,17 @@ describe('Languages', () => {
     expect(messages.current?.kind).toBe('err');
   });
 
+  it('uninstalling a model asks first and warns when corpora use the language', async () => {
+    render(Languages);
+    await loaded();
+    await fireEvent.click(within(card('Spanish')).getByRole('button', { name: 'Uninstall model of Spanish' }));
+    expect(calls.some((c) => c.method === 'DELETE')).toBe(false);
+    const dlg = screen.getByRole('dialog', { name: 'Uninstall the model of Spanish?' });
+    expect(within(dlg).getByText(/2 corpora use this language: importing/)).toBeInTheDocument();
+    await fireEvent.click(within(dlg).getByRole('button', { name: 'Uninstall' }));
+    await waitFor(() => expect(calls.some((c) => c.method === 'DELETE' && c.path === '/api/languages/es/model')).toBe(true));
+  });
+
   it('remove is disabled while corpora use the language and says how many', async () => {
     render(Languages);
     await loaded();

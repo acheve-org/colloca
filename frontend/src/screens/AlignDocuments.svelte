@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { post, upload } from '../lib/api';
+  import { onMount } from 'svelte';
+  import { get, post, upload } from '../lib/api';
   import {
     fromProposal, isLow, linkType, mergeNext, removeLink, report, splitLink, storable,
     type AlignLink, type AlignProposal,
@@ -8,6 +9,7 @@
   import { t } from '../lib/i18n';
   import { trackJobs } from '../lib/jobs.svelte';
   import { messages } from '../lib/messages.svelte';
+  import type { Languages } from '../lib/types';
   import Badge from '../lib/ui/Badge.svelte';
   import Button from '../lib/ui/Button.svelte';
   import Field from '../lib/ui/Field.svelte';
@@ -31,6 +33,19 @@
   let docTitle = $state('');
   let partner = $state('');
   let partnerName = $state('');
+  // With more than two languages set up the user says which one the translation is in.
+  let langs = $state.raw<Languages>({});
+  let targetLang = $state('');
+  const otherLangs = $derived(Object.keys(langs).filter((l) => l !== corpusStore.current?.lang));
+  const chooseLang = $derived(otherLangs.length > 1);
+  $effect(() => {
+    if (!otherLangs.includes(targetLang)) targetLang = otherLangs[0] ?? '';
+  });
+  onMount(() => {
+    get<Languages>('/api/languages')
+      .then((l) => (langs = l))
+      .catch(() => {}); // without the list the server picks the only other language, as before
+  });
   let splitting = $state<number | null>(null);
   let splitS = $state('1');
   let splitT = $state('1');
@@ -45,7 +60,7 @@
   );
   const partnerOptions = $derived.by(() => {
     const cur = corpusStore.current;
-    const others = cur ? corpusStore.list.filter((c) => c.id !== cur.id && c.lang !== cur.lang && !c.is_reference) : [];
+    const others = cur ? corpusStore.list.filter((c) => c.id !== cur.id && c.lang !== cur.lang && !c.is_reference && (!chooseLang || c.lang === targetLang)) : [];
     return [
       ...others.map((c) => ({ value: String(c.id), label: `${c.name} [${c.lang}]` })),
       { value: 'new', label: t('src.pair.newCorpus') },
@@ -67,7 +82,7 @@
     fd.append('target', targetFile);
     busy = true;
     try {
-      const p = await upload<AlignProposal>(`/api/corpora/${id}/align/propose`, fd);
+      const p = await upload<AlignProposal>(`/api/corpora/${id}/align/propose`, fd, chooseLang ? { target_lang: targetLang } : undefined);
       if (corpusStore.currentId !== id) return;
       proposal = p;
       corpusId = id;
@@ -114,7 +129,10 @@
     }
     busy = true;
     try {
-      const target = partner === 'new' ? { partner_name: partnerName.trim() } : { partner_corpus_id: Number(partner) };
+      const target =
+        partner === 'new'
+          ? { partner_name: partnerName.trim(), ...(chooseLang ? { partner_lang: targetLang } : {}) }
+          : { partner_corpus_id: Number(partner) };
       await post(`/api/corpora/${corpusId}/align/confirm`, {
         links: links.map((l) => ({ src: l.src, tgt: l.tgt, low: isLow(l) })),
         title: docTitle.trim(),
@@ -142,6 +160,11 @@
       <input bind:this={sourceInput} type="file" accept=".docx,.pdf,.txt,.md,.html,.htm" aria-label={t('align.source')}
         onchange={(e) => (sourceFile = e.currentTarget.files?.[0] ?? null)} />
     </Field>
+    {#if chooseLang}
+      <Field label={t('align.language')}>
+        <Select bind:value={targetLang} label={t('align.language')} options={otherLangs.map((l) => ({ value: l, label: langs[l] }))} />
+      </Field>
+    {/if}
     <Field label={t('align.target')}>
       <input bind:this={targetInput} type="file" accept=".docx,.pdf,.txt,.md,.html,.htm" aria-label={t('align.target')}
         onchange={(e) => (targetFile = e.currentTarget.files?.[0] ?? null)} />

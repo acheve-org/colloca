@@ -5,8 +5,10 @@ import { corpusStore } from '../src/lib/corpus.svelte';
 import { stopAllJobs } from '../src/lib/jobs.svelte';
 import { messages } from '../src/lib/messages.svelte';
 
-interface Call { method: string; path: string; body?: unknown }
+interface Call { method: string; path: string; search?: string; body?: unknown }
 let calls: Call[];
+let languages: Record<string, string> | null;
+const apiCalls = () => calls.filter((c) => c.path !== '/api/languages');
 
 const res = (status: number, body: unknown) => ({ ok: status < 400, status, statusText: 'x', json: async () => body });
 const proposal = {
@@ -20,6 +22,7 @@ const proposal = {
 
 beforeEach(() => {
   calls = [];
+  languages = null;
   messages.clear();
   corpusStore.list = [
     { id: 1, name: 'ES', lang: 'es', project_id: null, is_reference: 0, docs: 0, tokens: 0 },
@@ -30,7 +33,8 @@ beforeEach(() => {
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
     const u = new URL(url, 'http://x');
     const raw = init?.body;
-    calls.push({ method: init?.method ?? 'GET', path: u.pathname, body: typeof raw === 'string' ? JSON.parse(raw) : raw });
+    calls.push({ method: init?.method ?? 'GET', path: u.pathname, search: u.search, body: typeof raw === 'string' ? JSON.parse(raw) : raw });
+    if (u.pathname === '/api/languages' && languages) return res(200, languages);
     if (u.pathname === '/api/corpora/1/align/propose') return res(200, proposal);
     if (u.pathname === '/api/corpora/1/align/confirm') return res(202, { job_id: 5 });
     if (/\/jobs$/.test(u.pathname)) return res(200, []);
@@ -55,16 +59,40 @@ async function propose() {
 }
 
 describe('AlignDocuments', () => {
+  it('asks for the translation language when several others are set up, and sends it', async () => {
+    languages = { es: 'Spanish', it: 'Italian', fr: 'French' };
+    corpusStore.list = [...corpusStore.list, { id: 3, name: 'FR', lang: 'fr', project_id: null, is_reference: 0, docs: 0, tokens: 0 } as never];
+    render(AlignDocuments);
+    const pick = await screen.findByLabelText('Language of the translation');
+    await fireEvent.change(pick, { target: { value: 'fr' } });
+    const file = (n: string) => new File(['x'], n, { type: 'text/plain' });
+    await fireEvent.change(screen.getByLabelText('Original document'), { target: { files: [file('a.txt')] } });
+    await fireEvent.change(screen.getByLabelText('Translation'), { target: { files: [file('b.txt')] } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Propose alignment' }));
+    await waitFor(() => expect(screen.getAllByTestId('link')).toHaveLength(3));
+    expect(apiCalls()[0].search).toBe('?target_lang=fr');
+    await fireEvent.click(screen.getByRole('button', { name: 'Confirm and import' }));
+    await waitFor(() => expect(calls.some((c) => c.path === '/api/corpora/1/align/confirm')).toBe(true));
+    expect((calls.find((c) => c.path === '/api/corpora/1/align/confirm')!.body as { partner_corpus_id: number }).partner_corpus_id).toBe(3);
+  });
+
+  it('shows no language choice with exactly two languages', async () => {
+    languages = { es: 'Spanish', it: 'Italian' };
+    render(AlignDocuments);
+    await waitFor(() => expect(calls.some((c) => c.path === '/api/languages')).toBe(true));
+    expect(screen.queryByLabelText('Language of the translation')).toBeNull();
+  });
+
   it('asks for both files first', async () => {
     render(AlignDocuments);
     await fireEvent.click(screen.getByRole('button', { name: 'Propose alignment' }));
     expect(messages.current?.text ?? '').toContain('Choose both documents');
-    expect(calls).toHaveLength(0);
+    expect(apiCalls()).toHaveLength(0);
   });
 
   it('shows the proposal with a text mark on low-confidence links and a report, and stores nothing yet', async () => {
     await propose();
-    expect(calls.map((c) => c.path)).toEqual(['/api/corpora/1/align/propose']);
+    expect(apiCalls().map((c) => c.path)).toEqual(['/api/corpora/1/align/propose']);
     const rows = screen.getAllByTestId('link');
     expect(within(rows[0]).queryByText(/Check/)).toBeNull();
     expect(within(rows[1]).getByText(/Check/)).toBeInTheDocument();

@@ -111,11 +111,21 @@
       await post(`/api/languages/${r.code}/model`, size ? { size } : {});
       await loadSettings();
     });
-  const uninstallModel = (r: LanguageSetting) =>
-    act(async () => {
+  let uninstalling = $state.raw<LanguageSetting | null>(null);
+  let uninstallOpen = $state(false);
+  function askUninstall(r: LanguageSetting): void {
+    uninstalling = r;
+    uninstallOpen = true;
+  }
+  async function confirmUninstall(): Promise<void> {
+    const r = uninstalling;
+    uninstallOpen = false;
+    if (!r) return;
+    await act(async () => {
       await del(`/api/languages/${r.code}/model`);
       await loadSettings();
     });
+  }
   const installOcr = (r: LanguageSetting) =>
     act(async () => {
       await post(`/api/languages/${r.code}/ocr`);
@@ -186,7 +196,7 @@
                   ariaLabel={t('lang.changeSizeFor', { name: r.name })}
                   onclick={() => installModel(r)}>{t('lang.changeSize')}</Button
                 >
-                <Button variant="danger" disabled={busy} ariaLabel={t('lang.uninstallFor', { name: r.name })} onclick={() => uninstallModel(r)}>
+                <Button variant="danger" disabled={busy} ariaLabel={t('lang.uninstallFor', { name: r.name })} onclick={() => askUninstall(r)}>
                   {t('lang.uninstall')}
                 </Button>
               {:else}
@@ -240,6 +250,16 @@
 
 <AddLanguageDialog bind:open={addOpen} {catalog} onadded={load} />
 <EditLanguageDialog bind:open={editOpen} lang={editing} sizes={editing ? sizesOf(editing.code) : SIZES} onsaved={load} />
+<Dialog bind:open={uninstallOpen} title={t('lang.uninstallTitle', { name: uninstalling?.name ?? '' })}>
+  <p class="confirm">{t('lang.uninstallBody')}</p>
+  {#if uninstalling && uninstalling.corpus_count > 0}
+    <p class="confirm err" role="alert">{t('lang.uninstallCorpora', { n: uninstalling.corpus_count })}</p>
+  {/if}
+  {#snippet footer()}
+    <Button onclick={() => (uninstallOpen = false)}>{t('common.cancel')}</Button>
+    <Button variant="danger" onclick={confirmUninstall}>{t('lang.uninstall')}</Button>
+  {/snippet}
+</Dialog>
 <Dialog bind:open={removeOpen} title={t('lang.removeTitle', { name: removing?.name ?? '' })}>
   <p class="confirm">{t('lang.removeBody')}</p>
   <Toggle bind:checked={alsoUninstall} label={t('lang.alsoUninstall')} />

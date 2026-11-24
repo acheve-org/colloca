@@ -72,8 +72,12 @@ def tessdata_args(codes: list[str]) -> list[str]:
     return []
 
 
+FETCH_TIMEOUT_S = 60       # per socket operation: a stalled connection must end as "failed", not hang forever
+
+
 def _fetch(url: str, dest: Path) -> None:
-    urllib.request.urlretrieve(url, dest)  # noqa: S310 - fixed https GitHub URL built from the catalog
+    with urllib.request.urlopen(url, timeout=FETCH_TIMEOUT_S) as resp, dest.open("wb") as out:  # noqa: S310
+        shutil.copyfileobj(resp, out)       # the URL is a fixed https GitHub URL built from the catalog
 
 
 def install(code: str) -> None:

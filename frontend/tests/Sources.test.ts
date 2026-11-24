@@ -22,6 +22,7 @@ interface Call { method: string; path: string; params: URLSearchParams; body?: u
 let calls: Call[];
 let docs: { status: number; body: unknown };
 let jobList: Job[][];
+let langsReply: Record<string, string> | null;
 let uploadReply: { status: number; body: unknown };
 let previewFileReply: Record<string, unknown>;
 let docsGate: Promise<void> | null;
@@ -37,6 +38,7 @@ beforeEach(() => {
   previewGate = null;
   urlsReply = null;
   discovered = { links: [], max_per_request: 20, truncated: false };
+  langsReply = null;
   docs = { status: 200, body: [doc(1), doc(2, { tags: [], text_type: 'manual' })] };
   jobList = [[]];
   uploadReply = { status: 202, body: [{ file: 'a.txt', ok: true, job_id: 7 }, { file: 'b.docx', ok: true, job_id: 8 }] };
@@ -52,6 +54,7 @@ beforeEach(() => {
     const body = typeof raw === 'string' ? JSON.parse(raw) : raw;
     calls.push({ method, path: u.pathname, params: u.searchParams, body });
     const p = u.pathname;
+    if (p === '/api/languages' && langsReply) return res(200, langsReply);
     if (p === '/api/corpora/1/documents' && method === 'GET') {
       if (docsGate) await docsGate;
       return res(docs.status, docs.body);
@@ -354,6 +357,18 @@ describe('Sources', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Import' }));
     await waitFor(() => expect(calls.some((c) => c.path === '/api/corpora/1/upload-pairs')).toBe(true));
     expect(calls.find((x) => x.path === '/api/corpora/1/upload-pairs')!.params.get('partner_name')).toBe('Traduzioni');
+  });
+
+  it('a new partner corpus gets the chosen language when several are set up', async () => {
+    langsReply = { es: 'Spanish', it: 'Italian', fr: 'French' };
+    await ready();
+    await fireEvent.change(screen.getByLabelText('Aligned file'), { target: { files: [new File(['x'], 'tm.tmx')] } });
+    await fireEvent.change(screen.getByLabelText('Translations go to'), { target: { value: 'new' } });
+    await fireEvent.input(screen.getByLabelText('Name of the new corpus'), { target: { value: 'Traductions' } });
+    await fireEvent.change(await screen.findByLabelText('Language of the new corpus'), { target: { value: 'fr' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Import' }));
+    await waitFor(() => expect(calls.some((c) => c.path === '/api/corpora/1/upload-pairs')).toBe(true));
+    expect(calls.find((x) => x.path === '/api/corpora/1/upload-pairs')!.params.get('partner_lang')).toBe('fr');
   });
 
   it('pastes text with a default title', async () => {

@@ -45,7 +45,7 @@
   import { JOBS_DONE, jobLogs, trackJobs } from '../lib/jobs.svelte';
   import { messages } from '../lib/messages.svelte';
   import { projectStore, reloadProjects } from '../lib/projects.svelte';
-  import type { Doc, Facets, Job, NearDupMatch, NearDupReport } from '../lib/types';
+  import type { Doc, Facets, Job, Languages, NearDupMatch, NearDupReport } from '../lib/types';
   import AlignDocuments from './AlignDocuments.svelte';
   import TmxExport from './TmxExport.svelte';
   import Badge from '../lib/ui/Badge.svelte';
@@ -125,6 +125,13 @@
   let partner = $state('');
   let pairName = $state('');
   let swap = $state(false);
+  // A new partner corpus needs its language when more than one other language is set up.
+  let langs = $state.raw<Languages>({});
+  let pairLang = $state('');
+  const otherLangs = $derived(Object.keys(langs).filter((l) => l !== corpusStore.current?.lang));
+  $effect(() => {
+    if (!otherLangs.includes(pairLang)) pairLang = otherLangs[0] ?? '';
+  });
 
   // Paste card
   let pasteTitle = $state('');
@@ -323,6 +330,9 @@
     window.addEventListener(CORPUS_CHANGED, onCorpusChanged);
     window.addEventListener(JOBS_DONE, onJobsDone);
     reloadProjects().catch((err) => messages.say(errMsg(err), 'err'));
+    get<Languages>('/api/languages')
+      .then((l) => (langs = l))
+      .catch(() => {}); // without the list the server picks the only other language, as before
     return () => {
       window.removeEventListener(CORPUS_CHANGED, onCorpusChanged);
       window.removeEventListener(JOBS_DONE, onJobsDone);
@@ -520,7 +530,10 @@
       }
       const fd = new FormData();
       fd.append('files', f);
-      const target = partner === 'new' ? { partner_name: pairName.trim() } : { partner_corpus_id: partner };
+      const target =
+        partner === 'new'
+          ? { partner_name: pairName.trim(), ...(otherLangs.length > 1 ? { partner_lang: pairLang } : {}) }
+          : { partner_corpus_id: partner };
       const res = await upload<UploadResult[]>(`/api/corpora/${id}/upload-pairs`, fd, {
         ...target,
         swap,
@@ -840,6 +853,9 @@
           </Field>
           {#if partner === 'new'}
             <input bind:value={pairName} maxlength="120" placeholder={t('src.pair.namePlaceholder')} aria-label={t('src.pair.name')} />
+            {#if otherLangs.length > 1}
+              <Select label={t('src.pair.lang')} bind:value={pairLang} options={otherLangs.map((l) => ({ value: l, label: langs[l] }))} />
+            {/if}
           {/if}
           <Toggle bind:checked={swap} label={t('src.pair.swap')} />
           <div class="row">

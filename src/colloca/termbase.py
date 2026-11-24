@@ -55,9 +55,9 @@ def assign_concept(conn, project_id: int | None, src_lang: str, tgt_lang: str, s
     return conn.execute("SELECT COALESCE(MAX(concept_id), 0) + 1 FROM terms").fetchone()[0]
 
 
-def other_lang(lang: str) -> str:
-    """The default target language: the first supported language that is not the source."""
-    return next(code for code in nlp.SUPPORTED if code != lang)
+def other_lang(lang: str) -> str | None:
+    """The default target language: the first supported language that is not the source (None when there is none)."""
+    return next((code for code in nlp.SUPPORTED if code != lang), None)
 
 
 def clean(fields: dict, *, partial: bool = False) -> dict:
@@ -98,7 +98,11 @@ def clean(fields: dict, *, partial: bool = False) -> dict:
     if not partial:
         if not out.get("src_term"):
             raise TermError("The source term is required")
-        out.setdefault("tgt_lang", other_lang(out["src_lang"]))
+        if "tgt_lang" not in out:
+            default = other_lang(out["src_lang"])
+            if default is None:
+                raise TermError("A termbase entry needs two languages: add a second one in the Languages screen")
+            out["tgt_lang"] = default
         if out["tgt_lang"] == out["src_lang"]:
             raise TermError("The target language must differ from the source language")
     return out

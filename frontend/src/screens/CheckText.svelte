@@ -1,10 +1,11 @@
 <script lang="ts">
-  import { ApiError, post } from '../lib/api';
+  import { onMount } from 'svelte';
+  import { ApiError, get, post } from '../lib/api';
   import { corpusStore } from '../lib/corpus.svelte';
   import { termRanges } from '../lib/highlight';
   import { t } from '../lib/i18n';
   import { messages } from '../lib/messages.svelte';
-  import type { CheckTextResult } from '../lib/types';
+  import type { CheckTextResult, Languages } from '../lib/types';
   import Button from '../lib/ui/Button.svelte';
   import EmptyState from '../lib/ui/EmptyState.svelte';
   import Field from '../lib/ui/Field.svelte';
@@ -12,18 +13,25 @@
   import Select from '../lib/ui/Select.svelte';
   import Toolbar from '../lib/ui/Toolbar.svelte';
 
-  // 'source' = a segment in the corpus language; 'draft' = a draft translation (the other language).
-  const LANGS = ['es', 'it'];
+  // 'source' = a segment in the corpus language; 'draft:<code>' = a draft translation in another set-up language.
+  let langs = $state.raw<Languages>({});
   let text = $state('');
-  let side = $state<'source' | 'draft'>('source');
+  let side = $state('source');
   let result = $state.raw<CheckTextResult | null>(null);
   let busy = $state(false);
   let error = $state('');
 
   const corpus = $derived(corpusStore.current);
+  const drafts = $derived(corpus ? Object.keys(langs).filter((l) => l !== corpus.lang) : []);
   const lang = $derived(
-    !corpus ? '' : side === 'source' ? corpus.lang : (LANGS.find((l) => l !== corpus.lang) ?? corpus.lang),
+    !corpus ? '' : side.startsWith('draft:') && drafts.includes(side.slice(6)) ? side.slice(6) : corpus.lang,
   );
+
+  onMount(() => {
+    get<Languages>('/api/languages')
+      .then((l) => (langs = l))
+      .catch((err) => messages.say(err instanceof Error ? err.message : String(err), 'err'));
+  });
 
   async function run(): Promise<void> {
     if (!corpus) return;
@@ -55,7 +63,7 @@
           label={t('chk.what')}
           options={[
             { value: 'source', label: t('chk.source', { lang: corpus.lang }) },
-            { value: 'draft', label: t('chk.draft', { lang: LANGS.find((l) => l !== corpus.lang) ?? '' }) },
+            ...drafts.map((l) => ({ value: `draft:${l}`, label: t('chk.draft', { lang: l }) })),
           ]}
         />
       </Field>
