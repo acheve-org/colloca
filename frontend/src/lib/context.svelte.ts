@@ -13,25 +13,30 @@ export interface WorkingContext {
 
 const languageNames = $state<{ names: Languages }>({ names: {} });
 
-/** Loads the language names once per call; the Rail does it on mount. */
-export async function loadLanguageNames(): Promise<void> {
+// Codes already looked up by ensureLanguageName without success: one reload per missing code.
+let tried: Record<string, true> = {};
+
+async function fetchNames(): Promise<void> {
   languageNames.names = await get<Languages>('/api/languages');
+}
+
+/** Explicit refresh (Rail mount, Languages screen changes): reads the names and lets missing codes be retried. */
+export async function loadLanguageNames(): Promise<void> {
+  await fetchNames();
   tried = {};
 }
 
-// Codes already looked up without success: one reload per missing code, not one per render.
-let tried: Record<string, true> = {};
-
 /**
  * Reloads the names when the working corpus's language is not in the map (a language added
- * since the last load). Asks at most once per code; a failing load keeps the code as the name.
+ * since the last load). Asks at most once per code, even when the API succeeds without it;
+ * a failing load keeps the code as the name.
  */
 export async function ensureLanguageName(): Promise<void> {
   const lang = corpusStore.current?.lang;
   if (!lang || lang in languageNames.names || lang in tried) return;
   tried[lang] = true;
   try {
-    await loadLanguageNames();
+    await fetchNames();
   } catch {
     // The code stays as the name.
   }

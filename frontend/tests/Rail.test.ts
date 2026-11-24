@@ -30,6 +30,24 @@ describe('Rail', () => {
     expect(screen.queryByRole('combobox', { name: 'Project' })).toBeNull();
   });
 
+  it('does not keep reloading language names for a code the API lacks', async () => {
+    const f = vi.fn(async (u: string) => ({
+      ok: true, status: 200, statusText: 'OK',
+      json: async () => (String(u) === '/api/languages' ? { es: 'Spanish' } : []),
+    }));
+    vi.stubGlobal('fetch', f);
+    corpusStore.list = [{ id: 1, name: 'a', lang: 'zz', project_id: null, is_reference: 0, docs: 1, tokens: 1 }];
+    corpusStore.currentId = 1;
+    render(Rail);
+    await new Promise((r) => setTimeout(r, 50));
+    const n = f.mock.calls.filter((c) => String(c[0]) === '/api/languages').length;
+    await new Promise((r) => setTimeout(r, 50));
+    expect(f.mock.calls.filter((c) => String(c[0]) === '/api/languages').length).toBe(n);
+    expect(n).toBeLessThanOrEqual(2);
+    corpusStore.currentId = null;
+    vi.unstubAllGlobals();
+  });
+
   it('marks only the active route with aria-current', () => {
     route.screen = 'keyness';
     render(Rail);

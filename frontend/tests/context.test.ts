@@ -66,4 +66,16 @@ describe('ensureLanguageName', () => {
     expect(f).toHaveBeenCalledTimes(1);
     expect(workingContext()?.languageName).toBe('fr');
   });
+
+  it('asks once for a code the API does not know, however often it runs', async () => {
+    await loadLanguageNames();
+    corpusStore.list = [corpus(6, 'zz', null)];
+    corpusStore.currentId = 6;
+    const f = vi.fn(async () => ({ ok: true, status: 200, statusText: 'OK', json: async () => ({ es: 'Spanish' }) }));
+    vi.stubGlobal('fetch', f);
+    await ensureLanguageName();
+    await ensureLanguageName();
+    expect(f).toHaveBeenCalledTimes(1);
+    expect(workingContext()?.languageName).toBe('zz');
+  });
 });
