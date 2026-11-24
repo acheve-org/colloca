@@ -1,3 +1,4 @@
+import contextlib
 import sqlite3
 
 import pytest
@@ -17,16 +18,14 @@ def xx(client):
     yield
     with db.session() as conn:
         conn.execute("DELETE FROM corpora WHERE lang='xx'")
-    try:
+    with contextlib.suppress(KeyError):
         languages.remove("xx")
-    except KeyError:
-        pass
 
 
 def test_seed_has_es_and_it(client):
     assert languages.get("es") == languages.Language("es", "Spanish", None, "spa")
     assert languages.get("it").tesseract == "ita"
-    assert [l.code for l in languages.all_languages()][:2] == ["es", "it"]
+    assert [x.code for x in languages.all_languages()][:2] == ["es", "it"]
 
 
 def test_add_get_update_remove_roundtrip(xx):
