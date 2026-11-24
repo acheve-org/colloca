@@ -52,11 +52,11 @@ The T-numbers are stable labels used for cross-references; the **row order is th
 | T18 | Segment lookup with match percentages (fuzzy matching against aligned texts) | Medium | L | P2 | Research #9 |
 | T28 | Engineering health: browser tests, split `app.js`, logging, type checking (**partly done**: browser tests, UI split) | Medium | M | P2 | Audit |
 | T19 | Term entry model: several terms per language, term-level notes, gender and number | Medium | L | P3 | Research #11 |
-| T20 | TMX export of aligned corpora, keep TMX inline markup | Low | M | P3 | Research #10 |
+| T20 | TMX export of aligned corpora, keep TMX inline markup (**done**, not yet checked against the official DTD or a CAT tool) | Low | M | P3 | Research #10 |
 | T21 | Related-term suggestions from word embeddings | Low | L | P3 | Roadmap 14 |
 | T22 | Interface language (Spanish, Italian) and a semantic colour system (**done**, `docs/accessibility.md`) | Low | M | P3 | Audit, Research #12 |
 | T23 | Optional authentication and encryption at rest | Low | M | P3 | Roadmap 15 |
-| T24 | PDF extraction robustness | Low | M | P3 | Audit |
+| T24 | PDF extraction robustness (**done**) | Low | M | P3 | Audit |
 | T25 | URL fetching: DNS-rebinding hardening, import a list of URLs (**done**) | Low | S | P3 | Audit |
 | T26 | Virtual scrolling for very large tables (**done**) | Low | M | P3 | Audit |
 | T27 | Dispersion plot for a word across documents (**done**) | Low | S | P3 | Research #14 |
@@ -555,6 +555,10 @@ termbase tab, the dialog, the Job matching, and the exports (TBX already has the
 
 **Priority** P3 · **Value** Low · **Effort** M · **Source** Research #10
 
+**Status: done** (migration v12, `tmxexport.py`): `GET /api/corpora/{id}/export-tmx` and *Sources > Export aligned texts*, inline markup kept in `segment_markup`
+and written back, metadata as props, round trip tested. Open: validate against the official TMX DTD (needs the maintainer's OK to download it, as for T07) and
+import an export into the maintainer's CAT tool; the tests check the 1.4b content model written from memory of the DTD.
+
 **Why it matters.** Aligned texts can be imported but not exported, so a memory built or cleaned in Colloca cannot go back to a CAT tool. The importer drops inline
 tags, which is fine for corpus building but loses them on a round trip.
 
@@ -622,6 +626,10 @@ reverse-proxy setups; optional SQLCipher or a documented encrypted volume for th
 ### T24. PDF extraction robustness
 
 **Priority** P3 · **Value** Low · **Effort** M · **Source** Audit
+
+**Status: done** (`pdftext.py`): reading order from run positions (columns, full-width headings, table rows), a quality score with reasons, a file preview
+(`POST /api/preview-file`) and the quality in URL previews and upload warnings. Positions only, so it is a heuristic (see the README for limits); tested on
+hand-made PDFs with known layouts, not on a collection of real documents.
 
 **Why it matters.** The PDF cleaner removes repeated headers and footers and joins soft-wrapped lines by heuristics. It can damage two-column layouts and tables, and
 nothing tells the user a result is poor.

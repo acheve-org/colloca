@@ -71,13 +71,24 @@ Upload (*Sources*) and *Analyse a job* accept:
 | Format | What is imported |
 | --- | --- |
 | `.docx`, `.odt`, `.rtf` | Body text and tables (ODT: footnotes and comments are left out). |
-| `.pdf` | The text layer; a PDF without one is read with **OCR** (below). |
+| `.pdf` | The text layer, read in **reading order** (columns one after the other, table rows kept as `a | b | c` lines) with a **quality score**; a PDF without a text layer is read with **OCR** (below). |
 | `.xlsx`, `.csv`, `.tsv` | The text columns, one cell per line (all sheets of an XLSX). They are detected (columns of words, not numbers, codes or dates); the *Spreadsheet columns* field overrides it with numbers or header names, e.g. `2,4` or `Texto`. A header row is skipped. |
 | `.xlf`, `.xliff` (1.2 and 2.x) | Plain text of the side written in the corpus language (target if it is the corpus language, else source), inline codes removed. For translation pairs use *Import aligned texts*. |
 | `.srt`, `.vtt` | Cue text, one line per cue; numbers, timings, tags, VTT notes and styles are dropped. |
 | `.txt`, `.md`, `.html` | As before. |
 
 XML formats are parsed with `defusedxml` (no external entities). The size and page limits below apply to all of them.
+
+### PDF layout and quality
+
+A PDF stores text runs at positions, not in reading order, so Colloca reads each page from the positions (`pdftext.py`): lines are
+rebuilt from the runs, a multi-column block is read column by column (a full-width heading stays above its columns), and three or more
+consecutive lines of short, aligned cells are kept as table rows. Running headers and page numbers are removed as before. A **quality
+score** (0 to 100: *good*, *fair*, *poor*) looks at the finished text for undecodable characters, many symbols, words without vowels,
+words split into letters, very short lines and lines that stop mid-sentence. For a PDF from a URL or *Preview file* (choose one file in
+*Upload documents*) the score and the reasons are shown above the text, which you can trim before *Add to corpus*; an upload that scores
+below *good* carries a warning in its job. Limits: it works from positions only (no ruling lines or font metrics), so a table with long
+cell text may be read as columns, text in an unusual order is left as pypdf gives it, and the score is a guide, not a guarantee.
 
 ### OCR for scanned PDFs (optional)
 
@@ -137,6 +148,14 @@ and search them side by side:
   everyday words score low). Single words only on the target side, and a statistical hint, not a verdict: confirm
   with the translated concordance, then **+ Term** adds the pair to the termbase with the example sentence.
 - TMX is parsed with `defusedxml`, so a hostile file (entity bombs, external entities) is refused.
+
+**Export as TMX.** *Sources > Export aligned texts (TMX)* (`GET /api/corpora/{id}/export-tmx`) writes this corpus and its aligned
+translations as a TMX 1.4b translation memory, so a memory built or cleaned in Colloca can go back to a CAT tool: this corpus's language is
+the source language, each unit carries its document's title, source, text type, date, author and tags as `prop`s, and the project name is in
+the header. When a TMX was imported, the inline markup of its segments (formatting codes, placeholders) is kept beside the plain text that the
+searches use, and is written back on export (switch it off for plain text). Import, export and import again gives the same segments. With
+several partner corpora choose one (`partner_corpus_id`); the document filter narrows the documents. The structure is checked by the tests
+against the content model of the TMX 1.4b DTD, but the official DTD file has not been used and no CAT tool has opened an export yet.
 
 ## Analyse a job before translating
 

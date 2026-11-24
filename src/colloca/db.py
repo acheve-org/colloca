@@ -195,8 +195,20 @@ CREATE TABLE job_reports (
 CREATE INDEX idx_job_reports_corpus ON job_reports (corpus_id, created);
 """
 
+# --- v12: inline markup of imported TMX segments (T20). The text of a segment is stored without tags (that is what
+# the searches see); when the TMX segment had inline elements (bpt, ept, ph, it, hi...) their original form is kept
+# here, so an export can give the memory back with its formatting codes. Only segments that had markup have a row.
+_V12 = """
+CREATE TABLE segment_markup (
+    doc_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    seg INTEGER NOT NULL,
+    raw TEXT NOT NULL,                 -- the inner XML of <seg>
+    PRIMARY KEY (doc_id, seg)
+) WITHOUT ROWID;
+"""
+
 MIGRATIONS: list[tuple[int, str]] = [(1, _V1), (2, _V2), (3, _V3), (4, _V4), (5, _V5), (6, _V6), (7, _V7), (8, _V8),
-                                     (9, _V9), (10, _V10), (11, _V11)]
+                                     (9, _V9), (10, _V10), (11, _V11), (12, _V12)]
 SCHEMA_VERSION = MIGRATIONS[-1][0]
 
 
