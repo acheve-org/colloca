@@ -47,7 +47,7 @@ The T-numbers are stable labels used for cross-references; the **row order is th
 | T13 | Advanced query language: regex, lemma + part of speech, distance patterns, accent-insensitive (**done**, `docs/query-language.md`) | Medium | L | P2 | Roadmap 11 |
 | T14 | Project backup and restore, undo for deletes | Medium | M | P2 | Audit, New |
 | T15 | Termbase hits and forbidden terms marked inside concordance lines, "check text" box | Medium | M | P2 | Research #6 |
-| T16 | Near-duplicate document detection | Medium | M | P2 | Roadmap 13 |
+| T16 | Near-duplicate document detection (**done**) | Medium | M | P2 | Roadmap 13 |
 | T17 | Query performance for large corpora | Medium | M | P2 | Roadmap 16 |
 | T18 | Segment lookup with match percentages (fuzzy matching against aligned texts) | Medium | L | P2 | Research #9 |
 | T28 | Engineering health: browser tests, split `app.js`, logging, type checking (**partly done**: browser tests, UI split) | Medium | M | P2 | Audit |

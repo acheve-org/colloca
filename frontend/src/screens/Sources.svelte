@@ -34,7 +34,7 @@
   import { JOBS_DONE, jobLogs, trackJobs } from '../lib/jobs.svelte';
   import { messages } from '../lib/messages.svelte';
   import { projectStore, reloadProjects } from '../lib/projects.svelte';
-  import type { Doc, Facets, Job } from '../lib/types';
+  import type { Doc, Facets, Job, NearDupMatch, NearDupReport } from '../lib/types';
   import Badge from '../lib/ui/Badge.svelte';
   import Button from '../lib/ui/Button.svelte';
   import DataTable from '../lib/ui/DataTable.svelte';
@@ -112,6 +112,60 @@
   let form = $state<EditForm>({ title: '', tags: '', text_type: '', doc_date: '', author: '' });
   let delOpen = $state(false);
   let toDelete = $state.raw<Doc | null>(null);
+
+  // Near-duplicates: the decision on a held import, and the report on the whole corpus.
+  let dupOpen = $state(false);
+  let dupPct = $state(85);
+  let dupReport = $state.raw<NearDupReport | null>(null);
+  let dupBusy = $state(false);
+
+  const matchesOf = (j: Job): NearDupMatch[] =>
+    j.code === 'near_duplicate' && Array.isArray(j.result?.matches) ? (j.result.matches as NearDupMatch[]) : [];
+
+  async function resolveJob(j: Job, action: 'import' | 'replace' | 'skip'): Promise<void> {
+    await act('resolve', async (id) => {
+      try {
+        await post(`/api/jobs/${j.id}/resolve`, { action });
+      } catch {
+        messages.say(t('dup.gone'), 'err');
+        return;
+      }
+      if (!still(id)) return;
+      messages.say(t('dup.done'), 'ok');
+      watch(action !== 'skip');
+    });
+  }
+
+  async function findDuplicates(): Promise<void> {
+    const id = corpusStore.currentId;
+    if (id === null) return;
+    dupBusy = true;
+    try {
+      const r = await get<NearDupReport>(`/api/corpora/${id}/near-duplicates`, { threshold: dupPct / 100 });
+      if (corpusStore.currentId === id) dupReport = r;
+    } catch (err) {
+      messages.say(errMsg(err), 'err');
+    } finally {
+      dupBusy = false;
+    }
+  }
+
+  function openDuplicates(): void {
+    dupReport = null;
+    dupOpen = true;
+    findDuplicates();
+  }
+
+  async function removeDuplicate(d: { id: number; title: string }): Promise<void> {
+    await act('delete', async (id) => {
+      await del(`/api/documents/${d.id}`);
+      if (!still(id)) return;
+      messages.say(t('dup.removed', { title: d.title }), 'ok');
+      refresh();
+      corpusStore.reload().catch((err) => messages.say(errMsg(err), 'err'));
+      await findDuplicates();
+    });
+  }
 
   const projectOptions = $derived([
     { value: '', label: t('src.noProject') },
@@ -451,6 +505,7 @@
   }
 
   function jobState(j: Job): { cls: string; text: string; pct?: number } {
+    if (j.code === 'skipped' || j.code === 'resolved') return { cls: 'muted', text: t(`dup.${j.code}`) };
     if (j.status === 'error') return { cls: 'err', text: j.error };
     if (j.status === 'done') {
       const segs = Number(j.result?.segments ?? 0);
@@ -495,6 +550,29 @@
     <span class="jlabel">{j.label}</span>
     {#if s.pct !== undefined}<progress max="100" value={s.pct}></progress>{/if}
     <span class={s.cls}>{s.text}</span>
+    {#if matchesOf(j).length}
+      {@const ms = matchesOf(j)}
+      <div class="dup">
+        <p>{t('dup.found', { n: ms.length })}</p>
+        <ul>
+          {#each ms as m (m.id)}
+            <li>
+              <strong>{t('dup.match', { title: m.title, pct: Math.round(m.similarity * 100) })}</strong>
+              <span class="muted">{t('dup.shared', { shared: m.shared_units, total: m.units })}</span>
+              {#if m.changed.length}
+                <span class="muted">{t('dup.changed')}</span>
+                <ul class="changed">{#each m.changed as c, i (i)}<li>{c}</li>{/each}</ul>
+              {/if}
+            </li>
+          {/each}
+        </ul>
+        <div class="dup-actions">
+          <Button disabled={busy !== null} onclick={() => resolveJob(j, 'import')}>{t('dup.import')}</Button>
+          <Button disabled={busy !== null} onclick={() => resolveJob(j, 'replace')}>{t('dup.replace', { title: ms[0].title })}</Button>
+          <Button disabled={busy !== null} onclick={() => resolveJob(j, 'skip')}>{t('dup.skip')}</Button>
+        </div>
+      </div>
+    {/if}
   </li>
 {/snippet}
 
@@ -549,7 +627,10 @@
         {#each facets.text_types as x (x.text_type)}<option value={x.text_type}></option>{/each}
       </datalist>
 
-      <div class="force"><Toggle bind:checked={force} label={t('src.force')} /></div>
+      <div class="force">
+        <Toggle bind:checked={force} label={t('src.force')} />
+        <Button disabled={busy !== null || !docs.length} onclick={openDuplicates}>{t('dup.find')}</Button>
+      </div>
 
       {#if jobLog.length}
         <ul class="jobs" aria-live="polite" aria-label={t('jobs.label')}>
@@ -727,6 +808,44 @@
   {/snippet}
 </Dialog>
 
+<Dialog bind:open={dupOpen} title={t('dup.title')} wide>
+  <form
+    class="row"
+    onsubmit={(e) => {
+      e.preventDefault();
+      findDuplicates();
+    }}
+  >
+    <Field label={t('dup.threshold')}>
+      <input type="number" min="50" max="100" step="1" bind:value={dupPct} />
+    </Field>
+    <button type="submit" disabled={dupBusy}>{t('dup.run')}</button>
+  </form>
+  {#if dupReport}
+    <p class="muted" aria-live="polite">
+      {dupReport.pairs.length
+        ? t('dup.summary', { n: dupReport.pairs.length, docs: dupReport.documents })
+        : t('dup.none', { n: dupReport.documents })}
+    </p>
+    <ul class="dup-pairs">
+      {#each dupReport.pairs as p (`${p.a.id}-${p.b.id}`)}
+        <li>
+          <strong>{t('dup.pair', { pct: Math.round(p.similarity * 100) })}</strong>
+          {#each [p.a, p.b] as d (d.id)}
+            <div class="dup-doc">
+              <span>{d.title} <span class="muted">({d.added}, {d.n_tokens.toLocaleString()})</span></span>
+              <Button variant="danger" disabled={busy !== null} onclick={() => removeDuplicate(d)}>{t('dup.remove', { title: d.title })}</Button>
+            </div>
+          {/each}
+        </li>
+      {/each}
+    </ul>
+  {/if}
+  {#snippet footer()}
+    <Button onclick={() => (dupOpen = false)}>{t('dup.close')}</Button>
+  {/snippet}
+</Dialog>
+
 <Dialog bind:open={delOpen} title={t('src.confirmTitle')}>
   <p class="confirm">{t('src.confirmBody', { title: toDelete?.title ?? '' })}</p>
   {#snippet footer()}
@@ -786,7 +905,50 @@
     font-size: var(--fs-small);
   }
   .force {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--s-3);
     padding: var(--s-1) var(--s-3);
+  }
+  .job {
+    flex-wrap: wrap;
+  }
+  .dup {
+    flex-basis: 100%;
+    padding: var(--s-1) 0 var(--s-2) var(--s-3);
+  }
+  .dup p {
+    margin: 0;
+  }
+  .dup ul {
+    margin: var(--s-1) 0;
+    padding-left: var(--s-3);
+  }
+  .changed {
+    font-style: italic;
+    overflow-wrap: anywhere;
+  }
+  .dup-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s-2);
+  }
+  .dup-pairs {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .dup-pairs > li {
+    padding: var(--s-2) 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .dup-doc {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--s-2);
+    padding: var(--s-1) 0;
   }
   .jobs {
     margin: 0;

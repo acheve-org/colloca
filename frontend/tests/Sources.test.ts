@@ -60,6 +60,14 @@ beforeEach(() => {
     if (p === '/api/preview-url') return res(200, { url: 'https://example.org/final', title: 'Fetched title', text: 'one two three' });
     if (p === '/api/corpora/1/upload') return res(uploadReply.status, uploadReply.body);
     if (p === '/api/corpora/1/upload-pairs') return res(202, [{ file: 'tm.tmx', ok: true, job_id: 11, partner_corpus_id: 2 }]);
+    if (p === '/api/jobs/5/resolve') return res(202, { job_id: 20 });
+    if (p === '/api/corpora/1/near-duplicates') {
+      return res(200, {
+        threshold: Number(u.searchParams.get('threshold')), documents: 2, fingerprinted_now: 0,
+        pairs: [{ a: { id: 1, title: 'Doc 1', source: '', added: '2026-01-01', n_tokens: 1000 },
+                  b: { id: 2, title: 'Doc 2', source: '', added: '2026-01-02', n_tokens: 990 }, similarity: 0.93 }],
+      });
+    }
     if (p === '/api/corpora/1/reannotate') return res(202, { job_id: 12 });
     if (/^\/api\/documents\/\d+$/.test(p)) return method === 'DELETE' ? res(204, null) : res(200, { ok: true });
     if (p === '/api/corpora/1' && method === 'PATCH') return res(200, { ok: true });
@@ -334,5 +342,35 @@ describe('Sources', () => {
     window.dispatchEvent(new CustomEvent(CORPUS_CHANGED, { detail: { id: 2 } }));
     release();
     await waitFor(() => expect(messages.current).toBeNull());
+  });
+
+  describe('near-duplicates', () => {
+    const held = job(5, 'error', {
+      code: 'near_duplicate', error: 'Very similar', progress: 1,
+      result: { matches: [{ id: 1, title: 'Contract v1', source: '', added: '2026-01-01', similarity: 0.93, units: 12, shared_units: 11,
+                            changed: ['A new clause replaces the old one.'] }] },
+    });
+
+    it('shows what overlaps in a held import and sends the decision', async () => {
+      await ready();
+      jobList = [[held]];
+      await fireEvent.change(screen.getByLabelText('Documents to upload'), { target: { files: [new File(['x'], 'v2.txt')] } });
+      await fireEvent.click(screen.getByRole('button', { name: 'Upload' }));
+      expect(await screen.findByText('“Contract v1” — 93% alike')).toBeInTheDocument();
+      expect(screen.getByText('11 of 12 paragraphs also appear there.')).toBeInTheDocument();
+      expect(screen.getByText('A new clause replaces the old one.')).toBeInTheDocument();
+      await fireEvent.click(screen.getByRole('button', { name: 'Replace “Contract v1”' }));
+      await waitFor(() => expect(calls.some((c) => c.path === '/api/jobs/5/resolve')).toBe(true));
+      expect(calls.find((c) => c.path === '/api/jobs/5/resolve')?.body).toEqual({ action: 'replace' });
+    });
+
+    it('the report lists pairs at the chosen threshold and can remove one document', async () => {
+      await ready();
+      await fireEvent.click(screen.getByRole('button', { name: 'Find near-duplicates' }));
+      expect(await screen.findByText('93% alike')).toBeInTheDocument();
+      expect(calls.find((c) => c.path === '/api/corpora/1/near-duplicates')?.params.get('threshold')).toBe('0.85');
+      await fireEvent.click(screen.getByRole('button', { name: 'Remove “Doc 2”' }));
+      await waitFor(() => expect(calls.some((c) => c.method === 'DELETE' && c.path === '/api/documents/2')).toBe(true));
+    });
   });
 });
