@@ -1,24 +1,22 @@
 import { expect, test } from '@playwright/test';
-import { newCorpus, newProject, unique } from './helpers';
+import { escapeRegExp, newCorpus, newProject, unique } from './helpers';
 
 const context = (page: import('@playwright/test').Page) => page.getByRole('navigation', { name: 'Working context' });
 
-test('first run: a project and a corpus made on the Projects page show in the context bar', async ({ page }) => {
+test('a project and a corpus made on the Projects page show as language › project › corpus in the context bar', async ({ page }) => {
   await page.goto('/#/projects');
   const name = unique('Client');
   await page.getByLabel('New project', { exact: true }).fill(name);
   await page.getByRole('button', { name: /^(Add|Create project)$/ }).click();
-  await page.getByRole('button', { name: new RegExp(`^${name}`) }).click();
+  await page.getByRole('button', { name: new RegExp(`^${escapeRegExp(name)}`) }).click();
   await expect(page.getByRole('heading', { name: `Corpora in ${name}` })).toBeVisible();
   await expect(page.getByText('This project has no corpus yet.')).toBeVisible();
 
   const corpus = unique('Corpus');
-  await newCorpus(page, corpus, undefined, name);
+  await newCorpus(page, corpus, 'es', name);
   const bar = context(page);
   await expect(bar).toBeVisible();
-  await expect(bar.getByRole('link', { name })).toBeVisible();
-  await expect(bar.getByText(corpus)).toBeVisible();
-  await expect(bar.getByRole('link').first()).toHaveText(/\S/); // the language name
+  await expect(bar).toHaveText(new RegExp(`^\\s*Spanish\\s*›\\s*${escapeRegExp(name)}\\s*›\\s*${escapeRegExp(corpus)}\\s*$`));
 });
 
 test('switching: opening a corpus of another project changes the context', async ({ page }) => {
@@ -35,20 +33,21 @@ test('switching: opening a corpus of another project changes the context', async
 
   await page.goto('/#/projects');
   await page.reload();
-  await page.getByRole('button', { name: new RegExp(`^${a}`) }).click();
+  await page.getByRole('button', { name: new RegExp(`^${escapeRegExp(a)}`) }).click();
   await page.getByRole('button', { name: `Open ${ca}` }).click();
-  await expect(page.getByRole('row', { name: new RegExp(ca) }).getByText('Working', { exact: true })).toBeVisible();
+  await expect(page.getByRole('row', { name: new RegExp(escapeRegExp(ca)) }).getByText('Working', { exact: true })).toBeVisible();
 
   await page.getByRole('navigation').getByRole('link', { name: 'Sources' }).click();
   await expect(context(page).getByText(ca)).toBeVisible();
   await expect(context(page).getByRole('link', { name: a })).toBeVisible();
 
   await page.getByRole('navigation').getByRole('link', { name: 'Projects' }).click();
-  await page.getByRole('button', { name: new RegExp(`^${b}`) }).click();
+  await page.getByRole('button', { name: new RegExp(`^${escapeRegExp(b)}`) }).click();
   await page.getByRole('button', { name: `Open ${cb}` }).click();
   await page.getByRole('navigation').getByRole('link', { name: 'Sources' }).click();
   await expect(context(page).getByText(cb)).toBeVisible();
   await expect(context(page).getByRole('link', { name: b })).toBeVisible();
+  await expect(context(page).getByText(ca)).toHaveCount(0);
 });
 
 test('quick switch: the rail selector changes the working corpus', async ({ page }) => {
@@ -62,6 +61,9 @@ test('quick switch: the rail selector changes the working corpus', async ({ page
   await page.goto('/#/sources');
   await page.reload();
   const quick = page.getByLabel('Corpus', { exact: true });
+  // Start from the other corpus so each step below is a real switch.
+  await quick.selectOption({ label: c2 });
+  await expect(context(page).getByText(c2)).toBeVisible();
   await quick.selectOption({ label: c1 });
   await expect(context(page).getByText(c1)).toBeVisible();
   await quick.selectOption({ label: c2 });
@@ -76,7 +78,7 @@ test('delete guard: a project with a corpus asks where the corpora go', async ({
   const corpus = unique('Orphan');
   await newCorpus(page, corpus, undefined, p);
   await page.getByRole('navigation').getByRole('link', { name: 'Projects' }).click();
-  await page.getByRole('button', { name: new RegExp(`^${p}`) }).click();
+  await page.getByRole('button', { name: new RegExp(`^${escapeRegExp(p)}`) }).click();
 
   await page.getByRole('button', { name: `Delete ${p}` }).click();
   const dialog = page.getByRole('dialog', { name: 'Delete this project?' });
@@ -88,7 +90,7 @@ test('delete guard: a project with a corpus asks where the corpora go', async ({
   await confirm.click();
   await expect(dialog).toBeHidden();
 
-  await expect(page.getByRole('button', { name: new RegExp(`^${p}`) })).toHaveCount(0);
-  await page.getByRole('button', { name: new RegExp(`^${other}`) }).click();
-  await expect(page.getByRole('row', { name: new RegExp(corpus) })).toBeVisible();
+  await expect(page.getByRole('button', { name: new RegExp(`^${escapeRegExp(p)}`) })).toHaveCount(0);
+  await page.getByRole('button', { name: new RegExp(`^${escapeRegExp(other)}`) }).click();
+  await expect(page.getByRole('row', { name: new RegExp(escapeRegExp(corpus)) })).toBeVisible();
 });

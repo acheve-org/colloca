@@ -1,5 +1,7 @@
 import { expect, type Page } from '@playwright/test';
 
+export const escapeRegExp = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 /** A name no other test (or earlier run on the shared database) has used. */
 export function unique(prefix: string): string {
   return `${prefix} ${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
@@ -15,7 +17,7 @@ export async function newProject(page: Page, prefix = 'Project'): Promise<string
   expect(made.ok()).toBeTruthy();
   await page.goto('/#/projects');
   await page.reload();
-  await page.getByRole('button', { name: new RegExp(`^${name}`) }).click();
+  await page.getByRole('button', { name: new RegExp(`^${escapeRegExp(name)}`) }).click();
   await expect(page.getByRole('heading', { name: `Corpora in ${name}` })).toBeVisible();
   return name;
 }
@@ -33,7 +35,7 @@ export async function newCorpus(page: Page, name: string, lang?: string, project
   await dialog.getByLabel('Project').selectOption({ label: proj });
   await dialog.getByRole('button', { name: 'Create' }).click();
   await expect(dialog).toBeHidden();
-  await expect(page.getByRole('row', { name: new RegExp(name) }).getByText('Working', { exact: true })).toBeVisible();
+  await expect(page.getByRole('row', { name: new RegExp(escapeRegExp(name)) }).getByText('Working', { exact: true })).toBeVisible();
   await page.getByRole('navigation').getByRole('link', { name: 'Sources' }).click();
   return proj;
 }
