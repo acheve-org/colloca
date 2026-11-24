@@ -9,6 +9,7 @@
   import Badge from '../lib/ui/Badge.svelte';
   import Button from '../lib/ui/Button.svelte';
   import Dialog from '../lib/ui/Dialog.svelte';
+  import EmptyState from '../lib/ui/EmptyState.svelte';
   import NewCorpusDialog from './NewCorpusDialog.svelte';
 
   const errMsg = (err: unknown) => (err instanceof Error ? err.message : String(err));
@@ -44,6 +45,8 @@
   });
   const selected = $derived(projectStore.list.find((p) => p.id === selectedId) ?? null);
   const shown = $derived(selected ? working.filter((c) => c.project_id === selected.id) : loose);
+  // Nothing to choose from yet (and the list has been fetched, not just empty while loading).
+  const firstRun = $derived(projectStore.loaded && !projectStore.list.length && !loose.length);
   const heading = $derived(t('proj.corporaOf', { name: selected?.name ?? t('ctx.noProject') }));
 
   const nameOf = (p: Project) => names[p.id] ?? p.name;
@@ -215,10 +218,19 @@
           </li>
         {/if}
       </ul>
-      {#if !projectStore.list.length && !loose.length}<p class="muted">{t('proj.none')}</p>{/if}
+      {#if firstRun}
+        <EmptyState title={t('setup.project.title')} hint={t('setup.project.hint')} />
+      {:else if projectStore.loaded && !projectStore.list.length && !loose.length}
+        <p class="muted">{t('proj.none')}</p>
+      {/if}
       <form class="new" onsubmit={addProject}>
-        <input bind:value={newProject} maxlength="120" placeholder={t('proj.newPlaceholder')} aria-label={t('proj.new')} />
-        <Button type="submit" variant="primary" disabled={busy || !newProject.trim()}>{t('proj.add')}</Button>
+        <input
+          bind:value={newProject}
+          maxlength="120"
+          placeholder={firstRun ? t('proj.firstPlaceholder') : t('proj.newPlaceholder')}
+          aria-label={t('proj.new')}
+        />
+        <Button type="submit" variant="primary" disabled={busy || !newProject.trim()}>{firstRun ? t('proj.create') : t('proj.add')}</Button>
       </form>
     </section>
 
@@ -290,6 +302,8 @@
             {/each}
           </tbody>
         </table>
+      {:else if selected}
+        <EmptyState title={t('proj.noCorpusTitle')} hint={t('proj.noCorpusHint')} />
       {:else}
         <p class="muted">{t('corpus.none')}</p>
       {/if}

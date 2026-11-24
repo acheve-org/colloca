@@ -71,6 +71,33 @@ async function show() {
 const rows = () => screen.getAllByRole('row').slice(1);
 const rowOf = (name: string) => rows().find((r) => within(r).queryByText(name))!;
 
+describe('Projects screen empty states', () => {
+  it('no projects: first-project prompt with a single field and Create project', async () => {
+    projects = [];
+    corpora = [];
+    corpusStore.list = [];
+    corpusStore.currentId = null;
+    render(Projects);
+    await waitFor(() => expect(projectStore.loaded).toBe(true));
+    await tick();
+    expect(screen.getByText('Start your first project')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Contracts 2024')).toBeInTheDocument();
+    await fireEvent.input(screen.getByLabelText('New project'), { target: { value: 'Acme' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Create project' }));
+    await waitFor(() => expect(calls.some((c) => c.method === 'POST' && c.path === '/api/projects')).toBe(true));
+  });
+
+  it('a project without corpora: Create a corpus prompt next to the New corpus button', async () => {
+    projects = [{ id: 9, name: 'Empty', corpora: 0, trashed: 0 }];
+    corpora = [];
+    corpusStore.list = [];
+    corpusStore.currentId = null;
+    render(Projects);
+    await waitFor(() => expect(screen.getByText('Create a corpus')).toBeInTheDocument());
+    expect(screen.getByRole('button', { name: 'New corpus' })).toBeEnabled();
+  });
+});
+
 describe('Projects screen', () => {
   it('defaults to the working corpus project and shows only its corpora', async () => {
     await show();

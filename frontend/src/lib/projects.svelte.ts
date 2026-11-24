@@ -1,8 +1,8 @@
 import { get } from './api';
 import type { Corpus, Project } from './types';
 
-/** Projects (clients). */
-export const projectStore = $state<{ list: Project[] }>({ list: [] });
+/** Projects (clients). `loaded` tells "not fetched yet" from "no projects". */
+export const projectStore = $state<{ list: Project[]; loaded: boolean }>({ list: [], loaded: false });
 
 let seq = 0;
 
@@ -12,6 +12,7 @@ export async function reloadProjects(): Promise<void> {
   const list = await get<Project[]>('/api/projects');
   if (n !== seq) return;
   projectStore.list = list;
+  projectStore.loaded = true;
 }
 
 /** The project a corpus belongs to (null when it has none or the list does not know it). */

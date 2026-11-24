@@ -11,13 +11,18 @@ export interface WorkingContext {
   corpus: Corpus;
 }
 
-const languageNames = $state<{ names: Languages }>({ names: {} });
+const languageNames = $state<{ names: Languages; loaded: boolean }>({ names: {}, loaded: false });
+
+/** True once the language list has been read (so "no languages" is not a loading flash). */
+export const languagesLoaded = (): boolean => languageNames.loaded;
+export const languageCount = (): number => Object.keys(languageNames.names).length;
 
 // Codes already looked up by ensureLanguageName without success: one reload per missing code.
 let tried: Record<string, true> = {};
 
 async function fetchNames(): Promise<void> {
   languageNames.names = await get<Languages>('/api/languages');
+  languageNames.loaded = true;
 }
 
 /** Explicit refresh (Rail mount, Languages screen changes): reads the names and lets missing codes be retried. */

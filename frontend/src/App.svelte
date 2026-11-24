@@ -6,7 +6,9 @@
   import { messages } from './lib/messages.svelte';
   import { go, route } from './lib/router.svelte';
   import { registerShortcut } from './lib/shortcuts.svelte';
+  import { redirectOnce } from './lib/setup.svelte';
   import AppShell from './lib/ui/AppShell.svelte';
+  import SetupGate from './lib/ui/SetupGate.svelte';
   import ShortcutHelp from './lib/ui/ShortcutHelp.svelte';
   import type { Component } from 'svelte';
   import type { ScreenId } from './lib/router.svelte';
@@ -54,6 +56,12 @@
   const Screen = $derived(SCREEN_COMPONENTS[route.screen]);
 
   let helpOpen = $state(false);
+
+  // On a fresh load with no hash, open the first unfinished setup step (once, after the stores settle).
+  const redirect = redirectOnce();
+  $effect(() => {
+    redirect();
+  });
 
   // Not from inside a modal (the term dialog, the shortcut help): it would navigate behind it.
   const noModal = (): boolean => !document.querySelector('dialog[open]');
@@ -118,7 +126,9 @@
 </script>
 
 <AppShell>
-  {#key route.screen}<Screen />{/key}
+  <SetupGate>
+    {#key route.screen}<Screen />{/key}
+  </SetupGate>
 </AppShell>
 <ShortcutHelp bind:open={helpOpen} />
 <TermDialog />
