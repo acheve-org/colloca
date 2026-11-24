@@ -57,7 +57,7 @@ The T-numbers are stable labels used for cross-references; the **row order is th
 | T22 | Interface language (Spanish, Italian) and a semantic colour system (**done**, `docs/accessibility.md`) | Low | M | P3 | Audit, Research #12 |
 | T23 | Optional authentication and encryption at rest | Low | M | P3 | Roadmap 15 |
 | T24 | PDF extraction robustness | Low | M | P3 | Audit |
-| T25 | URL fetching: DNS-rebinding hardening, import a list of URLs | Low | S | P3 | Audit |
+| T25 | URL fetching: DNS-rebinding hardening, import a list of URLs (**done**) | Low | S | P3 | Audit |
 | T26 | Virtual scrolling for very large tables | Low | M | P3 | Audit |
 | T27 | Dispersion plot for a word across documents (**done**) | Low | S | P3 | Research #14 |
 | Q1 | Show the active spaCy model in the interface, fix the documented default | Medium | S | Quick | Roadmap Phase 1 item 5 |
@@ -632,6 +632,11 @@ nothing tells the user a result is poor.
 ### T25. URL fetching: DNS-rebinding hardening, import a list of URLs
 
 **Priority** P3 · **Value** Low · **Effort** S · **Source** Audit
+
+**Status: done.** `ingest._download` resolves each hop once, checks every answer and connects to the checked address (URL carries the IP,
+`Host` and the TLS server name keep the host; not used behind a proxy). `POST /api/corpora/{id}/urls` and *Sources › Add several addresses*
+import a list as background jobs with a per-URL result, a per-host pause and list/host caps. The audit also found that a literal private IP in
+a URL was only caught by the later DNS lookup (a `ValueError` swallowed by its own `try`); it is now refused directly.
 
 **Why it matters.** The address check resolves the host and then `httpx` resolves it again when connecting, a small window for DNS rebinding. Separately, URLs can
 only be added one at a time.

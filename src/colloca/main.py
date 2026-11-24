@@ -359,6 +359,37 @@ def preview_url(body: UrlIn):
         raise HTTPException(502, f"Could not fetch URL: {exc}") from exc
 
 
+class UrlListIn(BaseModel):
+    urls: list[str] = Field(max_length=500)   # one address each; blank lines and # comments are ignored
+    tags: str | list[str] = ""
+    text_type: str = ""
+    doc_date: str = ""
+    author: str = ""
+    force_language: bool = False
+    similar: Similar = "warn"
+
+
+@app.post("/api/corpora/{corpus_id}/urls", status_code=202)
+def add_urls(corpus_id: int, body: UrlListIn):
+    """Import a list of web pages or PDFs without the preview step. Each address becomes a background job; the
+    answer has one entry per line: {url, ok, job_id} or {url, ok: false, error}. Requests to one host are
+    spaced (URL_DELAY_SECONDS), a list holds at most MAX_URL_LIST addresses and MAX_URLS_PER_HOST per host,
+    and the same address checks as the single-URL preview apply. The metadata applies to every document."""
+    meta = _meta(body.tags, body.text_type, body.doc_date, body.author)
+    with db.session() as conn:
+        _corpus(conn, corpus_id)
+    urls, rejected = ingest.parse_url_list(body.urls)
+    if not urls and not rejected:
+        raise HTTPException(400, "The list has no addresses")
+    results = [{"url": r["url"], "ok": False, "error": r["error"]} for r in rejected]
+    for url in urls:
+        def build(policy: str, url=url):
+            return importer.import_url(corpus_id, url, meta, body.force_language, policy)
+        job = importer.submit(corpus_id, "import", url, build(body.similar), build)
+        results.append({"url": url, "ok": True, "job_id": job.id})
+    return results
+
+
 def _tags_by_doc(conn, corpus_id: int) -> dict[int, list[str]]:
     out: dict[int, list[str]] = {}
     for r in conn.execute("""SELECT g.doc_id, g.tag FROM doc_tags g JOIN documents d ON d.id=g.doc_id

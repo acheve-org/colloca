@@ -28,7 +28,10 @@ window, with a warning when a language runs on a small (`sm`) model. Data lives 
 1. **New corpus** (name + language), e.g. "Client X – wind energy [es]". Group the corpora of a client under a
    **project** (the *…* button next to the project selector at the top of the left rail opens *Manage projects*);
    the project selector narrows the corpus list.
-2. **Sources**: paste a URL → *Fetch & preview* → trim noise in the text box → *Add*.
+2. **Sources**: paste a URL → *Fetch & preview* → trim noise in the text box → *Add*. For many pages, *Add several
+   addresses* takes a list (one per line, no preview): each becomes a background job with its own result, with a pause
+   between requests to the same site (`URL_DELAY_SECONDS`, 1 s), at most `MAX_URL_LIST` (50) addresses per list and
+   `MAX_URLS_PER_HOST` (20) per site. API: `POST /api/corpora/{id}/urls`.
    Or upload files (formats below). Exact duplicates are rejected.
 3. Explore with the screens of the left rail. Click any word in a table to jump to its concordance. Every table
    sorts by a click on its header, has a *Filter in results* box, and a CSV export.
@@ -424,7 +427,9 @@ mise run ui:e2e               # builds the UI and runs the Playwright end-to-end
 
 - OCR is optional (see *Input formats*) and its accuracy depends on the scan. No JavaScript rendering for URLs (pages that need it fail to extract).
 - Extraction is heuristic: always review the preview. URL fetching respects no robots.txt (you choose the URLs);
-  it blocks private/internal addresses (`ALLOW_PRIVATE_URLS=1` to override). No authentication: bind to localhost only.
+  it blocks private/internal addresses (`ALLOW_PRIVATE_URLS=1` to override); the name is resolved once per request
+  and the connection goes to that checked address (certificates are still verified against the host name), so a DNS
+  answer that changes between the check and the connection cannot reach an internal address. No authentication: bind to localhost only.
 - Small spaCy models make lemma/POS errors; use `lg` (the Docker default) for better quality. A document in the
   wrong language is only caught when the check is confident (see Safeguards).
 - No synonym/related-term module yet (planned: thesaurus + embeddings, labelled as "related terms").

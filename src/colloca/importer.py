@@ -325,6 +325,21 @@ def import_text(corpus_id: int, title: str, text: str, source: str, kind: str, m
     return work
 
 
+def import_url(corpus_id: int, url: str, meta: dict, force_language: bool,
+               similar: str = "warn") -> Callable[[Job], dict]:
+    """Fetch a page or PDF (politely: a pause between requests to one host) and import it, with no trimming step."""
+    def work(job: Job) -> dict:
+        try:
+            page = ingest.fetch_url(url, polite=True)
+        except ingest.IngestError:
+            raise
+        except Exception as exc:             # network errors: a readable reason instead of "Unexpected error"
+            raise ingest.IngestError(f"Could not fetch URL: {exc}") from exc
+        job.set_progress(0.3)
+        return import_text(corpus_id, page["title"], page["text"], url, "url", meta, force_language, similar)(job)
+    return work
+
+
 def import_file(corpus_id: int, filename: str, data: bytes, meta: dict,
                 force_language: bool, sentences: bool = False, columns: str = "",
                 similar: str = "warn") -> Callable[[Job], dict]:

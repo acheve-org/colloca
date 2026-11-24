@@ -93,6 +93,7 @@
   // URL card
   let url = $state('');
   let preview = $state<Preview | null>(null);
+  let urlList = $state('');
   const previewWords = $derived(preview ? countWords(preview.text) : 0);
 
   // Upload card
@@ -378,6 +379,24 @@
       preview = null;
       url = '';
       messages.say(t('src.queuedProgress'), 'ok');
+      watch(true);
+    });
+
+  const addUrlList = () =>
+    act('urls', async (id) => {
+      const urls = urlList.split('\n').map((l) => l.trim()).filter(Boolean);
+      if (!urls.length) {
+        messages.say(t('src.urls.needed'), 'err');
+        return;
+      }
+      const res = await post<{ url: string; ok: boolean; error?: string }[]>(`/api/corpora/${id}/urls`, {
+        urls,
+        force_language: force,
+        ...metaParams(),
+      });
+      if (!still(id)) return;
+      urlList = '';
+      reportUpload(res.map((r) => ({ file: r.url, ok: r.ok, error: r.error })));
       watch(true);
     });
 
@@ -667,6 +686,15 @@
             </div>
             <p class="hint">{t('src.url.hint')}</p>
           {/if}
+
+          <h3 class="sub">{t('src.urls.title')}</h3>
+          <Field label={t('src.urls.label')}>
+            <textarea rows="4" bind:value={urlList} placeholder="https://…" spellcheck="false"></textarea>
+          </Field>
+          <div class="row">
+            <span class="hint grow">{t('src.urls.hint')}</span>
+            <Button variant="primary" disabled={busy !== null} onclick={addUrlList}>{t('src.urls.go')}</Button>
+          </div>
         </section>
 
         <section class="card" aria-labelledby="{uid}-up">

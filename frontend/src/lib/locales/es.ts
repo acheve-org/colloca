@@ -795,4 +795,9 @@ export const es: Messages = {
   'dp.plotNone': 'sin resultados en «{title}»',
   'dp.capped': 'Solo se marcan los primeros {n} resultados de cada documento.',
   'dp.run': 'Trazar',
+  'src.urls.title': 'Añadir varias direcciones',
+  'src.urls.label': 'Direcciones, una por línea',
+  'src.urls.go': 'Añadir todas',
+  'src.urls.needed': 'Escribe o pega al menos una dirección.',
+  'src.urls.hint': 'Sin vista previa: cada página se descarga y se añade tal cual, con una pausa entre peticiones al mismo sitio. Las líneas que empiezan por # se ignoran.',
 };
