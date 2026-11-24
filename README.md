@@ -227,6 +227,27 @@ a synthetic annotated corpus (`100k`, `1m`, `5m` or any number; seeded, so repro
 seconds), and `uv run python scripts/bench_analyses.py --words 1m` times every analysis on one and prints a table.
 It only measures; it changes no data outside its own temporary database.
 
+Timings (`bench_analyses.py`, synthetic Spanish corpus, one run, Apple-silicon laptop, SQLite, no precomputed counts;
+before → after the T17 changes, in milliseconds):
+
+| Analysis | 1M words | 5M words |
+|---|---:|---:|
+| frequency (lemma) | 653 → 546 | 3,620 → 2,998 |
+| frequency (form) | 989 → 881 | 5,422 → 4,619 |
+| concordance, frequent / mid / rare word | 13 / 8 / 1 (unchanged) | 32 / 15 / 6 (unchanged) |
+| concordance, wildcard | 69 → 64 | 354 → 343 |
+| collocations, frequent word | 429 → 432 | 2,291 → 2,244 |
+| collocations, mid word | 398 → 302 | 2,134 → 2,130 |
+| n-grams (3, form) | 2,048 → 1,655 | 10,330 → 9,213 |
+| keyness vs reference | 912 → 878 | 4,660 → 4,686 |
+| coverage / job analysis | 606 → 542 | 1,829 → 1,811 |
+
+No analysis takes over 5 s on a 1M-word corpus. At 5M words n-grams (about 9 s) and the unit-`form` frequency
+(4.6 s) are the slow ones; the cost is a scan over the `tokens` table, so a precomputed per-corpus count table
+(backlog T17) would be the next step if corpora of that size matter. Concordance stays in milliseconds because it
+uses the lemma/form indexes. Results are identical before and after (checked by comparing both versions on a
+generated corpus, and the statistics tests are unchanged).
+
 Layout (`src` layout): `src/colloca/ingest.py` (URL/DOCX/PDF → text), `nlp.py` (spaCy),
 `analysis.py` (all statistics, SQL + Python), `main.py` (API, also serves the built UI from `static/`);
 tests in `tests/`. The UI source is in `frontend/` (see below); its build output `src/colloca/static/` is git-ignored.
