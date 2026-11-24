@@ -64,6 +64,14 @@ and search them side by side:
   on it, and the target-language side is a ready corpus of the client's Italian). They are linked segment by
   segment: segment N of one is the translation of segment N of the other. Re-annotating keeps the alignment.
   Removing one side's document unlinks the other.
+- **Align two documents** (*Sources* → *Align two documents*): no TMX? Upload the original and its translation (DOCX, PDF
+  with text layer, TXT, HTML). Both are split into sentences and matched by length (Gale and Church), with numbers,
+  names written the same on both sides and closing punctuation as anchors; paragraph breaks are used first. Link
+  types are 1:1, 1:2, 2:1, 1:0 and 0:1. The result is only a **proposal**: the review table marks links to check
+  (with the word "Check", not only a colour), and you can merge, split, delete, then confirm. Nothing is stored
+  before that. Merged sentences are stored as one segment, joined by a space; units with an empty side (1:0, 0:1)
+  cannot be a pair and are not stored. Length-only alignment is weak on very short or reordered text: always look
+  at the marked links.
 - **Concordance → *Source + target*** (appears when the corpus has aligned texts) shows each hit as its source
   segment next to the aligned target segment; run it on the target-language corpus to search by the translation
   instead. The query is marked in the source segment, and the **likely equivalent** in the target: an **approved**

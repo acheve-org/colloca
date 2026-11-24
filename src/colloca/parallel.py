@@ -134,9 +134,10 @@ def read_pairs(filename: str, data: bytes, lang_a: str, lang_b: str, swap: bool 
 
 # --------------------------------------------------------------------------- import
 def import_pairs(corpus_id: int, partner_id: int, filename: str, data: bytes, swap: bool, meta: dict,
-                 force_language: bool):
+                 force_language: bool, preread: list[Pair] | None = None):
     """Job body: read an aligned file and store it as linked document pairs (`corpus_id` receives the first
-    texts, `partner_id` the second). Large files are split into parts of PAIRS_PER_DOC translation units."""
+    texts, `partner_id` the second). Large files are split into parts of PAIRS_PER_DOC translation units.
+    `preread` are pairs already in hand (the reviewed result of the automatic aligner): `data` is not read."""
     stem = filename.rsplit(".", 1)[0]
 
     def work(job) -> dict:
@@ -145,7 +146,10 @@ def import_pairs(corpus_id: int, partner_id: int, filename: str, data: bytes, sw
                      for i in (corpus_id, partner_id)]
         if not all(langs):
             raise importer.ImportRejected(404, "Corpus no longer exists", "gone")
-        pairs, skipped = read_pairs(filename, data, langs[0]["lang"], langs[1]["lang"], swap)
+        if preread is not None:
+            pairs, skipped = preread, 0
+        else:
+            pairs, skipped = read_pairs(filename, data, langs[0]["lang"], langs[1]["lang"], swap)
         parts = [pairs[i:i + PAIRS_PER_DOC] for i in range(0, len(pairs), PAIRS_PER_DOC)]
         done = dups = 0
         for n, part in enumerate(parts):
