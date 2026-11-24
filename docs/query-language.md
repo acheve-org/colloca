@@ -72,5 +72,5 @@ search through an index and the others are reached by primary-key lookups in the
 ## Errors
 
 Mistakes are reported with the 1-based character position, for example
-`A gap must span 1 to 15 words (at character 8)` for `tomar +99 NOUN`; the API answers 400 with that message as `detail`,
+`A gap must span 1 to 15 words (at character 7)` for `tomar +99 NOUN`; the API answers 400 with that message as `detail`,
 and `GET /api/query/explain?q=...&advanced=true` returns `{ok, parsed}` or `{ok: false, error, position}`.
