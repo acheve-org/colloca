@@ -118,6 +118,10 @@ def add_reference_columns(conn, rows: list[dict], ref_id: int, unit: str) -> Non
 
 
 # --------------------------------------------------------------------------- frequency
+POS_LOOKUP_MAX = 2000
+COLLOC_LOOKUP_MAX = 500
+
+
 def frequency(conn, scope, unit="lemma", pos=None, min_freq=1, exclude_stop=True,
               alpha_only=True, limit=500):
     scope = as_scope(scope)
@@ -137,10 +141,20 @@ def frequency(conn, scope, unit="lemma", pos=None, min_freq=1, exclude_stop=True
             FROM tokens t JOIN documents d ON d.id=t.doc_id WHERE {w}
             GROUP BY t.{col} HAVING COUNT(*) >= ? ORDER BY freq DESC, item LIMIT ?""",
         params + [min_freq, limit]).fetchall()
-    pos_rows = conn.execute(
-        f"""SELECT t.{col} AS item, t.upos AS upos, COUNT(*) AS c
-            FROM tokens t JOIN documents d ON d.id=t.doc_id WHERE {w}
-            GROUP BY t.{col}, t.upos""", params).fetchall()
+    # The commonest part of speech is needed only for the rows returned: ask for those items alone unless
+    # nearly every item is returned (keyness), where one pass over the table is cheaper.
+    base = f"SELECT t.{col} AS item, t.upos AS upos, COUNT(*) AS c FROM tokens t JOIN documents d ON d.id=t.doc_id"
+    if len(rows) > POS_LOOKUP_MAX:
+        pos_rows = conn.execute(f"{base} WHERE {w} GROUP BY t.{col}, t.upos ORDER BY t.{col}, t.upos",
+                                params).fetchall()
+    else:
+        items = [r["item"] for r in rows]
+        pos_rows = []
+        for i in range(0, len(items), 500):
+            chunk = items[i:i + 500]
+            pos_rows += conn.execute(
+                f"{base} WHERE {w} AND t.{col} IN ({','.join('?' * len(chunk))}) "
+                f"GROUP BY t.{col}, t.upos ORDER BY t.{col}, t.upos", [*params, *chunk]).fetchall()
     best: dict[str, tuple[int, str]] = {}
     for r in pos_rows:
         if r["item"] not in best or r["c"] > best[r["item"]][0]:
@@ -450,31 +464,43 @@ def collocations(conn, scope, q, left=4, right=4, min_freq=2, exclude_stop=True,
     hits = _find_hits(conn, scope, terms, "lemma")
     if not hits:
         return {"node_freq": 0, "corpus_size": corpus_size(conn, scope), "rows": []}
-    counts = lemma_counts(conn, scope)
     N = max(corpus_size(conn, scope), 1)
     f_n = len(hits)
     span = left + right
     co: Counter = Counter()
     docs: dict[str, set] = defaultdict(set)
     pos_of: dict[str, Counter] = defaultdict(Counter)
-    for h in hits:
-        rows = conn.execute(
-            """SELECT pos, lemma, upos, alpha, stop FROM tokens
-               WHERE doc_id=? AND sent=? AND pos BETWEEN ? AND ? AND pos<>?""",
-            (h["doc_id"], h["sent"], h["pos"] - left, h["pos"] + right, h["pos"])).fetchall()
-        for r in rows:
-            if not r["alpha"] or (exclude_stop and r["stop"]) or r["lemma"] == node:
+    # The windows of 300 hits at a time are read by one query (instead of one query per hit), in hit order
+    # and then token order, so the counts and their tie order do not change.
+    cursor = conn.cursor()
+    cursor.row_factory = None
+    for i in range(0, len(hits), 300):
+        batch = hits[i:i + 300]
+        values = ",".join("(?,?,?,?)" for _ in batch)
+        params = [v for j, h in enumerate(batch)
+                  for v in (j, h["doc_id"], h["pos"] - left, h["pos"] + right)]
+        for j, sent, p, lemma, upos, alpha, stop in cursor.execute(
+                f"""WITH w(i, doc_id, lo, hi) AS (VALUES {values})
+                    SELECT w.i, t.sent, t.pos, t.lemma, t.upos, t.alpha, t.stop FROM w
+                    JOIN tokens t ON t.doc_id=w.doc_id AND t.pos BETWEEN w.lo AND w.hi
+                    ORDER BY w.i, t.pos""", params):
+            h = batch[j]
+            if p == h["pos"] or sent != h["sent"] or not alpha or (exclude_stop and stop) or lemma == node:
                 continue
-            if pos and r["upos"] not in pos:
+            if pos and upos not in pos:
                 continue
-            co[r["lemma"]] += 1
-            docs[r["lemma"]].add(h["doc_id"])
-            pos_of[r["lemma"]][r["upos"]] += 1
+            co[lemma] += 1
+            docs[lemma].add(h["doc_id"])
+            pos_of[lemma][upos] += 1
+    # Corpus frequencies only for the collocates that survive min_freq (not a count of the whole lemma table).
+    # With very many collocates one pass over the table is cheaper than looking each up.
+    wanted = [lemma for lemma, o in co.items() if o >= min_freq]
+    counts = counts_for(conn, scope, "lemma", wanted) if len(wanted) <= COLLOC_LOOKUP_MAX else lemma_counts(conn, scope)
     out = []
     for lemma, o in co.items():
         if o < min_freq:
             continue
-        f_c = counts.get(lemma, o)
+        f_c = counts.get(lemma) or o
         expected = expected_cooc(f_n, f_c, span, N)
         a, b = o, f_n * span - o
         c, d = f_c - o, N - f_n * span - f_c + o
@@ -500,8 +526,10 @@ def ngrams(conn, scope, n=3, unit="form", min_freq=2, min_docs=1, edge_stop=Fals
         raise ValueError("n must be between 2 and 6")
     freq: Counter = Counter()
     docs: dict[tuple, set] = defaultdict(set)
-    cur = conn.execute(
-        f"""SELECT t.doc_id, t.sent, t.{col} AS w, t.alpha, t.stop FROM tokens t
+    cursor = conn.cursor()
+    cursor.row_factory = None           # plain tuples: this loop runs once per token
+    cur = cursor.execute(
+        f"""SELECT t.doc_id, t.sent, t.{col}, t.alpha, t.stop FROM tokens t
             JOIN documents d ON d.id=t.doc_id WHERE {w} ORDER BY t.doc_id, t.pos""",
         params)
     key, buf = None, []
@@ -517,13 +545,13 @@ def ngrams(conn, scope, n=3, unit="form", min_freq=2, min_docs=1, edge_stop=Fals
             freq[g] += 1
             docs[g].add(doc_id)
 
-    for r in cur:
-        k = (r["doc_id"], r["sent"])
+    for doc_id, sent, w, alpha, stp in cur:
+        k = (doc_id, sent)
         if k != key:
             if key:
                 flush(key[0])
             key, buf = k, []
-        buf.append((r["w"], r["alpha"], r["stop"]))
+        buf.append((w, alpha, stp))
     if key:
         flush(key[0])
     rows = [{"item": " ".join(g), "freq": c, "docs": len(docs[g])}
