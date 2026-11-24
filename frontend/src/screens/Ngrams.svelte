@@ -42,7 +42,7 @@
   });
 
   const nOptions = NS.map((v) => ({ value: v, label: v }));
-  const unitOptions = ['form', 'lemma'].map((u) => ({ value: u, label: t(`ex.unit.${u}`) }));
+  const unitOptions = $derived(['form', 'lemma'].map((u) => ({ value: u, label: t(`ex.unit.${u}`) })));
   const csvHref = $derived(result ? csvUrl(result.path, result.params) : '');
   const columns = $derived.by<Column<NgramRow>[]>(() => [
     { key: 'item', label: t('ex.col.ngram', { n: result?.n ?? n }), width: 'minmax(14rem, 3fr)' },

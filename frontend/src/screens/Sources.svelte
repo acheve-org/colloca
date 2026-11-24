@@ -30,7 +30,7 @@
   import { onMount, tick, untrack } from 'svelte';
   import { del, get, patch, post, upload } from '../lib/api';
   import { CORPUS_CHANGED, corpusStore } from '../lib/corpus.svelte';
-  import { t } from '../lib/i18n';
+  import { t, fmt } from '../lib/i18n';
   import { JOBS_DONE, jobLogs, trackJobs } from '../lib/jobs.svelte';
   import { messages } from '../lib/messages.svelte';
   import { projectStore, reloadProjects } from '../lib/projects.svelte';
@@ -536,7 +536,7 @@
   {:else if col.key === 'tags'}
     <span class="badges">{#each d.tags as tag (tag)}<Badge kind="neutral" label={tag} />{/each}</span>
   {:else if col.key === 'n_tokens'}
-    {d.n_tokens.toLocaleString()}
+    {fmt(d.n_tokens)}
   {:else if col.key === 'checks'}
     <span class="badges">
       {#each checks(d) as c (c.label)}<span title={c.title}><Badge kind={c.kind} label={c.label} /></span>{/each}
@@ -661,7 +661,7 @@
               <textarea rows="10" bind:value={preview.text}></textarea>
             </Field>
             <div class="row">
-              <span class="muted grow">{previewWords === 1 ? t('src.word1') : t('src.words', { n: previewWords.toLocaleString() })}</span>
+              <span class="muted grow">{previewWords === 1 ? t('src.word1') : t('src.words', { n: fmt(previewWords) })}</span>
               <Button onclick={() => (preview = null)}>{t('src.url.discard')}</Button>
               <Button variant="primary" disabled={busy !== null || !preview.text.trim()} onclick={addPreview}>{t('src.url.add')}</Button>
             </div>
@@ -779,7 +779,7 @@
             {#if d.doc_date}<dt>{t('src.col.date')}</dt><dd>{d.doc_date}</dd>{/if}
             {#if d.tags.length}<dt>{t('src.col.tags')}</dt><dd>{d.tags.join(', ')}</dd>{/if}
             <dt>{t('src.size')}</dt>
-            <dd>{t('src.sizeValue', { words: d.n_tokens.toLocaleString(), chars: d.chars.toLocaleString() })}</dd>
+            <dd>{t('src.sizeValue', { words: fmt(d.n_tokens), chars: fmt(d.chars) })}</dd>
             <dt>{t('src.model')}</dt>
             <dd>{d.pipeline}{d.stale ? ` (${t('src.check.stale')})` : ''}</dd>
             <dt>{t('src.langCheck')}</dt>
@@ -841,7 +841,7 @@
           <strong>{t('dup.pair', { pct: Math.round(p.similarity * 100) })}</strong>
           {#each [p.a, p.b] as d (d.id)}
             <div class="dup-doc">
-              <span>{d.title} <span class="muted">({d.added}, {d.n_tokens.toLocaleString()})</span></span>
+              <span>{d.title} <span class="muted">({d.added}, {fmt(d.n_tokens)})</span></span>
               <Button variant="danger" disabled={busy !== null} onclick={() => removeDuplicate(d)}>{t('dup.remove', { title: d.title })}</Button>
             </div>
           {/each}

@@ -240,6 +240,19 @@ rare-word statistics and makes annotation very slow.
 **Sanity check**: run Keyness of a small neutral text (a general article) against the base. It should show few or no
 key terms; many key terms mean the base is too narrow or its register is off.
 
+## Interface language
+
+The interface is available in **English, Spanish and Italian**. The first visit follows the browser's language; the
+**EN / ES / IT** switch at the bottom of the left rail changes it at once (no reload, no data is fetched again) and the
+choice is remembered in the browser. Tables sort and numbers are written by the rules of the chosen language. Text that
+comes from the server (error messages, the wording of language checks and job progress) and your own data stay as they are.
+
+The catalogues are `frontend/src/lib/locales/{en,es,it}.ts`, one key per string with `{name}` placeholders. English is the
+source: a unit test fails if `es.ts` or `it.ts` lacks a key, has an extra one, changes a placeholder, or leaves English text
+in place. To add a language, copy `en.ts`, translate it, and register it in `frontend/src/lib/locale.svelte.ts` and
+`frontend/src/lib/i18n.ts`. Colours and contrast (with the measured ratios) are documented in
+[`docs/accessibility.md`](docs/accessibility.md).
+
 ## Measures
 
 | Analysis | Details |
@@ -356,7 +369,7 @@ mise run ui:e2e               # builds the UI and runs the Playwright end-to-end
 - **Layout**: a left rail with the corpus switcher (project filter, *…* to manage projects, corpus selector with
   its language, documents and words, *New corpus*, *Delete*), the screens grouped as **Corpus** (Sources, Base
   corpora), **Explore** (Concordance, Collocations, N-grams, Frequency list, Keyness, Word cloud, Equivalents),
-  **Terms** (Termbase) and **Job**, and the theme switch (Auto, Light, Dark). The work area shows a toolbar with
+  **Terms** (Termbase) and **Job**, and the theme and language switches (Auto, Light, Dark; EN, ES, IT). The work area shows a toolbar with
   the options, the document filter, a result strip (counts and *Filter in results*), the sortable table and, for
   the selected row, a detail strip with its actions. Messages appear in the status line at the top. The screen
   and its options are kept in the address (`#/concordance?q=...`), so a reload or a bookmark restores a screen's

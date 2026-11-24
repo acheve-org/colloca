@@ -74,12 +74,31 @@
       messages.say(err instanceof Error ? err.message : String(err), 'err');
     });
     const offs = [
-      registerShortcut({ id: 'search', keys: 'Mod+K', label: t('shortcuts.search'), when: noModal, run: focusQuery }),
-      registerShortcut({ id: 'search-slash', keys: '/', label: t('shortcuts.search'), when: noModal, run: focusQuery }),
+      // `get label` so the help overlay follows the interface language.
+      registerShortcut({
+        id: 'search',
+        keys: 'Mod+K',
+        get label() {
+          return t('shortcuts.search');
+        },
+        when: noModal,
+        run: focusQuery,
+      }),
+      registerShortcut({
+        id: 'search-slash',
+        keys: '/',
+        get label() {
+          return t('shortcuts.search');
+        },
+        when: noModal,
+        run: focusQuery,
+      }),
       registerShortcut({
         id: 'help',
         keys: '?',
-        label: t('shortcuts.help'),
+        get label() {
+          return t('shortcuts.help');
+        },
         run: () => (helpOpen = true),
       }),
     ];

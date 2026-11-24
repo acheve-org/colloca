@@ -40,7 +40,7 @@
     run: () => run(),
   });
 
-  const unitOptions = ['lemma', 'form'].map((u) => ({ value: u, label: t(`ex.unit.${u}`) }));
+  const unitOptions = $derived(['lemma', 'form'].map((u) => ({ value: u, label: t(`ex.unit.${u}`) })));
   const csvHref = $derived(result ? csvUrl(result.path, result.params) : '');
   const columns = $derived.by<Column<FrequencyRow>[]>(() => [
     { key: 'item', label: t(`ex.col.${result?.unit ?? 'lemma'}`), width: 'minmax(12rem, 2fr)' },

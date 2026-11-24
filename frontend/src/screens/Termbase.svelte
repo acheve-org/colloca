@@ -122,11 +122,11 @@
     { value: '', label: t('tb.domain.all') },
     ...[...new Set([...domainChoices, ...(domain ? [domain] : [])])].sort().map((d) => ({ value: d, label: d })),
   ]);
-  const posOptions = [{ value: '', label: t('tb.pos.all') }, ...TERM_POS.map((p) => ({ value: p, label: p }))];
-  const bulkOptions = [
+  const posOptions = $derived([{ value: '', label: t('tb.pos.all') }, ...TERM_POS.map((p) => ({ value: p, label: p }))]);
+  const bulkOptions = $derived([
     { value: '', label: t('tb.bulkStatus') },
     ...STATUSES.map((s) => ({ value: s, label: t(`badge.${s}`) })),
-  ];
+  ]);
   const filtered = $derived(!!(status || domain || pos || since || q.trim()));
 
   const count = $derived(terms.length === 1 ? t('tb.count1') : t('tb.count', { n: terms.length }));

@@ -10,7 +10,7 @@
   import { corpusStore, scopeParams } from '../lib/corpus.svelte';
   import { toInt } from '../lib/explore.svelte';
   import { findRanges } from '../lib/highlight';
-  import { t } from '../lib/i18n';
+  import { t, fmt } from '../lib/i18n';
   import { messages } from '../lib/messages.svelte';
   import type { JobGap, JobKeyTerm, JobKnownTerm, JobPhrase } from '../lib/types';
   import Badge from '../lib/ui/Badge.svelte';
@@ -97,7 +97,7 @@
   const gaps = $derived(report ? visible(report.gaps as Flagged[]) as JobGap[] : []);
   const keyTerms = $derived(report ? visible(report.key_terms as Flagged[]) as JobKeyTerm[] : []);
   const phrases = $derived(report ? visible(report.phrases as Flagged[]) as JobPhrase[] : []);
-  const statusCol = { key: STATUS_KEY, label: t('cand.col.status'), sortable: false, width: '9rem' };
+  const statusCol = $derived({ key: STATUS_KEY, label: t('cand.col.status'), sortable: false, width: '9rem' });
 
   const lemmaCols = $derived<Column<JobGap>[]>([
     { key: 'item', label: t('job.col.lemma'), width: 'minmax(12rem, 2fr)' },
@@ -278,7 +278,7 @@
           {analysis.source ? t('job.reportOf', { source: analysis.source }) : t('job.reportOfPasted')}
         </p>
         <div class="stats">
-          {@render stat(t('job.stat.words'), summary.words.toLocaleString())}
+          {@render stat(t('job.stat.words'), fmt(summary.words))}
           {@render stat(t('job.stat.distinct'), summary.distinct_lemmas, t('job.stat.distinctHint'))}
           {@render stat(
             t('job.stat.covered', { n: summary.min_corpus_freq }),

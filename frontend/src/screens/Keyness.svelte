@@ -4,7 +4,7 @@
   import { corpusStore, scopeParams } from '../lib/corpus.svelte';
   import { csvUrl } from '../lib/csv';
   import { initialParams, keynessMemo, toInt, useRunner } from '../lib/explore.svelte';
-  import { t } from '../lib/i18n';
+  import { t, fmt } from '../lib/i18n';
   import { messages } from '../lib/messages.svelte';
   import { go } from '../lib/router.svelte';
   import { openTerm } from '../lib/term.svelte';
@@ -61,7 +61,7 @@
   const refOptions = $derived.by(() => {
     if (!current) return [];
     const base = refs.find((r) => r.lang === current.lang && r.tokens > 0);
-    const words = (c: Corpus) => c.tokens.toLocaleString();
+    const words = (c: Corpus) => fmt(c.tokens);
     const opts = [
       ...(base ? [{ value: '', label: t('ex.ky.base', { name: base.name, words: words(base) }) }] : []),
       ...corpusStore.list

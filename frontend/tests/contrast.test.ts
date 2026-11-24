@@ -1,3 +1,5 @@
+import { readFileSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import tableSrc from '../src/lib/ui/DataTable.svelte?raw';
 import css from '../src/lib/styles/tokens.css?raw';
@@ -102,5 +104,34 @@ describe('status badges on a selected DataTable row', () => {
         expect(contrast(t[k], t['--surface'])).toBeGreaterThanOrEqual(4.5);
       }
     }
+  });
+});
+
+// docs/accessibility.md lists the ratios measured here; it is generated, so it cannot drift from tokens.css.
+// vitest runs from frontend/, so the docs folder is one level up.
+const DOC = resolve(process.cwd(), '..', 'docs', 'accessibility.md');
+const MARK = '<!-- contrast-table -->';
+
+function ratioTable(): string {
+  const row = (fg: string, bg: string, what: string) => {
+    const l = contrast(light[fg], light[bg]);
+    const d = contrast(dark[fg], dark[bg]);
+    const mark = (r: number) => (r >= 7 ? `${r.toFixed(2)} (AAA)` : r >= 4.5 ? `${r.toFixed(2)} (AA)` : `${r.toFixed(2)} (fails)`);
+    return `| ${what} | \`${fg}\` on \`${bg}\` | ${mark(l)} | ${mark(d)} |`;
+  };
+  return [
+    '| Pair | Tokens | Light | Dark |',
+    '|---|---|---|---|',
+    ...pairs.map(([fg, bg, what]) => row(fg, bg, what)),
+  ].join('\n');
+}
+
+describe('docs/accessibility.md', () => {
+  it('shows the contrast ratios of tokens.css (run `UPDATE_DOCS=1 npx vitest run contrast` after changing colours)', () => {
+    const doc = readFileSync(DOC, 'utf8');
+    const [head, , tail] = doc.split(MARK);
+    const next = `${head}${MARK}\n${ratioTable()}\n${MARK}${tail}`;
+    if (process.env.UPDATE_DOCS) writeFileSync(DOC, next);
+    else expect(doc).toBe(next);
   });
 });

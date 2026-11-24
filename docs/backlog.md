@@ -54,7 +54,7 @@ The T-numbers are stable labels used for cross-references; the **row order is th
 | T19 | Term entry model: several terms per language, term-level notes, gender and number | Medium | L | P3 | Research #11 |
 | T20 | TMX export of aligned corpora, keep TMX inline markup | Low | M | P3 | Research #10 |
 | T21 | Related-term suggestions from word embeddings | Low | L | P3 | Roadmap 14 |
-| T22 | Interface language (Spanish, Italian) and a semantic colour system (**partly done**: catalogue, colour tokens) | Low | M | P3 | Audit, Research #12 |
+| T22 | Interface language (Spanish, Italian) and a semantic colour system (**done**, `docs/accessibility.md`) | Low | M | P3 | Audit, Research #12 |
 | T23 | Optional authentication and encryption at rest | Low | M | P3 | Roadmap 15 |
 | T24 | PDF extraction robustness | Low | M | P3 | Audit |
 | T25 | URL fetching: DNS-rebinding hardening, import a list of URLs | Low | S | P3 | Audit |
@@ -582,11 +582,12 @@ source with its licence recorded.
 
 **Priority** P3 · **Value** Low · **Effort** M · **Source** Audit, Research #12
 
-**Status: partly done** (UI redesign, 2026-11). Done: every interface string comes from one catalogue
-(`frontend/src/lib/i18n.ts`, English only), and semantic colour tokens exist for query hit, likely equivalent, termbase
-hit, forbidden term and the candidate / approved / forbidden statuses, each with a non-colour cue, in both themes
-(`frontend/src/lib/styles/tokens.css`, contrast checked by a unit test). Remaining: the Spanish and Italian
-catalogues with a language switch, and the contrast ratios written up as documentation.
+**Status: done.** Every interface string comes from the catalogues in `frontend/src/lib/locales/` (English, Spanish, Italian),
+with a language switch in the rail (first visit follows the browser; the choice is remembered; `<html lang>`, number
+formatting and table sorting follow it; switching re-renders without reloading data). A test keeps the three catalogues
+in step (keys, placeholders, no English left behind). Semantic colour tokens for query hit, likely equivalent, termbase hit,
+forbidden term and the candidate / approved / forbidden statuses exist with a non-colour cue each, in both themes; the
+measured contrast ratios are documented in `docs/accessibility.md`, generated from `tokens.css` and checked by the contrast test.
 
 **Why it matters.** The interface is English only while the users work in Spanish and Italian. The research also found one accent colour and badges only in the
 termbase, where memoQ and Phrase use a fixed colour per kind of information. (A light and dark theme already exist.)

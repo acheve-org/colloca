@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { get } from '../lib/api';
   import { CORPUS_CHANGED, corpusStore, scopeParams } from '../lib/corpus.svelte';
-  import { t } from '../lib/i18n';
+  import { t, fmt } from '../lib/i18n';
   import type { Facets, ScopeInfo } from '../lib/types';
   import Button from '../lib/ui/Button.svelte';
   import Field from '../lib/ui/Field.svelte';
@@ -33,8 +33,8 @@
     return t('filter.summary', {
       docs: info.docs,
       total: info.total_docs,
-      words: info.words.toLocaleString(),
-      totalWords: info.total_words.toLocaleString(),
+      words: fmt(info.words),
+      totalWords: fmt(info.total_words),
     });
   });
 

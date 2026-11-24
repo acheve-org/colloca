@@ -44,7 +44,7 @@
 </script>
 
 <script lang="ts">
-  import { t } from '../i18n';
+  import { t, LANGS, LANG_NAMES, locale, setLang } from '../i18n';
   import { go, route, screenHref } from '../router.svelte';
   import { setMode, theme, type ThemeMode } from '../theme.svelte';
   import CorpusSwitcher from './CorpusSwitcher.svelte';
@@ -83,6 +83,18 @@
   <div class="foot" role="group" aria-label={t('theme.label')}>
     {#each modes as m (m)}
       <button type="button" aria-pressed={theme.mode === m} onclick={() => setMode(m)}>{t(`theme.${m}`)}</button>
+    {/each}
+  </div>
+  <div class="foot" role="group" aria-label={t('lang.label')}>
+    {#each LANGS as l (l)}
+      <button
+        type="button"
+        lang={l}
+        title={LANG_NAMES[l]}
+        aria-label={LANG_NAMES[l]}
+        aria-pressed={locale.code === l}
+        onclick={() => setLang(l)}>{l.toUpperCase()}</button
+      >
     {/each}
   </div>
 </aside>
@@ -137,6 +149,10 @@
     gap: 2px;
     padding: var(--s-2) var(--s-3);
     border-top: 1px solid var(--rail-hover);
+  }
+  .foot + .foot {
+    border-top: 0;
+    padding-top: 0;
   }
   .foot button {
     flex: 1;
