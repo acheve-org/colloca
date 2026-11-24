@@ -82,7 +82,7 @@ def _do_install(code: str, size: str) -> None:
             dest.mkdir(parents=True, exist_ok=True)
             tmp = Path(tempfile.mkdtemp(prefix=".install-", dir=dest))
         _run_installer(_installer_argv(code, size, tmp))
-        if tmp is not None:
+        if tmp is not None and dest is not None:
             for item in tmp.iterdir():
                 target = dest / item.name
                 if target.is_dir():

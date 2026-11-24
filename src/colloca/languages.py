@@ -86,7 +86,9 @@ def update(code: str, *, name: str | None = None, model_size: "str | None | _Uns
         if tesseract is not None:
             conn.execute("UPDATE languages SET tesseract=? WHERE code=?", (tesseract, code))
     _invalidate()
-    return get(code)
+    updated = get(code)
+    assert updated is not None      # it existed above and nothing removes it in between
+    return updated
 
 
 def corpus_count(code: str) -> int:

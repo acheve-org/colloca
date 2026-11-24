@@ -381,9 +381,10 @@ def run(conn, data: bytes, filename: str, *, project_id: int | None, src_lang: s
     else:
         if not src_lang:
             raise ImportFailure("Choose the source language")
-        tgt_lang = tgt_lang or termbase.other_lang(src_lang)
-        if not tgt_lang:
+        default = tgt_lang or termbase.other_lang(src_lang)
+        if not default:
             raise ImportFailure("A termbase needs two languages: add a second one in the Languages screen")
+        tgt_lang = default
         records = sheet_records(data, filename, mapping or {}, header)
     if src_lang == tgt_lang:
         raise ImportFailure("The target language must differ from the source language")
