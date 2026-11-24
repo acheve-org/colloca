@@ -10,17 +10,17 @@ RUN npm run build
 FROM python:3.14-slim
 
 # Optional OCR for scanned PDFs: docker build --build-arg WITH_OCR=1 .   (adds Tesseract with Spanish and Italian
-# data, about 100 MB, and the `ocr` Python extra)
+# data, about 100 MB, and the `ocr` Python extra; data for other languages is installed from the Languages screen)
 ARG WITH_OCR=0
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 ENV PYTHONUNBUFFERED=1 UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy \
-    COLLOCA_DATA_DIR=/data PYTHONPATH=/models PATH="/srv/.venv/bin:$PATH"
+    COLLOCA_DATA_DIR=/data COLLOCA_MODELS_DIR=/models PYTHONPATH=/models PATH="/srv/.venv/bin:$PATH"
 
 WORKDIR /srv
 
 # Dependencies first (cached layer). spaCy models are NOT bundled: they are mounted at /models and
-# downloaded on first start by docker/entrypoint.sh.
+# installed from the Languages screen (or prefetched with docker/entrypoint.sh download-models).
 COPY pyproject.toml uv.lock README.md ./
 RUN if [ "$WITH_OCR" = "1" ]; then apt-get update && apt-get install -y --no-install-recommends \
         tesseract-ocr tesseract-ocr-spa tesseract-ocr-ita && rm -rf /var/lib/apt/lists/*; fi

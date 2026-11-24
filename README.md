@@ -1,6 +1,6 @@
 # Colloca (MVP)
 
-Self-hosted web tool for translators to build **monolingual reference corpora** (Spanish, Italian)
+Self-hosted web tool for translators to build **monolingual reference corpora** (in the languages you set up)
 from hand-picked URLs and client documents, and explore them: frequency, concordance (KWIC),
 collocations, n-grams / phraseology, keyness and word clouds.
 
@@ -11,17 +11,38 @@ Everything stays on your machine: one SQLite file in a Docker volume, no externa
 
 ```bash
 docker compose build            # builds the UI too
-docker compose up               # first start downloads the spaCy models into `~/.spacy`
-# open http://localhost:8000
+docker compose up
+# open http://localhost:8000, then install the models in the Languages screen (Spanish and Italian are set up
+# from the start but their models are only downloaded when you ask, into `~/.spacy`)
 ```
 
-The image does not bundle the spaCy models; they live in `~/.spacy` on the host (mounted at `/models`), which keeps the
-image small and lets you swap sizes without rebuilding: set `SPACY_SIZE` (sm|md|lg) for the `colloca` service in
-`docker-compose.yml`; missing models are downloaded on start (`docker compose run --rm colloca download-models`
-prefetches them). The compose file sets `SPACY_SIZE: lg`, so **Docker uses the large (`lg`) models by default**; this is
+The image does not bundle the spaCy models; they live in `~/.spacy` on the host (mounted at `/models`, also
+`COLLOCA_MODELS_DIR`), which keeps the image small. You install, resize and uninstall them per language in the
+**Languages** screen (see below); `docker compose run --rm colloca download-models fr de` prefetches models for the
+given language codes (default `es it`). The default size comes from `SPACY_SIZE` (sm|md|lg) for the `colloca` service in
+`docker-compose.yml`, which sets `lg`, so **Docker uses the large (`lg`) models by default**; this is
 the recommended setup for real work. The active model per language is shown in the status line at the top of the
 window, with a warning when a language runs on a small (`sm`) model. Data lives in the
 `colloca-data` volume; back it up from the *Backup and Trash* screen (a zip with a consistent copy of the database; single projects can be exported and imported too), or with `docker run --rm -v colloca-data:/d -v $PWD:/b alpine tar czf /b/colloca-backup.tgz -C /d .`. Deleted corpora, documents and terms stay in the Trash for 30 days (adjustable) before they are removed.
+
+## Languages
+
+The **Languages** screen lists the languages you work with (Spanish and Italian at first) and lets you add, edit and
+remove them. Each language card shows:
+
+- **Model**: the spaCy model in use (name, version, size) with *Install*, *Change size* and *Uninstall*. Models are
+  downloaded from the official spaCy releases (or from `SPACY_WHEELS` offline) into `COLLOCA_MODELS_DIR`
+  (Docker: `/models`) while you keep working; a failed download leaves nothing half-installed.
+- **OCR**: whether the Tesseract program is present (it needs `--build-arg WITH_OCR=1` in Docker) and whether the data
+  for the language is installed; *Install data* downloads `<code>.traineddata` from Tesseract's `tessdata_fast` set
+  (or copies it from the folder in `TESSDATA_FILES`) into the same volume, so no root or `apt` is needed.
+- **Base corpus**: create, fill and delete the language's general-language corpus used by keyness and the key terms.
+
+*Add language* offers spaCy's official pipelines: Catalan, Croatian, Danish, Dutch, English, Finnish, French, German,
+Greek, Italian, Lithuanian, Macedonian, Norwegian Bokmål, Polish, Portuguese, Romanian, Slovenian, Spanish and
+Swedish (languages written without spaces, Russian and Ukrainian are not offered yet). A language cannot be removed
+while any corpus of that language exists (the Trash counts). The language check on import compares a text with the
+stop words of the languages you have set up, so it only helps once at least two are set up.
 
 ## Workflow
 
@@ -415,7 +436,7 @@ are logged with their stack trace.
 Offline or locked-down installs of the spaCy models (no GitHub at build time): on a machine with internet run
 `uv run python scripts/fetch_model_wheels.py wheels --size lg` (es and it; `--dry-run` lists the URLs), copy the
 `wheels/` directory over and run `uv pip install --no-index --find-links wheels es_core_news_lg it_core_news_lg`.
-In Docker, mount the directory and set `SPACY_WHEELS=/wheels`: the entrypoint then installs from it instead of downloading.
+In Docker, mount the directory and set `SPACY_WHEELS=/wheels`: the Languages screen and `download-models` then install from it instead of downloading (`--langs fr de` adds other languages to the script).
 
 Sample data and benchmarks: `uv run python scripts/make_sample_corpus.py --lang es --words 1m --db /tmp/s.db` builds
 a synthetic annotated corpus (`100k`, `1m`, `5m` or any number; seeded, so reproducible; 1M words take under 10

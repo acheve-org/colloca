@@ -280,7 +280,8 @@ def import_payload(conn: sqlite3.Connection, payload: dict, *, project_id: int |
             if not name:
                 raise ValueError("a corpus has no name")
             if lang not in nlp.SUPPORTED:
-                raise ValueError(f"corpus “{name}”: language “{lang}” is not set up; add it in the Languages screen first")
+                raise ValueError(f"corpus “{name}”: language “{lang}” is not set up; "
+                                 "add it in the Languages screen first")
             is_ref = bool(c.get("is_reference"))
         except ValueError as exc:
             rep.rejected += 1

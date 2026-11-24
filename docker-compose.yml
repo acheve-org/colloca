@@ -6,7 +6,7 @@ services:
       - "127.0.0.1:8000:8000"   # local only; change deliberately to expose on a network
     volumes:
       - colloca-data:/data      # SQLite database lives here
-      - ${HOME}/.spacy:/models  # spaCy models, downloaded on first start if missing
+      - ${HOME}/.spacy:/models  # spaCy models and OCR data, installed from the Languages screen
     environment:
       SPACY_SIZE: lg            # sm | md | lg
       # ALLOW_PRIVATE_URLS: "1" # allow fetching intranet URLs (off by default)
