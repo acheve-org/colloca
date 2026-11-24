@@ -6,7 +6,7 @@
   const ctx = $derived(workingContext());
 </script>
 
-<div class="block">
+<div class="block" role="group" aria-label={t('ctx.working')}>
   <div class="head">
     <span class="label">{t('ctx.working')}</span>
     <a href={screenHref('projects')}>{t('ctx.change')}</a>

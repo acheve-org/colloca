@@ -1,8 +1,8 @@
 import { expect, test } from '@playwright/test';
-import { newCorpus } from './helpers';
+import { escapeRegExp, newCorpus } from './helpers';
 
 test('job report: save it, reopen it after a reload, delete it', async ({ page }) => {
-  await newCorpus(page, 'Informes');
+  const project = await newCorpus(page, 'Informes');
   await page.getByLabel('Pasted text', { exact: true }).fill(
     'El parque eólico produce energía limpia. El parque eólico de la sierra es nuevo.',
   );
@@ -28,8 +28,9 @@ test('job report: save it, reopen it after a reload, delete it', async ({ page }
 
   // leave and come back to a fresh page: the report is still there
   await page.reload();
-  const option = page.locator('option', { hasText: 'Informes' });
-  await page.getByLabel('Corpus', { exact: true }).selectOption(await option.first().getAttribute('value'));
+  await page.getByRole('navigation').getByRole('link', { name: 'Projects' }).click();
+  await page.getByRole('button', { name: new RegExp(`^${escapeRegExp(project)}`) }).click();
+  await page.getByRole('button', { name: 'Open Informes' }).click();
   await page.getByRole('navigation').getByRole('link', { name: 'Job' }).click();
   await page.getByRole('button', { name: /^Open report/ }).click();
   await expect(page.getByText('Saved', { exact: true })).toBeVisible();
