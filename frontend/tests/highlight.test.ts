@@ -151,4 +151,17 @@ describe('mergeRanges', () => {
       ]),
     ).toEqual([{ start: 0, end: 4, kind: 'term' }]);
   });
+
+  it('keeps the tooltip of a term range under a query range, and flags the merged range', () => {
+    expect(
+      mergeRanges([
+        { start: 0, end: 6, kind: 'query' },
+        { start: 2, end: 4, kind: 'term', title: 'lease' },
+      ]),
+    ).toEqual([
+      { start: 0, end: 2, kind: 'query' },
+      { start: 2, end: 4, kind: 'query', title: 'lease', term: true },
+      { start: 4, end: 6, kind: 'query' },
+    ]);
+  });
 });

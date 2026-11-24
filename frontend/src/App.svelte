@@ -15,6 +15,7 @@
   import Concordance from './screens/Concordance.svelte';
   import Equivalents from './screens/Equivalents.svelte';
   import Frequency from './screens/Frequency.svelte';
+  import CheckText from './screens/CheckText.svelte';
   import Job from './screens/Job.svelte';
   import Keyness from './screens/Keyness.svelte';
   import Ngrams from './screens/Ngrams.svelte';
@@ -35,6 +36,7 @@
     equivalents: Equivalents,
     cloud: WordCloud,
     termbase: Termbase,
+    check: CheckText,
     job: Job,
   };
   const Screen = $derived(SCREEN_COMPONENTS[route.screen]);

@@ -71,6 +71,13 @@ and search them side by side:
   with a dotted underline and the label *guess*. A guess is statistical: check it before adopting it (in a small
   memory several words can tie, and the one that looks most like the query is chosen). Words are matched by lemma,
   so *contratti* is marked for *contrato*. The CSV export is unchanged.
+- **Termbase hits in concordance lines** (KWIC and *Source + target*): words that belong to a termbase entry of the
+  corpus's project (or the general termbase) are underlined, with the approved translation on hover; inflected forms
+  and multi-word terms match (by word form or lemma). A **forbidden** translation found in a target segment is struck
+  through and marked ⚠ (not colour alone), with the approved alternative on hover. The **Check text** screen (Terms
+  group) does the same for a pasted source segment or draft translation. Matching runs on the server
+  (`POST /api/corpora/{id}/check-text`; `source_terms` / `target_terms` and `left_terms` / `node_terms` /
+  `right_terms` offsets in the concordance responses); CSV exports are unchanged.
 - **Equivalents** screen (in the rail only when the corpus has aligned texts): candidate translations of a word or phrase, i.e. the target lemmas that keep appearing in
   the aligned segments of its occurrences, scored by Dice against their overall frequency in the target text (so
   everyday words score low). Single words only on the target side, and a statistical hint, not a verdict: confirm

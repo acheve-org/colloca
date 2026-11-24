@@ -143,3 +143,14 @@ thead th {
   color: var(--hit-forbidden-fg);
   text-decoration: line-through;
 }
+/* A forbidden translation also carries a warning sign, so colour and strike-through are not the only cues. */
+.hit-forbidden::before {
+  content: '\26A0\FE0E\00a0';
+  text-decoration: none;
+  display: inline-block;
+}
+/* The query word is also a termbase term: keep the query look and add the term underline. */
+.hit-query.in-term {
+  text-decoration: underline solid;
+  text-underline-offset: 2px;
+}
