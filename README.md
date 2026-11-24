@@ -222,6 +222,19 @@ lemma quality: install `md` or `lg` (`uv pip install` the wheel from the spacy-m
 download es_core_news_lg it_core_news_lg`) and set `SPACY_SIZE`. `GET /api/status` reports what is in use.
 Add dependencies with `uv add <pkg>`; `uv.lock` is committed.
 
+Python 3.12 or newer (CI runs the tests on 3.12, 3.13 and 3.14; Docker and `mise.toml` use 3.14). Type checking is
+`uv run mypy` (basic level, in CI) and coverage `uv run pytest --cov` (printed in CI).
+
+Logging: `COLLOCA_LOG_LEVEL` (`INFO` by default), `COLLOCA_LOG_FORMAT=json` for one JSON object per line, and
+`COLLOCA_SLOW_MS` (default 1000, `0` = off): requests and concordance queries slower than that are logged as warnings;
+import and analysis jobs log when they are queued, started, done or rejected, and 5xx responses and job crashes
+are logged with their stack trace.
+
+Offline or locked-down installs of the spaCy models (no GitHub at build time): on a machine with internet run
+`uv run python scripts/fetch_model_wheels.py wheels --size lg` (es and it; `--dry-run` lists the URLs), copy the
+`wheels/` directory over and run `uv pip install --no-index --find-links wheels es_core_news_lg it_core_news_lg`.
+In Docker, mount the directory and set `SPACY_WHEELS=/wheels`: the entrypoint then installs from it instead of downloading.
+
 Sample data and benchmarks: `uv run python scripts/make_sample_corpus.py --lang es --words 1m --db /tmp/s.db` builds
 a synthetic annotated corpus (`100k`, `1m`, `5m` or any number; seeded, so reproducible; 1M words take under 10
 seconds), and `uv run python scripts/bench_analyses.py --words 1m` times every analysis on one and prints a table.

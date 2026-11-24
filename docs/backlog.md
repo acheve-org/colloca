@@ -667,8 +667,7 @@ that are fetched as background jobs with a per-URL report (the trimming step bec
 **Status: partly done** (UI redesign, 2026-11). Done: the front end is a typed Svelte/Vite app in `frontend/` split
 into screens, components and stores (replacing `app.js`), with eslint and svelte-check, Vitest unit and component
 tests, and Playwright browser tests of the main flow (create corpus, upload, concordance, add term, termbase, CSV
-export), all in CI. Remaining: the other browser flows (aligned texts, job analysis), logging, Python type checking
-and coverage, the Python version floor, offline model install, and the sample-data generator.
+export), all in CI. Also done (milestone 4): browser tests of aligned texts and job analysis, logging, mypy and coverage in CI, Python 3.12 floor tested on 3.12 to 3.14, offline model install, and the sample-data generator (T28 is complete).
 
 **Why it matters.** The back end has 130 tests; the front end has none, and `static/app.js` is one 600-line file whose long lines hold most of the interface logic.
 Each new feature is verified by hand in a browser. The server logs almost nothing. These make every other task slower and riskier.

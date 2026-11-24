@@ -6,7 +6,7 @@ import time
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 
-from . import cql, metadata
+from . import cql, logsetup, metadata
 
 UNITS = {"lemma": "lemma", "form": "norm"}  # public name -> column (whitelist)
 
@@ -40,7 +40,8 @@ class Scope:
 
     def where(self, alias: str = "d") -> tuple[str, list]:
         """SQL condition (on documents aliased `alias`) and its parameters."""
-        conds, params = [f"{alias}.corpus_id=?"], [self.corpus_id]
+        conds: list[str] = [f"{alias}.corpus_id=?"]
+        params: list = [self.corpus_id]
         for tag in self.tags:
             conds.append(f"EXISTS (SELECT 1 FROM doc_tags g WHERE g.doc_id={alias}.id AND g.tag=?)")
             params.append(tag)
@@ -296,8 +297,14 @@ def _hits_advanced(conn, scope, query: cql.Query):
     return out, capped
 
 
-def search(conn, scope, q, unit="lemma", case_sensitive=False, any_order=False, advanced=False,
-           accent_insensitive=False):
+def search(conn, scope, q, *args, **kwargs):
+    """`_search` with a slow-query log line (see logsetup.timer)."""
+    with logsetup.timer(f"concordance query {q!r}"):
+        return _search(conn, scope, q, *args, **kwargs)
+
+
+def _search(conn, scope, q, unit="lemma", case_sensitive=False, any_order=False, advanced=False,
+            accent_insensitive=False):
     """Everything a concordance-style query can ask: returns (hits, capped, parsed) where `parsed` is the query
     in words (advanced only). Used by the concordance, the bilingual concordance and the equivalents."""
     scope = as_scope(scope)

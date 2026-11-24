@@ -194,7 +194,7 @@ def _term_sections(lang_sec) -> list[dict]:
         term = next((n for n in sec.iter() if _local(n) == "term"), None)
         if term is None or not _text(term):
             continue
-        notes = {}
+        notes: dict = {}
         for n in sec.iter():
             if _local(n) == "termNote" and n.get("type"):
                 notes.setdefault(n.get("type"), _text(n))
@@ -224,7 +224,7 @@ def _parse_tbx(data: bytes):
         raise ImportFailure("The file is not TBX (no <tbx> or <martif> root element)")
     entries = []
     for n, entry in enumerate((e for e in root.iter() if _local(e) in ("termEntry", "conceptEntry")), 1):
-        sections = {}
+        sections: dict = {}
         for sec in entry:
             if _local(sec) in ("langSet", "langSec"):
                 lang = _lang(sec.get(_XML_LANG) or sec.get("lang"))
