@@ -15,8 +15,10 @@ from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, UploadFi
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from starlette.concurrency import run_in_threadpool
 
 from . import (
+    align,
     analysis,
     candidates,
     db,
@@ -434,14 +436,8 @@ async def upload(corpus_id: int, files: list[UploadFile] = File(...), tags: str 
     return results
 
 
-@app.post("/api/corpora/{corpus_id}/upload-pairs", status_code=202)
-async def upload_pairs(corpus_id: int, files: list[UploadFile] = File(...), partner_corpus_id: int | None = None,
-                       partner_name: str = "", swap: bool = False, tags: str = "", text_type: str = "",
-                       doc_date: str = "", author: str = "", force_language: bool = False):
-    """Import aligned texts (TMX, XLIFF, or two-column .tsv/.csv/.docx table) into this corpus and a partner corpus of
-    the other language: pass `partner_corpus_id`, or `partner_name` to create the partner corpus (same project).
-    This corpus receives the first language / column, the partner the second (`swap` flips two-column files)."""
-    meta = _meta(tags, text_type, doc_date, author)
+def _partner_corpus(corpus_id: int, partner_corpus_id: int | None, partner_name: str) -> int:
+    """The corpus that receives the translations: an existing one, or a new one in the same project."""
     with db.session() as conn:
         corpus = _corpus(conn, corpus_id)
         if corpus["is_reference"]:
@@ -450,14 +446,24 @@ async def upload_pairs(corpus_id: int, files: list[UploadFile] = File(...), part
             partner = _corpus(conn, partner_corpus_id)
             if partner["id"] == corpus_id or partner["lang"] == corpus["lang"] or partner["is_reference"]:
                 raise HTTPException(400, "The partner must be another, non-base corpus in the other language")
-            partner_id = partner["id"]
-        elif partner_name.strip():
-            partner_id = conn.execute(
+            return partner["id"]
+        if partner_name.strip():
+            return conn.execute(
                 "INSERT INTO corpora (name,lang,description,project_id) VALUES (?,?,?,?)",
                 (partner_name.strip()[:120], termbase.other_lang(corpus["lang"]),
                  f"Translations of “{corpus['name']}”", corpus["project_id"])).lastrowid
-        else:
-            raise HTTPException(400, "Choose the partner corpus (partner_corpus_id) or name a new one (partner_name)")
+    raise HTTPException(400, "Choose the partner corpus (partner_corpus_id) or name a new one (partner_name)")
+
+
+@app.post("/api/corpora/{corpus_id}/upload-pairs", status_code=202)
+async def upload_pairs(corpus_id: int, files: list[UploadFile] = File(...), partner_corpus_id: int | None = None,
+                       partner_name: str = "", swap: bool = False, tags: str = "", text_type: str = "",
+                       doc_date: str = "", author: str = "", force_language: bool = False):
+    """Import aligned texts (TMX, XLIFF, or two-column .tsv/.csv/.docx table) into this corpus and a partner corpus of
+    the other language: pass `partner_corpus_id`, or `partner_name` to create the partner corpus (same project).
+    This corpus receives the first language / column, the partner the second (`swap` flips two-column files)."""
+    meta = _meta(tags, text_type, doc_date, author)
+    partner_id = _partner_corpus(corpus_id, partner_corpus_id, partner_name)
     if len(files) > ingest.MAX_UPLOAD_FILES:
         raise HTTPException(413, f"Too many files in one upload (limit {ingest.MAX_UPLOAD_FILES})")
     results = []
@@ -472,6 +478,71 @@ async def upload_pairs(corpus_id: int, files: list[UploadFile] = File(...), part
             corpus_id, partner_id, name, data, swap, meta, force_language))
         results.append({"file": name, "ok": True, "job_id": job.id, "partner_corpus_id": partner_id})
     return results
+
+
+class AlignLink(BaseModel):
+    src: list[str] = Field(max_length=200)
+    tgt: list[str] = Field(max_length=200)
+    low: bool = False
+
+
+class AlignConfirm(BaseModel):
+    links: list[AlignLink] = Field(max_length=100_000)
+    title: str = Field(default="", max_length=200)
+    partner_corpus_id: int | None = None
+    partner_name: str = ""
+    tags: str = ""
+    text_type: str = ""
+    doc_date: str = ""
+    author: str = ""
+    force_language: bool = False
+
+
+async def _read_upload(f: UploadFile) -> dict:
+    data = await f.read(ingest.MAX_UPLOAD_BYTES + 1)
+    if len(data) > ingest.MAX_UPLOAD_BYTES:
+        raise HTTPException(413, f"{f.filename or 'file'} is larger than {ingest.MAX_UPLOAD_BYTES // 1024 // 1024} MB "
+                                 "(set MAX_UPLOAD_MB to change)")
+    try:
+        return await run_in_threadpool(ingest.read_file, f.filename or "file", data)
+    except ingest.IngestError as exc:
+        raise HTTPException(400, f"{f.filename or 'file'}: {exc}") from exc
+
+
+@app.post("/api/corpora/{corpus_id}/align/propose")
+async def align_propose(corpus_id: int, source: UploadFile = File(...), target: UploadFile = File(...)):
+    """Align a document (this corpus's language) with its translation (the other language). Only proposes:
+    nothing is stored until `/align/confirm`. Paragraph breaks of the files are used as anchors."""
+    with db.session() as conn:
+        corpus = _corpus(conn, corpus_id)
+    if corpus["is_reference"]:
+        raise HTTPException(400, "A base corpus cannot hold aligned texts")
+    src_lang, tgt_lang = corpus["lang"], termbase.other_lang(corpus["lang"])
+    a, b = await _read_upload(source), await _read_upload(target)
+    links = await run_in_threadpool(align.propose, a["text"], b["text"], src_lang, tgt_lang)
+    return {"title": a["title"], "source_lang": src_lang, "target_lang": tgt_lang,
+            "links": [{"src": lk.src, "tgt": lk.tgt, "type": lk.type, "confidence": lk.confidence, "low": lk.low}
+                      for lk in links],
+            "report": align.links_report(links)}
+
+
+@app.post("/api/corpora/{corpus_id}/align/confirm", status_code=202)
+def align_confirm(corpus_id: int, body: AlignConfirm):
+    """Store the reviewed links as an aligned document pair (a background job, like any aligned import).
+    Merged sentences become one segment; links with an empty side are not stored (counted in the report)."""
+    meta = _meta(body.tags, body.text_type, body.doc_date, body.author)
+    pairs, rep = align.confirm_pairs([(lk.src, lk.tgt, lk.low) for lk in body.links])
+    if not pairs:
+        raise HTTPException(400, "No link has a text on both sides, nothing to store")
+    partner_id = _partner_corpus(corpus_id, body.partner_corpus_id, body.partner_name)
+    title = body.title.strip() or "Aligned documents"
+    work = parallel.import_pairs(corpus_id, partner_id, f"{title}.align", b"", False, meta, body.force_language,
+                                 preread=pairs)
+
+    def run(job: importer.Job) -> dict:
+        return {**work(job), "report": rep}
+    job = importer.submit(corpus_id, "import", title, run)
+    return {"job_id": job.id, "partner_corpus_id": partner_id, "report": rep}
 
 
 @app.get("/api/corpora/{corpus_id}/parallel")
