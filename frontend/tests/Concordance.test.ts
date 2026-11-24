@@ -85,6 +85,14 @@ beforeEach(() => {
       if (gate && (gateQ === null || gateQ === q)) await gate;
       return q in byQ ? res(200, byQ[q]) : res(conc.status, conc.body);
     }
+    if (p.endsWith('/context')) {
+      return res(200, {
+        document: { id: 1, corpus_id: 1, title: 'doc1', source: 'https://x.org/a', kind: 'url', author: 'Ana',
+          date: '2024-05', text_type: 'contract', tags: ['law', 'lease'], tokens: 9, aligned: false },
+        blocks: [{ n: 0, text: 'Una casa grande.', hit: true, pair: '', marks: [{ start: 4, end: 8 }] }],
+        more_before: false, more_after: false,
+      });
+    }
     if (p.endsWith('/bilingual')) return res(bi.status, bi.body);
     if (p.endsWith('/parallel')) return res(200, { documents: corpusStore.aligned ? 1 : 0, segments: 0, partners: [] });
     if (p.endsWith('/facets')) return res(200, { tags: [], text_types: [], date_min: '', date_max: '' });
@@ -199,6 +207,30 @@ describe('Concordance', () => {
     expect(bodyRows()).toHaveLength(1);
     expect(screen.getByText('(1 match the filters)')).toBeInTheDocument();
     expect(searches()).toHaveLength(1);
+  });
+
+  it('shows the document metadata and the whole sentence of the selected hit', async () => {
+    render(Concordance);
+    await search('casa');
+    await fireEvent.click(bodyRows()[0]);
+    await waitFor(() => expect(screen.getByText('Ana')).toBeInTheDocument());
+    for (const text of ['https://x.org/a', '2024-05', 'contract', 'law, lease']) {
+      expect(screen.getByText(text)).toBeInTheDocument();
+    }
+    expect(screen.getByText('Sentence')).toBeInTheDocument();
+    const c = calls.find((x) => x.path.endsWith('/context'))!;
+    expect(c.path).toBe('/api/documents/1/context');
+    expect(c.params.get('pos')).toBe('10');
+    expect(c.params.get('radius')).toBe('0');
+  });
+
+  it('opens the document viewer from the detail strip', async () => {
+    render(Concordance);
+    await search('casa');
+    await fireEvent.click(bodyRows()[0]);
+    await fireEvent.click(screen.getByRole('button', { name: 'Open document' }));
+    await waitFor(() => expect(document.querySelector('dialog')).toHaveAttribute('open'));
+    await waitFor(() => expect(calls.filter((x) => x.path.endsWith('/context')).some((x) => x.params.get('radius') === '3')).toBe(true));
   });
 
   it('renders results in order with the node highlighted and counts', async () => {

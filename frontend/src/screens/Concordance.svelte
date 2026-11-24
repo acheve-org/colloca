@@ -34,10 +34,11 @@
   import { go, route } from '../lib/router.svelte';
   import { formatKeys, registerShortcut } from '../lib/shortcuts.svelte';
   import { openTerm, termStore } from '../lib/term.svelte';
-  import type { BilingualResult, ConcLine, ConcordanceResult } from '../lib/types';
+  import type { BilingualResult, ConcLine, ConcordanceResult, DocContext } from '../lib/types';
   import Badge from '../lib/ui/Badge.svelte';
   import Button from '../lib/ui/Button.svelte';
   import DetailStrip from '../lib/ui/DetailStrip.svelte';
+  import DocViewer from '../lib/ui/DocViewer.svelte';
   import EmptyState from '../lib/ui/EmptyState.svelte';
   import Field from '../lib/ui/Field.svelte';
   import Highlight from '../lib/ui/Highlight.svelte';
@@ -82,6 +83,11 @@
   // Fallback words for the target highlight when the server sent no marks (it normally does).
   const likelyEquiv: string[] = [];
 
+  // Metadata and sentence of the selected hit, and the "open the document" viewer.
+  let hitDoc = $state.raw<DocContext | null>(null);
+  let viewerOpen = $state(false);
+  let docSeq = 0;
+
   let detailEl: HTMLElement | undefined = $state();
   let tableEl: HTMLElement | undefined = $state();
 
@@ -95,6 +101,30 @@
       (l) => fold(bi ? l.source : l.left).includes(a) && fold(bi ? l.target : l.right).includes(b),
     );
   });
+  const hitSpan = (l: ConcLine) => (l.matches?.length ? l.matches[l.matches.length - 1] - l.matches[0] + 1 : 1);
+  const selIndex = $derived(selected ? shown.findIndex((x) => lineKey(x) === lineKey(selected!)) : -1);
+
+  $effect(() => {
+    const l = selected;
+    const n = ++docSeq;
+    if (!l) {
+      hitDoc = null;
+      return;
+    }
+    get<DocContext>(`/api/documents/${l.doc_id}/context`, { pos: l.pos, span: hitSpan(l), radius: 0 })
+      .then((r) => {
+        if (n === docSeq) hitDoc = r;
+      })
+      .catch(() => {
+        if (n === docSeq) hitDoc = null; // the detail strip still shows what the line itself carries
+      });
+  });
+
+  function step(delta: number): void {
+    const next = shown[selIndex + delta];
+    if (next) selected = next;
+  }
+
   const docCount = $derived(new Set(lines.map((l) => l.doc_id)).size);
   const csvHref = $derived(result ? csvUrl(result.path, result.params) : '');
 
@@ -369,12 +399,21 @@
       <div class="detail" tabindex="-1" bind:this={detailEl}>
         <DetailStrip title={t('cc.detail')}>
           {#snippet actions()}
+            <Button onclick={() => (viewerOpen = true)}>{t('doc.open')}</Button>
             <Button onclick={addTermFromHit}>{t('cc.addTermSel')} <Kbd keys="Mod+E" /></Button>
             {#if csvHref}<a class="csv" href={csvHref} download>{t('cc.csv')}</a>{/if}
           {/snippet}
           <dl>
             <dt>{t('cc.document')}</dt>
             <dd class="docname">{l.doc}</dd>
+            {#if hitDoc && hitDoc.document.id === l.doc_id}
+              {@const d = hitDoc.document}
+              {#if d.source}<dt>{t('doc.source')}</dt><dd>{d.source}</dd>{/if}
+              {#if d.author}<dt>{t('doc.author')}</dt><dd>{d.author}</dd>{/if}
+              {#if d.date}<dt>{t('doc.date')}</dt><dd>{d.date}</dd>{/if}
+              {#if d.text_type}<dt>{t('doc.type')}</dt><dd>{d.text_type}</dd>{/if}
+              {#if d.tags.length}<dt>{t('doc.tags')}</dt><dd>{d.tags.join(', ')}</dd>{/if}
+            {/if}
             {#if result?.mode === 'bilingual'}
               <dt>{t('cc.segment')}</dt>
               <dd data-side="source">
@@ -394,6 +433,15 @@
             {:else}
               <dt>{t('cc.context')}</dt>
               <dd data-side="source">{@render context(l)}</dd>
+              {#if hitDoc?.blocks[0]?.text}
+                <dt>{t('doc.sentence')}</dt>
+                <dd>
+                  <Highlight
+                    text={hitDoc.blocks[0].text}
+                    ranges={hitDoc.blocks[0].marks.map((m) => ({ ...m, kind: 'query' as const }))}
+                  />
+                </dd>
+              {/if}
             {/if}
           </dl>
         </DetailStrip>
@@ -401,6 +449,15 @@
     {/if}
   {/if}
 </div>
+
+<DocViewer
+  bind:open={viewerOpen}
+  hit={selected}
+  index={selIndex + 1}
+  total={shown.length}
+  onprev={() => step(-1)}
+  onnext={() => step(1)}
+/>
 
 <style>
   .cc {

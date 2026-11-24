@@ -84,6 +84,8 @@ export interface FrequencyRow {
 
 /** /concordance returns { total, lines } */
 export interface ConcordanceLine {
+  /** Token positions of the matched words (the hit, for the document viewer). */
+  matches?: number[];
   doc_id: number;
   doc: string;
   pos: number;
@@ -254,4 +256,32 @@ export interface JobReport {
   gaps: JobGap[];
   known_terms: JobKnownTerm[];
   phrases: JobPhrase[];
+}
+
+/** GET /api/documents/{id}/context: metadata and the text around one hit. */
+export interface DocContextBlock {
+  n: number;
+  text: string;
+  hit: boolean;
+  /** Aligned translation of this block (aligned documents only). */
+  pair: string;
+  marks: { start: number; end: number }[];
+}
+export interface DocContext {
+  document: {
+    id: number;
+    corpus_id: number;
+    title: string;
+    source: string;
+    kind: string;
+    author: string;
+    date: string;
+    text_type: string;
+    tags: string[];
+    tokens: number;
+    aligned: boolean;
+  };
+  blocks: DocContextBlock[];
+  more_before: boolean;
+  more_after: boolean;
 }

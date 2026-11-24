@@ -8,8 +8,10 @@
     onclose?: () => void;
     children: Snippet;
     footer?: Snippet;
+    /** A wide dialog, for reading text. */
+    wide?: boolean;
   }
-  let { open = $bindable(), title, onclose, children, footer }: Props = $props();
+  let { open = $bindable(), title, onclose, children, footer, wide = false }: Props = $props();
 
   let el: HTMLDialogElement | undefined = $state();
   let opener: HTMLElement | null = null;
@@ -39,7 +41,7 @@
   }
 </script>
 
-<dialog bind:this={el} aria-labelledby="{uid}-t" onclose={handleClose} {oncancel}>
+<dialog bind:this={el} class:wide aria-labelledby="{uid}-t" onclose={handleClose} {oncancel}>
   <header>
     <h2 id="{uid}-t">{title}</h2>
     <button type="button" class="x" aria-label={t('common.close')} onclick={() => el?.close()}>×</button>
@@ -60,6 +62,10 @@
     /* Only the body scrolls: header and footer (the actions) stay visible. */
     max-height: 85vh;
     overflow: hidden;
+  }
+  dialog.wide {
+    width: min(1100px, 94vw);
+    max-width: min(1100px, 94vw);
   }
   dialog[open] {
     display: flex;
