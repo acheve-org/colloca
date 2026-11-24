@@ -108,7 +108,7 @@
     {
       key: 'status',
       label: t('tb.col.status'),
-      width: '8rem',
+      width: '9.5rem',
       value: (r) => t(`badge.${r.status}`),
     },
     { key: 'domain', label: t('tb.col.domain'), width: '8rem' },
