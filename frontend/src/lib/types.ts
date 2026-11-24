@@ -356,7 +356,23 @@ export interface JobPhrase {
   in_termbase?: string;
   dropped?: boolean;
 }
+/** A saved report in GET /api/corpora/{id}/reports. */
+export interface SavedReport {
+  id: number;
+  title: string;
+  source: string;
+  created: string;
+  has_text: boolean;
+  words: number | null;
+  coverage_tokens_pct: number | null;
+  gaps: number | null;
+  terms_found: number | null;
+}
 export interface JobReport {
+  /** Present when the report was opened from the saved reports. */
+  report_id?: number;
+  title?: string;
+  has_text?: boolean;
   summary: JobSummary;
   key_terms: JobKeyTerm[];
   gaps: JobGap[];

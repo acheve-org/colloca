@@ -1,4 +1,4 @@
-import { get, upload } from './api';
+import { get, post, upload } from './api';
 import { CORPUS_CHANGED } from './corpus.svelte';
 import { t } from './i18n';
 import { trackJobs } from './jobs.svelte';
@@ -33,6 +33,14 @@ class Analysis {
   source = $state('');
   /** The pasted text, kept with the report. */
   text = $state('');
+  /** Where the report on screen is served from (a finished job, or a saved report), for its downloads. */
+  resultPath = $state('');
+  /** The saved report on screen (opened, or just saved from this analysis), and its title. */
+  savedId = $state<number | null>(null);
+  title = $state('');
+  hasText = $state(false);
+  /** Changes whenever another report is put on screen. */
+  version = $state(0);
 
   #seq = 0;
   #timer: ReturnType<typeof setTimeout> | undefined;
@@ -89,7 +97,12 @@ class Analysis {
       if (n !== this.#seq) return;
       this.report = r;
       this.reportJob = job_id;
+      this.resultPath = `/api/jobs/${job_id}/result`;
       this.source = req.source;
+      this.savedId = null;
+      this.title = '';
+      this.hasText = false;
+      this.version++;
       this.job = null;
     } catch (err) {
       if (n !== this.#seq) return;
@@ -102,6 +115,31 @@ class Analysis {
     }
   }
 
+  /** Keeps the report on screen (a finished analysis) so it can be reopened after a restart. */
+  async save(title: string): Promise<number> {
+    const { id } = await post<{ id: number }>(`/api/jobs/${this.reportJob}/save`, { title });
+    this.savedId = id;
+    this.resultPath = `/api/reports/${id}/result`;
+    return id;
+  }
+
+  /** Puts a saved report on screen. */
+  async openSaved(id: number): Promise<void> {
+    this.#cancel();
+    this.busy = false;
+    this.job = null;
+    this.error = '';
+    const r = await get<JobReport>(`/api/reports/${id}/result`);
+    this.report = r;
+    this.reportJob = 0;
+    this.resultPath = `/api/reports/${id}/result`;
+    this.source = (r as JobReport & { source?: string }).source ?? '';
+    this.savedId = id;
+    this.title = r.title ?? '';
+    this.hasText = !!r.has_text;
+    this.version++;
+  }
+
   /** Stops any poll and drops the report (the corpus changed; tests). The pasted text stays. */
   reset(): void {
     this.#cancel();
@@ -110,7 +148,12 @@ class Analysis {
     this.error = '';
     this.report = null;
     this.reportJob = 0;
+    this.resultPath = '';
+    this.savedId = null;
+    this.title = '';
+    this.hasText = false;
     this.source = '';
+    this.version++;
   }
 }
 

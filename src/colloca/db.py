@@ -178,8 +178,25 @@ CREATE TABLE settings (
 ) WITHOUT ROWID;
 """
 
+# --- v11: saved job reports (T11). The report of an analysis (the JSON the Job screen shows), kept with its
+# parameters so it can be reopened after a restart. `text` holds the analysed text only when the user asked to
+# keep it (a client's source text is confidential); deleting the report deletes it.
+_V11 = """
+CREATE TABLE job_reports (
+    id INTEGER PRIMARY KEY,
+    corpus_id INTEGER NOT NULL REFERENCES corpora(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT '',
+    created TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    params TEXT NOT NULL DEFAULT '{}',
+    payload TEXT NOT NULL,
+    text TEXT
+);
+CREATE INDEX idx_job_reports_corpus ON job_reports (corpus_id, created);
+"""
+
 MIGRATIONS: list[tuple[int, str]] = [(1, _V1), (2, _V2), (3, _V3), (4, _V4), (5, _V5), (6, _V6), (7, _V7), (8, _V8),
-                                     (9, _V9), (10, _V10)]
+                                     (9, _V9), (10, _V10), (11, _V11)]
 SCHEMA_VERSION = MIGRATIONS[-1][0]
 
 

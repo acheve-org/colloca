@@ -4,18 +4,20 @@
 </script>
 
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { analysis } from '../lib/analysis.svelte';
-  import { qs } from '../lib/api';
+  import { ApiError, del, get, post, qs } from '../lib/api';
   import { type Flagged, visible } from '../lib/candidates.svelte';
-  import { corpusStore, scopeParams } from '../lib/corpus.svelte';
+  import { CORPUS_CHANGED, corpusStore, scopeParams } from '../lib/corpus.svelte';
   import { toInt } from '../lib/explore.svelte';
-  import { findRanges } from '../lib/highlight';
+  import { findRanges, termRanges } from '../lib/highlight';
   import { t, fmt } from '../lib/i18n';
   import { messages } from '../lib/messages.svelte';
-  import type { JobGap, JobKeyTerm, JobKnownTerm, JobPhrase } from '../lib/types';
+  import type { CheckTextResult, JobGap, JobKeyTerm, JobKnownTerm, JobPhrase, SavedReport } from '../lib/types';
   import Badge from '../lib/ui/Badge.svelte';
   import Button from '../lib/ui/Button.svelte';
   import DataTable from '../lib/ui/DataTable.svelte';
+  import Dialog from '../lib/ui/Dialog.svelte';
   import { cellValue, type Column } from '../lib/ui/DataTable.types';
   import EmptyState from '../lib/ui/EmptyState.svelte';
   import Field from '../lib/ui/Field.svelte';
@@ -38,6 +40,7 @@
   let minFreq = $state<number | null>(2);
   let minCorpus = $state<number | null>(3);
   let force = $state(false);
+  let keepText = $state(false);
 
   const report = $derived(analysis.report);
   const busy = $derived(analysis.busy);
@@ -50,7 +53,7 @@
   let selKey = $state.raw<JobKeyTerm | null>(null);
   let selPhrase = $state.raw<JobPhrase | null>(null);
   $effect.pre(() => {
-    void analysis.reportJob;
+    void analysis.version;
     selKnown = selGap = selKey = selPhrase = null;
   });
 
@@ -74,6 +77,7 @@
         min_freq: toInt(minFreq, 2),
         min_corpus_freq: toInt(minCorpus, 3),
         force_language: force,
+        keep_text: keepText,
         ...scopeParams(),
       },
       source: file?.name ?? '',
@@ -82,8 +86,90 @@
 
   // ------------------------------------------------------------------ report
   const pct = (v: number) => `${v}%`;
-  const sectionUrl = (name: string) =>
-    `/api/jobs/${analysis.reportJob}/result?${qs({ section: name, format: 'csv' })}`;
+  const sectionUrl = (name: string) => `${analysis.resultPath}?${qs({ section: name, format: 'csv' })}`;
+  const workbookUrl = $derived(`${analysis.resultPath}?${qs({ format: 'xlsx' })}`);
+
+  // ------------------------------------------------------------------ saved reports (T11)
+  let saved = $state.raw<SavedReport[]>([]);
+  let delTarget = $state.raw<SavedReport | null>(null);
+  let delOpen = $state(false);
+  let textResult = $state.raw<CheckTextResult | null>(null);
+  let textOpen = $state(false);
+
+  async function loadSaved(): Promise<void> {
+    const id = corpusStore.currentId;
+    if (id === null) {
+      saved = [];
+      return;
+    }
+    try {
+      const rows = await get<SavedReport[]>(`/api/corpora/${id}/reports`);
+      if (corpusStore.currentId === id) saved = rows;
+    } catch {
+      saved = [];
+    }
+  }
+  onMount(() => {
+    void loadSaved();
+    window.addEventListener(CORPUS_CHANGED, loadSaved);
+    return () => window.removeEventListener(CORPUS_CHANGED, loadSaved);
+  });
+  $effect(() => {
+    void corpusStore.currentId;
+    void loadSaved();
+  });
+
+  const fail = (err: unknown) => messages.say(err instanceof ApiError || err instanceof Error ? err.message : String(err), 'err');
+
+  async function saveReport(): Promise<void> {
+    try {
+      await analysis.save('');
+      messages.say(t('job.saved'), 'ok');
+      await loadSaved();
+    } catch (err) {
+      fail(err);
+    }
+  }
+  async function openReport(r: SavedReport): Promise<void> {
+    try {
+      await analysis.openSaved(r.id);
+      textResult = null;
+      textOpen = false;
+    } catch (err) {
+      fail(err);
+    }
+  }
+  function askDelete(r: SavedReport): void {
+    delTarget = r;
+    delOpen = true;
+  }
+  async function doDelete(): Promise<void> {
+    const r = delTarget;
+    delOpen = false;
+    if (!r) return;
+    try {
+      await del(`/api/reports/${r.id}`);
+      if (analysis.savedId === r.id) analysis.reset();
+      messages.say(t('job.deleted'), 'ok');
+      await loadSaved();
+    } catch (err) {
+      fail(err);
+    }
+  }
+  /** The kept text, with the termbase hits marked (the same marking as Check text). */
+  async function showText(): Promise<void> {
+    const id = analysis.savedId;
+    const cid = corpusStore.currentId;
+    if (id === null || cid === null) return;
+    try {
+      const { text, lang } = await get<{ text: string; lang: string }>(`/api/reports/${id}/text`);
+      textResult = await post<CheckTextResult>(`/api/corpora/${cid}/check-text`, { text, lang });
+      textOpen = true;
+    } catch (err) {
+      fail(err);
+    }
+  }
+  const when = (iso: string) => iso.slice(0, 16).replace('T', ' ');
   const glossaryUrl = (fmt: string, ids: number[]) =>
     `/api/terms/export?${qs({ format: fmt, ids: ids.join(',') })}`;
 
@@ -248,6 +334,7 @@
         <input type="number" min="1" bind:value={minCorpus} title={t('job.minCorpusHint')} />
       </Field>
       <div class="force"><Toggle bind:checked={force} label={t('job.force')} /></div>
+      <div class="force" title={t('job.keepTextHint')}><Toggle bind:checked={keepText} label={t('job.keepText')} /></div>
       <div class="actions">
         <Button variant="primary" disabled={busy} onclick={analyse}>{t('job.go')}</Button>
         <span class="progress" aria-live="polite">
@@ -273,10 +360,53 @@
       ></textarea>
       {#if error}<p class="error" role="alert">{t('job.failed', { error })}</p>{/if}
 
+      {#if saved.length}
+        <section aria-labelledby="saved-h">
+          <h3 id="saved-h">{t('job.savedTitle')}</h3>
+          <ul class="saved">
+            {#each saved as r (r.id)}
+              <li class:open={analysis.savedId === r.id}>
+                <span class="grow">
+                  <b>{r.title}</b>
+                  <span class="muted">
+                    {when(r.created)} · {t('job.savedMeta', { words: fmt(r.words ?? 0), pct: r.coverage_tokens_pct ?? 0, gaps: r.gaps ?? 0 })}
+                    {#if r.has_text} · {t('job.textKept')}{/if}
+                  </span>
+                </span>
+                <Button onclick={() => openReport(r)} ariaLabel={t('job.openOf', { title: r.title })}>{t('job.open')}</Button>
+                <a class="csv" href={`/api/reports/${r.id}/result?${qs({ format: 'xlsx' })}`} download>{t('job.excel')}</a>
+                <Button variant="danger" onclick={() => askDelete(r)} ariaLabel={t('job.deleteOf', { title: r.title })}>{t('common.delete')}</Button>
+              </li>
+            {/each}
+          </ul>
+        </section>
+      {/if}
+
       {#if report && summary}
         <p class="muted">
           {analysis.source ? t('job.reportOf', { source: analysis.source }) : t('job.reportOfPasted')}
         </p>
+        <div class="reportbar">
+          {#if analysis.title}<b>{analysis.title}</b>{/if}
+          {#if analysis.savedId === null}
+            <Button onclick={saveReport}>{t('job.save')}</Button>
+          {:else}
+            <span class="muted">{t('job.savedState')}</span>
+          {/if}
+          <a class="csv" href={workbookUrl} download>{t('job.excelAll')}</a>
+          {#if analysis.hasText}<Button onclick={showText}>{t('job.showText')}</Button>{/if}
+        </div>
+        {#if textOpen && textResult}
+          <section class="text" aria-label={t('job.textTitle')}>
+            <h3>{t('job.textTitle')}</h3>
+            <ol class="lines">
+              {#each textResult.lines as l, i (i)}
+                <li><Highlight text={l.text} ranges={termRanges(l.marks)} /></li>
+              {/each}
+            </ol>
+            <p class="muted">{t('chk.legend')}</p>
+          </section>
+        {/if}
         <div class="stats">
           {@render stat(t('job.stat.words'), fmt(summary.words))}
           {@render stat(t('job.stat.distinct'), summary.distinct_lemmas, t('job.stat.distinctHint'))}
@@ -342,7 +472,60 @@
   {/if}
 </div>
 
+<Dialog bind:open={delOpen} title={t('job.confirmTitle')}>
+  <p>{t('job.confirmBody', { title: delTarget?.title ?? '' })}</p>
+  <div class="actions">
+    <Button onclick={() => (delOpen = false)}>{t('common.cancel')}</Button>
+    <Button variant="danger" onclick={doDelete}>{t('common.delete')}</Button>
+  </div>
+</Dialog>
+
 <style>
+  .saved {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--s-1);
+  }
+  .saved li {
+    display: flex;
+    align-items: center;
+    gap: var(--s-2);
+    padding: var(--s-1) var(--s-2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--surface);
+  }
+  .saved li.open {
+    border-color: var(--accent);
+  }
+  .saved .grow {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .reportbar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--s-2);
+  }
+  .lines {
+    margin: 0;
+    padding-left: 1.6rem;
+    line-height: 1.7;
+  }
+  .text {
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: var(--s-2) var(--s-3);
+    background: var(--bg);
+    max-height: 22rem;
+    overflow: auto;
+  }
   .job {
     display: flex;
     flex-direction: column;

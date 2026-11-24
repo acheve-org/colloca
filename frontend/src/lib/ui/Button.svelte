@@ -6,14 +6,16 @@
     type?: 'button' | 'submit';
     disabled?: boolean;
     title?: string;
+    /** Accessible name when the text alone is not enough (a row action: which row?). */
+    ariaLabel?: string;
     onclick?: (e: MouseEvent) => void;
     children: Snippet;
   }
-  let { variant = 'default', type = 'button', disabled = false, title, onclick, children }: Props =
+  let { variant = 'default', type = 'button', disabled = false, title, ariaLabel, onclick, children }: Props =
     $props();
 </script>
 
-<button class="btn {variant}" {type} {disabled} {title} {onclick}>{@render children()}</button>
+<button class="btn {variant}" {type} {disabled} {title} aria-label={ariaLabel} {onclick}>{@render children()}</button>
 
 <style>
   .btn.danger {
