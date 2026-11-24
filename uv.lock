@@ -227,6 +227,7 @@ dependencies = [
 dev = [
     { name = "es-core-news-sm" },
     { name = "it-core-news-sm" },
+    { name = "lxml" },
     { name = "pytest" },
     { name = "ruff" },
 ]
@@ -249,6 +250,7 @@ requires-dist = [
 dev = [
     { name = "es-core-news-sm", url = "https://github.com/explosion/spacy-models/releases/download/es_core_news_sm-3.8.0/es_core_news_sm-3.8.0-py3-none-any.whl" },
     { name = "it-core-news-sm", url = "https://github.com/explosion/spacy-models/releases/download/it_core_news_sm-3.8.0/it_core_news_sm-3.8.0-py3-none-any.whl" },
+    { name = "lxml", specifier = ">=5" },
     { name = "pytest", specifier = ">=8" },
     { name = "ruff", specifier = ">=0.17.6" },
 ]

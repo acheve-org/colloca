@@ -113,8 +113,14 @@ Turn what you find into terminology you can reuse and hand over:
     (`conceptEntry / langSec / termSec`), `tbx2` the 2008 one (`termEntry / langSet / tig`) that most CAT tools read.
     Rows with the same source term form one concept; approved translations are `preferredTerm`, candidates
     `admittedTerm`, forbidden ones `deprecatedTerm`.
-  - The TBX output is well-formed and covered by tests, but it has **not been validated against the official TBX
-    schema**; import it into your CAT tool (Trados, memoQ, …) to check before relying on it.
+  - **Checked so far:** the `tbx` output validates against the official TBX core structure RELAX NG schema
+    (`tests/schemas/`, run with lxml in `tests/test_tbx_schema.py`), and the TBX-Basic value lists and placements
+    (`partOfSpeech`, `administrativeStatus`, where `definition`, `context` and `subjectField` may sit) are checked by
+    hand-written rules taken from the TBX-Basic Schematron, which lxml cannot run. A proper noun is exported as
+    `noun`, because TBX-Basic has no `properNoun`. An export with no entries is not valid TBX (the schema needs at
+    least one concept). `tbx2` (2008) has no schema in the repo: only its value lists are checked.
+  - **Not checked:** import into a real CAT tool (Trados, memoQ, Phrase, OmegaT) has not been tried. Samples to try
+    are in `docs/samples/` (`termbase-sample.tbx`, `termbase-sample-tbx2.tbx`); please test your tool and report.
   - Excel and CSV cells that start with `=`, `+`, `-` or `@` are neutralised (text, never formulas).
 
 ## Base corpora (general language per language)
