@@ -11,14 +11,14 @@ Everything stays on your machine: one SQLite file in a Docker volume, no externa
 
 ```bash
 docker compose build            # builds the UI too
-docker compose run --rm models   # one-off: download spaCy models into `~/.spacy` on the host
-docker compose up
+docker compose up               # first start downloads the spaCy models into `~/.spacy`
 # open http://localhost:8000
 ```
 
 The image does not bundle the spaCy models; they live in `~/.spacy` on the host (mounted at `/models`), which keeps the
-image small and lets you swap sizes without rebuilding: `SPACY_SIZE=sm|md|lg docker compose run --rm models`
-(and set `SPACY_SIZE` for the `colloca` service in `docker-compose.yml` to prefer it). Data lives in the
+image small and lets you swap sizes without rebuilding: set `SPACY_SIZE` (sm|md|lg) for the `colloca` service in
+`docker-compose.yml`; missing models are downloaded on start (`docker compose run --rm colloca download-models`
+prefetches them). Data lives in the
 `colloca-data` volume; back it up with `docker run --rm -v colloca-data:/d -v $PWD:/b alpine tar czf /b/colloca-backup.tgz -C /d .`.
 
 ## Workflow

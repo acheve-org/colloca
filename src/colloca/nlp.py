@@ -27,7 +27,7 @@ def load_model(lang: str):
             except OSError:
                 continue
         raise RuntimeError(f"No spaCy model installed for '{lang}' (expected {lang}_core_news_*). "
-                           "In Docker run: docker compose run --rm models")
+                           "In Docker: docker compose run --rm colloca download-models")
 
 
 def pipeline_name(lang: str) -> str:
