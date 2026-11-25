@@ -25,3 +25,8 @@ export function cellValue<Row>(row: Row, col: Column<Row>): string | number {
   return v === undefined || v === null ? '' : (v as string | number);
 }
 
+
+/** Text folded for filtering: accents and case ignored. */
+export function foldText(s: string): string {
+  return s.normalize('NFD').replace(/\p{M}+/gu, '').toLowerCase();
+}

@@ -270,6 +270,7 @@ export const en: Messages = {
   'cc.node': 'Node',
   'cc.right': 'Right',
   'cc.document': 'Document',
+  'cc.hitsList': 'Hit list',
   'cc.source': 'Source segment',
   'cc.target': 'Target segment',
   'cc.detail': 'Selected hit',

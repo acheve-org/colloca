@@ -1,5 +1,7 @@
+import { tick } from 'svelte';
 import { fireEvent, render, screen, within } from '@testing-library/svelte';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { __setViewportForTests } from '../src/lib/viewport.svelte';
 import Kwic from '../src/lib/ui/Kwic.svelte';
 import type { ConcLine } from '../src/lib/types';
 
@@ -202,5 +204,104 @@ describe('Kwic', () => {
     const t = bodyRows()[0].querySelector('.hit-term');
     expect(t?.textContent).toBe('de arrendamiento');
     expect(t).toHaveAttribute('title', expect.stringContaining('Avoid: y'));
+  });
+});
+
+describe('Kwic cards (narrow)', () => {
+  afterEach(() => __setViewportForTests({ narrow: false }));
+  const narrow = () => __setViewportForTests({ narrow: true });
+  const cards = () => screen.getAllByRole('option');
+
+  it('renders one card per hit with the full sentence, node highlighted, and a muted meta line', () => {
+    narrow();
+    render(Kwic, { lines: [line(1), line(2)], mode: 'kwic', query: 'casa', selected: null });
+    expect(screen.queryByRole('grid')).toBeNull();
+    expect(screen.getByRole('listbox', { name: 'Hit list' })).toBeInTheDocument();
+    expect(cards()).toHaveLength(2);
+    const text = cards()[0].querySelector('.card-text')!;
+    expect(text.textContent).toBe('left 1 casa right 1');
+    expect(within(cards()[0]).getByText('casa')).toHaveClass('hit-query');
+    const meta = cards()[0].querySelector('.card-meta')!;
+    expect(meta.textContent).toContain('doc1');
+    expect(meta.textContent).toContain('1');
+  });
+
+  it('renders lines with empty context and keeps long words breakable', () => {
+    narrow();
+    render(Kwic, { lines: [line(1, { left: '', right: '' })], mode: 'kwic', query: 'casa', selected: null });
+    expect(cards()[0].querySelector('.card-text')!.textContent!.trim()).toBe('casa');
+    const src = import.meta.glob('../src/lib/ui/Kwic.svelte', { query: '?raw', import: 'default', eager: true });
+    expect(Object.values(src)[0] as string).toMatch(/\.card-text[^}]*overflow-wrap:\s*anywhere/s);
+  });
+
+  it('click selects and calls onselect; aria-selected follows; Enter and double-click activate', async () => {
+    narrow();
+    const onselect = vi.fn();
+    const onactivate = vi.fn();
+    const lines = [line(1), line(2)];
+    render(Kwic, { lines, mode: 'kwic', query: 'casa', selected: null, onselect, onactivate });
+    await fireEvent.click(cards()[1]);
+    expect(onselect).toHaveBeenCalledWith(lines[1]);
+    expect(cards()[1]).toHaveAttribute('aria-selected', 'true');
+    expect(cards()[0]).toHaveAttribute('aria-selected', 'false');
+    expect(cards()[1]).toHaveAttribute('tabindex', '0');
+    expect(cards()[0]).toHaveAttribute('tabindex', '-1');
+    await fireEvent.keyDown(cards()[1], { key: 'Enter' });
+    expect(onactivate).toHaveBeenCalledWith(lines[1]);
+    await fireEvent.dblClick(cards()[0]);
+    expect(onactivate).toHaveBeenCalledWith(lines[0]);
+  });
+
+  it('ArrowDown and ArrowUp move the selection', async () => {
+    narrow();
+    const onselect = vi.fn();
+    const lines = [line(1), line(2), line(3)];
+    render(Kwic, { lines, mode: 'kwic', query: 'casa', selected: null, onselect });
+    await fireEvent.keyDown(screen.getByRole('listbox'), { key: 'ArrowDown' });
+    expect(onselect).toHaveBeenLastCalledWith(lines[0]);
+    await fireEvent.keyDown(screen.getByRole('listbox'), { key: 'ArrowDown' });
+    expect(onselect).toHaveBeenLastCalledWith(lines[1]);
+    await fireEvent.keyDown(screen.getByRole('listbox'), { key: 'ArrowUp' });
+    expect(onselect).toHaveBeenLastCalledWith(lines[0]);
+    expect(cards()[0]).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('bilingual mode shows source then target with highlights', () => {
+    narrow();
+    render(Kwic, {
+      lines: [line(1, { source: 'La casa es grande.', target: 'La casa è grande.' })],
+      mode: 'bilingual',
+      query: 'casa',
+      selected: null,
+      likelyEquiv: ['grande'],
+    });
+    const c = cards()[0];
+    const segs = c.querySelectorAll('.seg');
+    expect(segs).toHaveLength(2);
+    expect(segs[0]).toHaveClass('src');
+    expect(segs[1]).toHaveClass('tgt');
+    expect(segs[0].querySelector('.hit-query')!.textContent).toBe('casa');
+    expect(segs[1].querySelector('.hit-equiv')!.textContent).toBe('grande');
+  });
+
+  it('keeps the selected line selected when switching between cards and table', async () => {
+    narrow();
+    const lines = [line(1), line(2)];
+    render(Kwic, { lines, mode: 'kwic', query: 'casa', selected: lines[1] });
+    expect(cards()[1]).toHaveAttribute('aria-selected', 'true');
+    __setViewportForTests({ narrow: false });
+    await tick();
+    expect(screen.getByRole('grid')).toBeInTheDocument();
+    expect(bodyRows()[1]).toHaveAttribute('aria-selected', 'true');
+    __setViewportForTests({ narrow: true });
+    await tick();
+    expect(cards()[1]).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('filters the cards with the quick filter', () => {
+    narrow();
+    render(Kwic, { lines: [line(1), line(2, { doc: 'zeta' })], mode: 'kwic', query: 'casa', selected: null, filter: 'ZETA' });
+    expect(cards()).toHaveLength(1);
+    expect(cards()[0]).toHaveTextContent('zeta');
   });
 });

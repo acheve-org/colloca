@@ -6,16 +6,12 @@
   }
 
   let warnedDuplicates = false;
-
-  function fold(s: string): string {
-    return s.normalize('NFD').replace(/\p{M}+/gu, '').toLowerCase();
-  }
 </script>
 
 <script lang="ts" generics="Row">
   import { tick, untrack, type Snippet } from 'svelte';
   import { t, locale } from '../i18n';
-  import { cellValue, type Column, type SortState } from './DataTable.types';
+  import { cellValue, foldText, type Column, type SortState } from './DataTable.types';
 
   interface Props {
     columns: Column<Row>[];
@@ -57,11 +53,11 @@
 
   // Searchable text per row, rebuilt only when rows/columns change.
   const haystack = $derived(
-    rows.map((r) => fold(columns.map((c) => String(cellValue(r, c))).join('\u0001'))),
+    rows.map((r) => foldText(columns.map((c) => String(cellValue(r, c))).join('\u0001'))),
   );
 
   const view = $derived.by(() => {
-    const q = fold(filter.trim());
+    const q = foldText(filter.trim());
     let idx = rows.map((_, i) => i);
     if (q) idx = idx.filter((i) => haystack[i].includes(q));
     if (sort) {
