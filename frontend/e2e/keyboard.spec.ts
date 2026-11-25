@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
-import { newCorpus, openScreen } from './helpers';
+import { addDocuments, newCorpus, openScreen } from './helpers';
 
 const TERM = 'parque eólico';
 
@@ -8,9 +8,7 @@ async function seededCorpus(page: Page, name: string): Promise<void> {
   await page.goto('/');
   await page.evaluate(() => localStorage.removeItem('colloca.keys'));
   await newCorpus(page, name);
-  await page.getByLabel('Documents to upload').setInputFiles(join(import.meta.dirname, 'seed.txt'));
-  await page.getByRole('button', { name: 'Upload', exact: true }).click();
-  await expect(page.getByRole('row', { name: /seed/ })).toBeVisible();
+  await addDocuments(page, join(import.meta.dirname, 'seed.txt'));
 }
 
 test('keyboard layer: slash, help overlay, rebinding, example keys', async ({ page }) => {

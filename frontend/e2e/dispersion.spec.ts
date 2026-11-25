@@ -1,15 +1,14 @@
 import { expect, test } from '@playwright/test';
-import { newCorpus, openScreen } from './helpers';
+import { newCorpus, openScreen, pasteText } from './helpers';
 
 test('dispersion plot: see where a word occurs and open the passage', async ({ page }) => {
   await newCorpus(page, 'Plot');
 
-  await page.getByLabel('Title of the pasted text').fill('Contrato A');
-  await page.getByLabel('Pasted text', { exact: true }).fill(
-    'El contrato empieza aquí. Hablamos de otras cosas durante un rato largo. El contrato termina allí.',
-  );
-  await page.getByRole('button', { name: 'Add text' }).click();
-  await expect(page.getByRole('row', { name: /Contrato A/ })).toBeVisible({ timeout: 60_000 });
+  await pasteText(page, 'El contrato empieza aquí. Hablamos de otras cosas durante un rato largo. El contrato termina allí.', {
+    title: 'Contrato A',
+    row: /Contrato A/,
+    timeout: 60_000,
+  });
 
   await openScreen(page, 'Dispersion plot');
   await page.getByLabel('Word or phrase').fill('contrato');

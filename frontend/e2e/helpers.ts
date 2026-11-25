@@ -1,3 +1,4 @@
+import { basename, extname } from 'node:path';
 import { expect, type Page } from '@playwright/test';
 
 export const escapeRegExp = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -93,4 +94,38 @@ export async function setInterfaceLanguage(page: Page, code: 'EN' | 'ES' | 'IT')
   await menu.click();
   await page.getByRole('button', { name: LANG_BUTTON[code], exact: true }).click();
   await page.keyboard.press('Escape');
+}
+
+/** Opens the add page from Sources and returns once its tabs are shown. */
+async function openAddPage(page: Page): Promise<void> {
+  await page.getByRole('link', { name: '+ Add documents' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Add documents' })).toBeVisible();
+}
+
+/**
+ * From Sources, adds one file through Add documents > Upload files and waits for the list to
+ * show a row for its title (the file name without the extension).
+ */
+export async function addDocuments(page: Page, file: string): Promise<void> {
+  await openAddPage(page);
+  const tab = page.getByRole('tab', { name: 'Upload files' });
+  if ((await tab.getAttribute('aria-selected')) !== 'true') await tab.click();
+  await expect(tab).toHaveAttribute('aria-selected', 'true');
+  await page.getByLabel('Documents to upload').setInputFiles(file);
+  await page.getByRole('button', { name: 'Upload', exact: true }).click();
+  const title = basename(file, extname(file));
+  await expect(page.getByRole('row', { name: new RegExp(escapeRegExp(title)) })).toBeVisible();
+}
+
+/**
+ * From Sources, adds a pasted text through Add documents > Paste text. Waits for the list to
+ * show `row` (a pattern for the new document's row) when given.
+ */
+export async function pasteText(page: Page, text: string, opts: { title?: string; row?: RegExp; timeout?: number } = {}): Promise<void> {
+  await openAddPage(page);
+  await page.getByRole('tab', { name: 'Paste text' }).click();
+  if (opts.title) await page.getByLabel('Title of the pasted text').fill(opts.title);
+  await page.getByLabel('Pasted text', { exact: true }).fill(text);
+  await page.getByRole('button', { name: 'Add text' }).click();
+  if (opts.row) await expect(page.getByRole('row', { name: opts.row }).first()).toBeVisible({ timeout: opts.timeout });
 }

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
-import { newCorpus, openScreen } from './helpers';
+import { addDocuments, newCorpus, openScreen, pasteText } from './helpers';
 
 const TERM = 'parque eólico';
 
@@ -17,9 +17,7 @@ async function modifier(page: Page): Promise<'Meta' | 'Control'> {
 test('translator workflow', async ({ page }) => {
   await newCorpus(page, 'Eolica');
 
-  await page.getByLabel('Documents to upload').setInputFiles(join(import.meta.dirname, 'seed.txt'));
-  await page.getByRole('button', { name: 'Upload', exact: true }).click();
-  await expect(page.getByRole('row', { name: /seed/ })).toBeVisible();
+  await addDocuments(page, join(import.meta.dirname, 'seed.txt'));
 
   const MOD = await modifier(page);
   await page.keyboard.press(`${MOD}+k`);
@@ -63,11 +61,7 @@ test('a document title is shown as literal text', async ({ page }) => {
   await newCorpus(page, 'Escape');
   const title = '<script>x</script>';
 
-  await page.getByLabel('Title of the pasted text').fill(title);
-  await page.getByLabel('Pasted text', { exact: true }).fill('Un texto breve sobre el parque eólico.');
-  await page.getByRole('button', { name: 'Add text' }).click();
-
-  await expect(page.getByRole('row', { name: /<script>x<\/script>/ })).toBeVisible();
+  await pasteText(page, 'Un texto breve sobre el parque eólico.', { title, row: /<script>x<\/script>/ });
   await expect(page.locator('script', { hasText: /^x$/ })).toHaveCount(0);
   expect(await page.evaluate(() => document.body.innerHTML.includes('<script>x'))).toBe(false);
 });

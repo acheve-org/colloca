@@ -1,10 +1,12 @@
 import { join } from 'node:path';
 import { expect, test } from '@playwright/test';
-import { newCorpus, openScreen } from './helpers';
+import { newCorpus, openScreen, pasteText } from './helpers';
 
 test('aligned texts: import a two-column file, then search source + target', async ({ page }) => {
   await newCorpus(page, 'Alineados');
 
+  await page.getByRole('link', { name: '+ Add documents' }).click();
+  await page.getByRole('tab', { name: 'Aligned texts' }).click();
   await page.getByLabel('Aligned file').setInputFiles(join(import.meta.dirname, 'aligned.tsv'));
   await page.getByLabel('Translations go to').selectOption({ label: '+ new corpus…' });
   await page.getByLabel('Name of the new corpus').fill('Traduzioni');
@@ -12,6 +14,7 @@ test('aligned texts: import a two-column file, then search source + target', asy
   await expect(page.getByRole('row', { name: /aligned/ })).toBeVisible({ timeout: 60_000 });
 
   // the memory goes back out as TMX
+  await page.locator('summary', { hasText: 'Export aligned texts (TMX)' }).click();
   const [tmx] = await Promise.all([
     page.waitForEvent('download'),
     page.getByRole('link', { name: 'Download TMX' }).click(),
@@ -29,11 +32,10 @@ test('aligned texts: import a two-column file, then search source + target', asy
 
 test('job analysis: paste a text and read the coverage report', async ({ page }) => {
   await newCorpus(page, 'Trabajo');
-  await page.getByLabel('Pasted text', { exact: true }).fill(
-    'El parque eólico produce energía limpia. El parque eólico de la sierra es nuevo.',
-  );
-  await page.getByRole('button', { name: 'Add text' }).click();
-  await expect(page.getByRole('row', { name: /Pasted text|Untitled|parque/i }).first()).toBeVisible({ timeout: 60_000 });
+  await pasteText(page, 'El parque eólico produce energía limpia. El parque eólico de la sierra es nuevo.', {
+    row: /Pasted text|Untitled|parque/i,
+    timeout: 60_000,
+  });
 
   await openScreen(page, 'Job');
   await page.getByLabel('Or paste the text here').fill('El parque eólico necesita energía. El parque nuevo produce mucho.');
@@ -44,6 +46,8 @@ test('job analysis: paste a text and read the coverage report', async ({ page })
 
 test('segment lookup: a segment with one word changed finds its stored match and translation', async ({ page }) => {
   await newCorpus(page, 'Memoria');
+  await page.getByRole('link', { name: '+ Add documents' }).click();
+  await page.getByRole('tab', { name: 'Aligned texts' }).click();
   await page.getByLabel('Aligned file').setInputFiles(join(import.meta.dirname, 'aligned.tsv'));
   await page.getByLabel('Translations go to').selectOption({ label: '+ new corpus…' });
   await page.getByLabel('Name of the new corpus').fill('Memoria IT');
@@ -79,9 +83,7 @@ test('related terms: words that keep similar company, learned from the corpus', 
       next(2) ? `El ${animals[next(4)]} ${withAnimals[next(4)]}.` : `El ${things[next(4)]} ${withThings[next(4)]}.`,
     );
   }
-  await page.getByLabel('Pasted text', { exact: true }).fill(sentences.join(' '));
-  await page.getByRole('button', { name: 'Add text' }).click();
-  await expect(page.getByRole('row', { name: /Pasted text|Untitled|El perro/i }).first()).toBeVisible({ timeout: 60_000 });
+  await pasteText(page, sentences.join(' '), { row: /Pasted text|Untitled|El perro/i, timeout: 60_000 });
 
   await openScreen(page, 'Related terms');
   await page.getByLabel('Word (lemma)').fill('gato');
