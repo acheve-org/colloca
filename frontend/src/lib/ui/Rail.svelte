@@ -110,7 +110,13 @@
     white-space: nowrap;
   }
   .label {
-    font-size: 11px;
+    font-size: 10px;
     line-height: 1.2;
+    max-width: 100%;
+    padding: 0 2px;
+    box-sizing: border-box;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 </style>
