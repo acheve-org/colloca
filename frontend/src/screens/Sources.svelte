@@ -1,30 +1,4 @@
 <script module lang="ts">
-  interface UploadResult {
-    file: string;
-    ok: boolean;
-    job_id?: number;
-    error?: string;
-  }
-  interface Quality {
-    score: number;
-    level: 'good' | 'fair' | 'poor';
-    issues: { code: string; message: string }[];
-  }
-  interface Preview {
-    source: string;
-    title: string;
-    text: string;
-    kind: 'url' | 'file';
-    /** Only for a PDF: how reliable the extracted text looks. */
-    quality?: Quality;
-    warnings: string[];
-  }
-  interface Meta {
-    tags: string;
-    text_type: string;
-    doc_date: string;
-    author: string;
-  }
   type EditForm = Meta & { title: string };
 
   const UPLOAD_ACCEPT = '.docx,.pdf,.odt,.rtf,.xlsx,.csv,.tsv,.xlf,.xliff,.srt,.vtt,.txt,.md,.html,.htm';
@@ -37,12 +11,15 @@
 
 <script lang="ts">
   import { onMount, tick, untrack } from 'svelte';
-  import { del, get, patch, post, upload } from '../lib/api';
-  import { SvelteSet } from 'svelte/reactivity';
-  import { chunk, filterLinks, type Discovery } from '../lib/catalog';
+  import { del, get, patch, post } from '../lib/api';
+    import {
+    act, addPaste, addPreview, addUrlList, draft, fetchPreview, findLinks, importSelected, metaSummary, pickedCount,
+    pickLinks, previewFile, still, uploadFiles, uploadPairs, visibleLinks, watch, work,
+    type Meta,
+  } from '../lib/addDocuments.svelte';
   import { CORPUS_CHANGED, corpusStore } from '../lib/corpus.svelte';
   import { t, fmt } from '../lib/i18n';
-  import { JOBS_DONE, jobLogs, trackJobs } from '../lib/jobs.svelte';
+  import { JOBS_DONE, jobLogs } from '../lib/jobs.svelte';
   import { messages } from '../lib/messages.svelte';
   import { projectStore, reloadProjects } from '../lib/projects.svelte';
   import type { Doc, Facets, Job, Languages, NearDupMatch, NearDupReport } from '../lib/types';
@@ -80,62 +57,26 @@
   let tableEl: HTMLElement | undefined = $state();
   let seq = 0;
 
-  // What is being sent; the matching buttons are disabled meanwhile.
-  let busy = $state<string | null>(null);
-
   // Corpus settings
   let setName = $state('');
   let setProject = $state('');
 
-  // Metadata applied to the documents added next, and the language override.
-  let meta = $state<Meta>({ tags: '', text_type: '', doc_date: '', author: '' });
-  let force = $state(false);
-  let textColumns = $state('');
-  const metaSummary = $derived(
-    [
-      meta.tags.trim() && t('src.meta.sumTags', { v: meta.tags.trim() }),
-      meta.text_type.trim() && t('src.meta.sumType', { v: meta.text_type.trim() }),
-      meta.doc_date.trim() && t('src.meta.sumDate', { v: meta.doc_date.trim() }),
-      meta.author.trim() && t('src.meta.sumAuthor', { v: meta.author.trim() }),
-    ]
-      .filter(Boolean)
-      .join(' · '),
-  );
-
-  // URL card
-  let url = $state('');
-  let preview = $state<Preview | null>(null);
-  let urlList = $state('');
-  const previewWords = $derived(preview ? countWords(preview.text) : 0);
-
-  // Catalog: links found on an index page, chosen by the user and sent in batches
-  let catalogUrl = $state('');
-  let catalog = $state.raw<Discovery | null>(null);
-  const picked = new SvelteSet<string>();
-  let linkFilter = $state('');
-  let sameHostOnly = $state(true);
-  const visibleLinks = $derived(catalog ? filterLinks(catalog.links, linkFilter, sameHostOnly) : []);
-  const pickedCount = $derived(visibleLinks.filter((l) => picked.has(l.url)).length);
+  const previewWords = $derived(draft.preview ? countWords(draft.preview.text) : 0);
+  const visible = $derived(visibleLinks());
+  const nPicked = $derived(pickedCount());
 
   // Upload card
-  let files = $state.raw<File[]>([]);
   let fileInput: HTMLInputElement | undefined = $state();
-  let pairFile = $state.raw<File | null>(null);
   let pairInput: HTMLInputElement | undefined = $state();
-  let partner = $state('');
-  let pairName = $state('');
-  let swap = $state(false);
   // A new partner corpus needs its language when more than one other language is set up.
   let langs = $state.raw<Languages>({});
-  let pairLang = $state('');
   const otherLangs = $derived(Object.keys(langs).filter((l) => l !== corpusStore.current?.lang));
   $effect(() => {
-    if (!otherLangs.includes(pairLang)) pairLang = otherLangs[0] ?? '';
+    if (!otherLangs.includes(draft.pairLang)) draft.pairLang = otherLangs[0] ?? '';
   });
-
-  // Paste card
-  let pasteTitle = $state('');
-  let pasteText = $state('');
+  $effect(() => {
+    draft.multiLang = otherLangs.length > 1;
+  });
 
   // Dialogs
   let editOpen = $state(false);
@@ -213,9 +154,8 @@
     ];
   });
   // Like the old select (re-rendered after every reload): the first option until one is picked.
-  let partnerPicked = false;
   $effect(() => {
-    if (!partnerPicked || !partnerOptions.some((o) => o.value === partner)) partner = partnerOptions[0].value;
+    if (!draft.partnerPicked || !partnerOptions.some((o) => o.value === draft.partner)) draft.partner = partnerOptions[0].value;
   });
 
   // The settings follow the current corpus (as the old tab did after every reload).
@@ -290,12 +230,6 @@
     loadFacets();
   }
 
-  /** Follows the jobs of the current corpus app-wide; `started` after submitting one. */
-  function watch(started: boolean): void {
-    const id = corpusStore.currentId;
-    if (id !== null) trackJobs(id, started);
-  }
-
   function onJobsDone(e: Event): void {
     if ((e as CustomEvent<{ id: number }>).detail?.id === corpusStore.currentId) refresh();
   }
@@ -314,9 +248,6 @@
     filter = '';
     loadedOnce = false;
     facets = emptyFacets();
-    preview = null;
-    busy = null;
-    partnerPicked = false;
     if (corpusStore.currentId !== null) start();
   }
 
@@ -328,6 +259,10 @@
   });
 
   onMount(() => {
+    draft.clearInputs = {
+      files: () => fileInput && (fileInput.value = ''),
+      pair: () => pairInput && (pairInput.value = ''),
+    };
     window.addEventListener(CORPUS_CHANGED, onCorpusChanged);
     window.addEventListener(JOBS_DONE, onJobsDone);
     reloadProjects().catch((err) => messages.say(errMsg(err), 'err'));
@@ -337,238 +272,18 @@
     return () => {
       window.removeEventListener(CORPUS_CHANGED, onCorpusChanged);
       window.removeEventListener(JOBS_DONE, onJobsDone);
+      draft.clearInputs = {};
       seq++;
     };
   });
 
   // ---------------------------------------------------------------- actions
-  /** Runs an action for the current corpus; nothing is applied if the corpus changed meanwhile. */
-  async function act(name: string, fn: (id: number) => Promise<void>): Promise<void> {
-    const id = corpusStore.currentId;
-    if (id === null) {
-      messages.say(t('corpus.selectFirst'), 'err');
-      return;
-    }
-    if (busy) return;
-    busy = name;
-    messages.say(t('corpus.working'));
-    try {
-      await fn(id);
-    } catch (err) {
-      if (corpusStore.currentId === id) messages.say(errMsg(err), 'err');
-    } finally {
-      if (busy === name) busy = null;
-      // An action that ended without a message of its own (the corpus changed meanwhile).
-      messages.clearWorking();
-    }
-  }
-
-  const still = (id: number) => corpusStore.currentId === id;
-  const metaParams = () => ({ ...meta });
-
-  function reportUpload(res: UploadResult[]): void {
-    const bad = res.filter((r) => !r.ok);
-    const n = res.length - bad.length;
-    if (bad.length) {
-      const list = bad.map((b) => `${b.file} (${b.error ?? ''})`).join('; ');
-      messages.say(t('src.queuedRejected', { n, list }), 'err');
-    } else {
-      messages.say(t('src.queued', { n }), 'ok');
-    }
-  }
-
   const saveSettings = () =>
     act('settings', async (id) => {
       await patch(`/api/corpora/${id}`, { name: setName.trim(), ...(setProject ? { project_id: Number(setProject) } : {}) });
       if (!still(id)) return;
       messages.say(t('src.corpusSaved'), 'ok');
       await Promise.all([reloadProjects(), corpusStore.reload()]);
-    });
-
-  const fetchPreview = () =>
-    act('preview', async (id) => {
-      const u = url.trim();
-      if (!u) {
-        messages.say(t('src.url.needed'), 'err');
-        return;
-      }
-      const r = await post<{ url: string; title: string; text: string; quality?: Quality; warnings?: string[] }>(
-        '/api/preview-url',
-        { url: u },
-      );
-      if (!still(id)) return;
-      preview = { source: r.url, title: r.title, text: r.text, kind: 'url', quality: r.quality, warnings: r.warnings ?? [] };
-      messages.clear();
-    });
-
-  /** Read the one chosen file without adding it, so the text (and, for a PDF, its quality) can be checked first. */
-  const previewFile = () =>
-    act('preview', async (id) => {
-      if (files.length !== 1) {
-        messages.say(t('src.preview.one'), 'err');
-        return;
-      }
-      const fd = new FormData();
-      fd.append('file', files[0]);
-      const r = await upload<{ source: string; title: string; text: string; quality?: Quality; warnings?: string[] }>(
-        '/api/preview-file',
-        fd,
-        { corpus_id: id, columns: textColumns.trim() },
-      );
-      if (!still(id)) return;
-      preview = { source: r.source, title: r.title, text: r.text, kind: 'file', quality: r.quality, warnings: r.warnings ?? [] };
-      messages.clear();
-    });
-
-  const addPreview = () =>
-    act('add', async (id) => {
-      const p = preview;
-      if (!p) return;
-      await post(
-        `/api/corpora/${id}/documents`,
-        { title: p.title, text: p.text, source: p.source, kind: p.kind, ...metaParams() },
-        { background: true, force_language: force },
-      );
-      if (!still(id)) return;
-      preview = null;
-      url = '';
-      messages.say(t('src.queuedProgress'), 'ok');
-      watch(true);
-    });
-
-  const addUrlList = () =>
-    act('urls', async (id) => {
-      const urls = urlList.split('\n').map((l) => l.trim()).filter(Boolean);
-      if (!urls.length) {
-        messages.say(t('src.urls.needed'), 'err');
-        return;
-      }
-      const res = await post<{ url: string; ok: boolean; error?: string }[]>(`/api/corpora/${id}/urls`, {
-        urls,
-        force_language: force,
-        ...metaParams(),
-      });
-      if (!still(id)) return;
-      urlList = '';
-      reportUpload(res.map((r) => ({ file: r.url, ok: r.ok, error: r.error })));
-      watch(true);
-    });
-
-  const findLinks = () =>
-    act('catalog', async () => {
-      const u = catalogUrl.trim();
-      if (!u) {
-        messages.say(t('src.url.needed'), 'err');
-        return;
-      }
-      const found = await post<Discovery>('/api/discover-links', { url: u });
-      catalog = found;
-      picked.clear();
-      for (const l of filterLinks(found.links, '', true)) picked.add(l.url);
-      linkFilter = '';
-      sameHostOnly = true;
-      messages.say(found.links.length ? t('src.catalog.found', { n: found.links.length }) : t('src.catalog.none'), 'ok');
-    });
-
-  function pick(urls: string[], on: boolean): void {
-    for (const u of urls) {
-      if (on) picked.add(u);
-      else picked.delete(u);
-    }
-  }
-
-  const importSelected = () =>
-    act('catalog', async (id) => {
-      const urls = visibleLinks.filter((l) => picked.has(l.url)).map((l) => l.url);
-      if (!urls.length) {
-        messages.say(t('src.catalog.needed'), 'err');
-        return;
-      }
-      const results: UploadResult[] = [];
-      for (const part of chunk(urls, catalog?.max_per_request ?? 20)) {
-        try {
-          const res = await post<{ url: string; ok: boolean; error?: string }[]>(`/api/corpora/${id}/urls`, {
-            urls: part,
-            force_language: force,
-            ...metaParams(),
-          });
-          results.push(...res.map((r) => ({ file: r.url, ok: r.ok, error: r.error })));
-        } catch (err) {          // one failed request must not stop the next ones
-          results.push(...part.map((u) => ({ file: u, ok: false, error: errMsg(err) })));
-        }
-        if (!still(id)) return;
-      }
-      reportUpload(results);
-      watch(true);
-    });
-
-  const uploadFiles = () =>
-    act('upload', async (id) => {
-      if (!files.length) {
-        messages.say(t('src.upload.choose'), 'err');
-        return;
-      }
-      const fd = new FormData();
-      for (const f of files) fd.append('files', f);
-      const res = await upload<UploadResult[]>(`/api/corpora/${id}/upload`, fd, { force_language: force, columns: textColumns.trim(), ...metaParams() });
-      if (!still(id)) return;
-      files = [];
-      if (fileInput) fileInput.value = '';
-      reportUpload(res);
-      watch(true);
-    });
-
-  const uploadPairs = () =>
-    act('pairs', async (id) => {
-      const f = pairFile;
-      if (!f) {
-        messages.say(t('src.pair.choose'), 'err');
-        return;
-      }
-      if (partner === 'new' && !pairName.trim()) {
-        messages.say(t('src.pair.nameNeeded'), 'err');
-        return;
-      }
-      const fd = new FormData();
-      fd.append('files', f);
-      const target =
-        partner === 'new'
-          ? { partner_name: pairName.trim(), ...(otherLangs.length > 1 ? { partner_lang: pairLang } : {}) }
-          : { partner_corpus_id: partner };
-      const res = await upload<UploadResult[]>(`/api/corpora/${id}/upload-pairs`, fd, {
-        ...target,
-        swap,
-        force_language: force,
-        ...metaParams(),
-      });
-      if (!still(id)) return;
-      pairFile = null;
-      pairName = '';
-      partnerPicked = false; // back to the first option, which may be the corpus just created
-      partner = '';
-      if (pairInput) pairInput.value = '';
-      const bad = res.filter((r) => !r.ok);
-      if (bad.length) messages.say(t('src.pair.rejected', { error: bad[0].error ?? '' }), 'err');
-      else messages.say(t('src.queuedProgress'), 'ok');
-      watch(true);
-    });
-
-  const addPaste = () =>
-    act('paste', async (id) => {
-      if (!pasteText.trim()) {
-        messages.say(t('src.paste.needed'), 'err');
-        return;
-      }
-      await post(
-        `/api/corpora/${id}/documents`,
-        { title: pasteTitle.trim() || t('src.paste.defaultTitle'), text: pasteText, kind: 'paste', ...metaParams() },
-        { background: true, force_language: force },
-      );
-      if (!still(id)) return;
-      pasteText = '';
-      pasteTitle = '';
-      messages.say(t('src.queuedProgress'), 'ok');
-      watch(true);
     });
 
   const reannotate = () =>
@@ -693,9 +408,9 @@
           {/each}
         </ul>
         <div class="dup-actions">
-          <Button disabled={busy !== null} onclick={() => resolveJob(j, 'import')}>{t('dup.import')}</Button>
-          <Button disabled={busy !== null} onclick={() => resolveJob(j, 'replace')}>{t('dup.replace', { title: ms[0].title })}</Button>
-          <Button disabled={busy !== null} onclick={() => resolveJob(j, 'skip')}>{t('dup.skip')}</Button>
+          <Button disabled={work.busy !== null} onclick={() => resolveJob(j, 'import')}>{t('dup.import')}</Button>
+          <Button disabled={work.busy !== null} onclick={() => resolveJob(j, 'replace')}>{t('dup.replace', { title: ms[0].title })}</Button>
+          <Button disabled={work.busy !== null} onclick={() => resolveJob(j, 'skip')}>{t('dup.skip')}</Button>
         </div>
       </div>
     {/if}
@@ -721,27 +436,27 @@
           <Field label={t('src.project')}>
             <Select label={t('src.project')} bind:value={setProject} options={projectOptions} />
           </Field>
-          <Button type="submit" disabled={busy !== null || !setName.trim()}>{t('src.saveCorpus')}</Button>
+          <Button type="submit" disabled={work.busy !== null || !setName.trim()}>{t('src.saveCorpus')}</Button>
         </Toolbar>
       </form>
 
       <details class="meta">
         <summary>
           {t('src.meta.summary')}
-          {#if metaSummary}<span class="on">{metaSummary}</span>{:else}<span class="muted">{t('src.meta.optional')}</span>{/if}
+          {#if metaSummary()}<span class="on">{metaSummary()}</span>{:else}<span class="muted">{t('src.meta.optional')}</span>{/if}
         </summary>
         <div class="row">
           <Field label={t('src.meta.tags')}>
-            <input bind:value={meta.tags} list="{uid}-tags" placeholder={t('src.meta.tagsPlaceholder')} size="18" />
+            <input bind:value={draft.meta.tags} list="{uid}-tags" placeholder={t('src.meta.tagsPlaceholder')} size="18" />
           </Field>
           <Field label={t('src.meta.type')}>
-            <input bind:value={meta.text_type} list="{uid}-types" placeholder={t('src.meta.typePlaceholder')} size="12" />
+            <input bind:value={draft.meta.text_type} list="{uid}-types" placeholder={t('src.meta.typePlaceholder')} size="12" />
           </Field>
           <Field label={t('src.meta.date')}>
-            <input bind:value={meta.doc_date} placeholder={t('src.meta.datePlaceholder')} size="10" />
+            <input bind:value={draft.meta.doc_date} placeholder={t('src.meta.datePlaceholder')} size="10" />
           </Field>
           <Field label={t('src.meta.author')}>
-            <input bind:value={meta.author} size="14" />
+            <input bind:value={draft.meta.author} size="14" />
           </Field>
         </div>
         <p class="hint">{t('src.meta.hint')}</p>
@@ -754,8 +469,8 @@
       </datalist>
 
       <div class="force">
-        <Toggle bind:checked={force} label={t('src.force')} />
-        <Button disabled={busy !== null || !docs.length} onclick={openDuplicates}>{t('dup.find')}</Button>
+        <Toggle bind:checked={draft.force} label={t('src.force')} />
+        <Button disabled={work.busy !== null || !docs.length} onclick={openDuplicates}>{t('dup.find')}</Button>
       </div>
 
       {#if jobLog.length}
@@ -774,49 +489,49 @@
               fetchPreview();
             }}
           >
-            <input class="grow" type="text" inputmode="url" bind:value={url} placeholder="https://…" aria-label={t('src.url.address')} />
-            <Button type="submit" disabled={busy !== null}>{t('src.url.fetch')}</Button>
+            <input class="grow" type="text" inputmode="url" bind:value={draft.url} placeholder="https://…" aria-label={t('src.url.address')} />
+            <Button type="submit" disabled={work.busy !== null}>{t('src.url.fetch')}</Button>
           </form>
 
           <h3 class="sub">{t('src.urls.title')}</h3>
           <Field label={t('src.urls.label')}>
-            <textarea rows="4" bind:value={urlList} placeholder="https://…" spellcheck="false"></textarea>
+            <textarea rows="4" bind:value={draft.urlList} placeholder="https://…" spellcheck="false"></textarea>
           </Field>
           <div class="row">
             <span class="hint grow">{t('src.urls.hint')}</span>
-            <Button variant="primary" disabled={busy !== null} onclick={addUrlList}>{t('src.urls.go')}</Button>
+            <Button variant="primary" disabled={work.busy !== null} onclick={addUrlList}>{t('src.urls.go')}</Button>
           </div>
 
           <h3 class="sub">{t('src.catalog.title')}</h3>
           <form class="row" onsubmit={(e) => { e.preventDefault(); findLinks(); }}>
-            <input class="grow" type="text" inputmode="url" bind:value={catalogUrl} placeholder="https://…" aria-label={t('src.catalog.address')} />
-            <Button type="submit" disabled={busy !== null}>{t('src.catalog.find')}</Button>
+            <input class="grow" type="text" inputmode="url" bind:value={draft.catalogUrl} placeholder="https://…" aria-label={t('src.catalog.address')} />
+            <Button type="submit" disabled={work.busy !== null}>{t('src.catalog.find')}</Button>
           </form>
-          {#if catalog}
+          {#if draft.catalog}
             <div class="row">
-              <input class="grow" type="text" bind:value={linkFilter} placeholder={t('src.catalog.filterPlaceholder')} aria-label={t('src.catalog.filter')} />
-              <Toggle bind:checked={sameHostOnly} label={t('src.catalog.sameHost')} />
+              <input class="grow" type="text" bind:value={draft.linkFilter} placeholder={t('src.catalog.filterPlaceholder')} aria-label={t('src.catalog.filter')} />
+              <Toggle bind:checked={draft.sameHostOnly} label={t('src.catalog.sameHost')} />
             </div>
             <div class="row">
-              <Button onclick={() => pick(visibleLinks.map((l) => l.url), true)}>{t('src.catalog.selectAll')}</Button>
-              <Button onclick={() => pick(visibleLinks.map((l) => l.url), false)}>{t('src.catalog.selectNone')}</Button>
-              <span class="hint grow">{t('src.catalog.count', { n: pickedCount, total: catalog.links.length })}</span>
+              <Button onclick={() => pickLinks(visible.map((l) => l.url), true)}>{t('src.catalog.selectAll')}</Button>
+              <Button onclick={() => pickLinks(visible.map((l) => l.url), false)}>{t('src.catalog.selectNone')}</Button>
+              <span class="hint grow">{t('src.catalog.count', { n: nPicked, total: draft.catalog.links.length })}</span>
             </div>
             <ul class="catalog-links">
-              {#each visibleLinks as l (l.url)}
+              {#each visible as l (l.url)}
                 <li>
                   <label>
-                    <input type="checkbox" checked={picked.has(l.url)} onchange={(e) => pick([l.url], e.currentTarget.checked)} />
+                    <input type="checkbox" checked={draft.picked.has(l.url)} onchange={(e) => pickLinks([l.url], e.currentTarget.checked)} />
                     <span class="ctext">{l.text}</span>
                     <small class="curl">{l.url}</small>
                   </label>
                 </li>
               {/each}
             </ul>
-            {#if catalog.truncated}<p class="hint">{t('src.catalog.truncated')}</p>{/if}
+            {#if draft.catalog.truncated}<p class="hint">{t('src.catalog.truncated')}</p>{/if}
             <div class="row">
               <span class="hint grow">{t('src.catalog.hint')}</span>
-              <Button variant="primary" disabled={busy !== null} onclick={importSelected}>{t('src.catalog.import')}</Button>
+              <Button variant="primary" disabled={work.busy !== null} onclick={importSelected}>{t('src.catalog.import')}</Button>
             </div>
           {/if}
         </section>
@@ -829,16 +544,16 @@
             multiple
             accept={UPLOAD_ACCEPT}
             aria-label={t('src.upload.files')}
-            onchange={(e) => (files = [...(e.currentTarget.files ?? [])])}
+            onchange={(e) => (draft.files = [...(e.currentTarget.files ?? [])])}
           />
           <label class="field">
             {t('src.upload.columns')}
-            <input type="text" bind:value={textColumns} placeholder={t('src.upload.columnsHint')} />
+            <input type="text" bind:value={draft.textColumns} placeholder={t('src.upload.columnsHint')} />
           </label>
           <div class="row">
             <span class="hint grow">{t('src.upload.hint')}</span>
-            <Button disabled={busy !== null || files.length !== 1} title={t('src.preview.fileHint')} onclick={previewFile}>{t('src.preview.file')}</Button>
-            <Button variant="primary" disabled={busy !== null} onclick={uploadFiles}>{t('src.upload.go')}</Button>
+            <Button disabled={work.busy !== null || draft.files.length !== 1} title={t('src.preview.fileHint')} onclick={previewFile}>{t('src.preview.file')}</Button>
+            <Button variant="primary" disabled={work.busy !== null} onclick={uploadFiles}>{t('src.upload.go')}</Button>
           </div>
 
           <h3 class="sub">{t('src.pair.title')}</h3>
@@ -847,21 +562,21 @@
             type="file"
             accept={PAIRS_ACCEPT}
             aria-label={t('src.pair.file')}
-            onchange={(e) => (pairFile = e.currentTarget.files?.[0] ?? null)}
+            onchange={(e) => (draft.pairFile = e.currentTarget.files?.[0] ?? null)}
           />
           <Field label={t('src.pair.partner')}>
-            <Select label={t('src.pair.partner')} bind:value={partner} options={partnerOptions} onchange={() => (partnerPicked = true)} />
+            <Select label={t('src.pair.partner')} bind:value={draft.partner} options={partnerOptions} onchange={() => (draft.partnerPicked = true)} />
           </Field>
-          {#if partner === 'new'}
-            <input bind:value={pairName} maxlength="120" placeholder={t('src.pair.namePlaceholder')} aria-label={t('src.pair.name')} />
+          {#if draft.partner === 'new'}
+            <input bind:value={draft.pairName} maxlength="120" placeholder={t('src.pair.namePlaceholder')} aria-label={t('src.pair.name')} />
             {#if otherLangs.length > 1}
-              <Select label={t('src.pair.lang')} bind:value={pairLang} options={otherLangs.map((l) => ({ value: l, label: langs[l] }))} />
+              <Select label={t('src.pair.lang')} bind:value={draft.pairLang} options={otherLangs.map((l) => ({ value: l, label: langs[l] }))} />
             {/if}
           {/if}
-          <Toggle bind:checked={swap} label={t('src.pair.swap')} />
+          <Toggle bind:checked={draft.swap} label={t('src.pair.swap')} />
           <div class="row">
             <span class="grow"></span>
-            <Button variant="primary" disabled={busy !== null} onclick={uploadPairs}>{t('src.pair.go')}</Button>
+            <Button variant="primary" disabled={work.busy !== null} onclick={uploadPairs}>{t('src.pair.go')}</Button>
           </div>
           <p class="hint">{t('src.pair.hint')}</p>
         </section>
@@ -871,43 +586,43 @@
 
         <section class="card" aria-labelledby="{uid}-paste">
           <h3 id="{uid}-paste">{t('src.paste.title')}</h3>
-          <input bind:value={pasteTitle} placeholder={t('src.paste.titlePlaceholder')} aria-label={t('src.paste.titleLabel')} />
-          <textarea rows="6" bind:value={pasteText} aria-label={t('src.paste.text')}></textarea>
+          <input bind:value={draft.pasteTitle} placeholder={t('src.paste.titlePlaceholder')} aria-label={t('src.paste.titleLabel')} />
+          <textarea rows="6" bind:value={draft.pasteText} aria-label={t('src.paste.text')}></textarea>
           <div class="row">
             <span class="grow"></span>
-            <Button disabled={busy !== null} onclick={addPaste}>{t('src.paste.go')}</Button>
+            <Button disabled={work.busy !== null} onclick={addPaste}>{t('src.paste.go')}</Button>
           </div>
         </section>
       </div>
 
-      {#if preview}
+      {#if draft.preview}
         <section class="card preview" aria-labelledby="{uid}-pv">
-          <h3 id="{uid}-pv">{t('src.preview.title')}: {preview.source}</h3>
-          {#if preview.quality}
-            <p class="quality" role={preview.quality.level === 'good' ? undefined : 'alert'}>
+          <h3 id="{uid}-pv">{t('src.preview.title')}: {draft.preview.source}</h3>
+          {#if draft.preview.quality}
+            <p class="quality" role={draft.preview.quality.level === 'good' ? undefined : 'alert'}>
               <Badge
-                kind={preview.quality.level === 'good' ? 'approved' : preview.quality.level === 'fair' ? 'candidate' : 'forbidden'}
-                label={t(`src.quality.${preview.quality.level}`)}
+                kind={draft.preview.quality.level === 'good' ? 'approved' : draft.preview.quality.level === 'fair' ? 'candidate' : 'forbidden'}
+                label={t(`src.quality.${draft.preview.quality.level}`)}
               />
-              {t('src.quality.score', { n: preview.quality.score })}
+              {t('src.quality.score', { n: draft.preview.quality.score })}
             </p>
-            {#if preview.quality.issues.length}
+            {#if draft.preview.quality.issues.length}
               <ul class="issues">
-                {#each preview.quality.issues as i (i.code)}<li>{i.message}</li>{/each}
+                {#each draft.preview.quality.issues as i (i.code)}<li>{i.message}</li>{/each}
               </ul>
             {/if}
           {/if}
-          {#each preview.warnings.filter((w) => !preview?.quality || !w.includes('may be unreliable')) as w (w)}<p class="hint">{w}</p>{/each}
+          {#each draft.preview.warnings.filter((w) => !draft.preview?.quality || !w.includes('may be unreliable')) as w (w)}<p class="hint">{w}</p>{/each}
           <Field label={t('src.url.pvTitle')}>
-            <input bind:value={preview.title} />
+            <input bind:value={draft.preview.title} />
           </Field>
           <Field label={t('src.url.pvText')}>
-            <textarea rows="10" bind:value={preview.text}></textarea>
+            <textarea rows="10" bind:value={draft.preview.text}></textarea>
           </Field>
           <div class="row">
             <span class="muted grow">{previewWords === 1 ? t('src.word1') : t('src.words', { n: fmt(previewWords) })}</span>
-            <Button onclick={() => (preview = null)}>{t('src.url.discard')}</Button>
-            <Button variant="primary" disabled={busy !== null || !preview.text.trim()} onclick={addPreview}>{t('src.url.add')}</Button>
+            <Button onclick={() => (draft.preview = null)}>{t('src.url.discard')}</Button>
+            <Button variant="primary" disabled={work.busy !== null || !draft.preview.text.trim()} onclick={addPreview}>{t('src.url.add')}</Button>
           </div>
           <p class="hint">{t('src.url.hint')}</p>
         </section>
@@ -924,7 +639,7 @@
       {#if staleCount}
         <span class="stale">
           <span class="muted">{staleCount === 1 ? t('src.reann.info1') : t('src.reann.info', { n: staleCount })}</span>
-          <Button disabled={busy !== null} onclick={reannotate}>{t('src.reann.go')}</Button>
+          <Button disabled={work.busy !== null} onclick={reannotate}>{t('src.reann.go')}</Button>
         </span>
       {/if}
     </div>
@@ -952,11 +667,11 @@
       <div class="detail">
         <DetailStrip title={t('src.detail')}>
           {#snippet actions()}
-            <Button disabled={busy !== null} onclick={() => openEdit(d)}>{t('src.edit')}</Button>
+            <Button disabled={work.busy !== null} onclick={() => openEdit(d)}>{t('src.edit')}</Button>
             {#if d.stale}
-              <Button disabled={busy !== null} title={t('src.reann.hint')} onclick={reannotate}>{t('src.reann.short')}</Button>
+              <Button disabled={work.busy !== null} title={t('src.reann.hint')} onclick={reannotate}>{t('src.reann.short')}</Button>
             {/if}
-            <Button variant="danger" disabled={busy !== null} onclick={() => askDelete(d)}>{t('src.remove')}</Button>
+            <Button variant="danger" disabled={work.busy !== null} onclick={() => askDelete(d)}>{t('src.remove')}</Button>
           {/snippet}
           <dl>
             <dt>{t('src.col.title')}</dt>
@@ -1002,7 +717,7 @@
   {/if}
   {#snippet footer()}
     <Button onclick={() => (editOpen = false)}>{t('common.cancel')}</Button>
-    <button type="submit" form="{uid}-edit" class="primary" disabled={!form.title.trim() || busy !== null}>{t('common.save')}</button>
+    <button type="submit" form="{uid}-edit" class="primary" disabled={!form.title.trim() || work.busy !== null}>{t('common.save')}</button>
   {/snippet}
 </Dialog>
 
@@ -1032,7 +747,7 @@
           {#each [p.a, p.b] as d (d.id)}
             <div class="dup-doc">
               <span>{d.title} <span class="muted">({d.added}, {fmt(d.n_tokens)})</span></span>
-              <Button variant="danger" disabled={busy !== null} onclick={() => removeDuplicate(d)}>{t('dup.remove', { title: d.title })}</Button>
+              <Button variant="danger" disabled={work.busy !== null} onclick={() => removeDuplicate(d)}>{t('dup.remove', { title: d.title })}</Button>
             </div>
           {/each}
         </li>
