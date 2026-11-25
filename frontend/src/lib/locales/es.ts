@@ -168,6 +168,8 @@ export const es: Messages = {
   'trash.confirmTitle': '¿Eliminar definitivamente?',
   'trash.confirmBody': '¿Eliminar «{name}» para siempre? No se puede deshacer.',
   'nav.label': 'Navegación principal',
+  'nav.tabs': 'Pantallas de la sección',
+  'nav.more': 'Más',
   'theme.label': 'Tema',
   'theme.auto': 'Auto',
   'theme.light': 'Claro',

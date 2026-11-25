@@ -168,6 +168,8 @@ export const it: Messages = {
   'trash.confirmTitle': 'Eliminare definitivamente?',
   'trash.confirmBody': 'Eliminare «{name}» per sempre? L’operazione non si può annullare.',
   'nav.label': 'Navigazione principale',
+  'nav.tabs': 'Schermate della sezione',
+  'nav.more': 'Altro',
   'theme.label': 'Tema',
   'theme.auto': 'Auto',
   'theme.light': 'Chiaro',

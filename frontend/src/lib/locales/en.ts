@@ -168,6 +168,8 @@ export const en: Messages = {
   'trash.confirmTitle': 'Delete permanently?',
   'trash.confirmBody': 'Delete “{name}” for good? This cannot be undone.',
   'nav.label': 'Main navigation',
+  'nav.tabs': 'Section screens',
+  'nav.more': 'More',
   'theme.label': 'Theme',
   'theme.auto': 'Auto',
   'theme.light': 'Light',

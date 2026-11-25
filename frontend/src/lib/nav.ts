@@ -40,3 +40,25 @@ export function visibleTabs(area: AreaId, aligned: boolean): ScreenId[] {
   const tabs = AREAS.find((a) => a.id === area)?.tabs ?? [];
   return tabs.filter((t) => aligned || !ALIGNED_ONLY.includes(t));
 }
+
+/**
+ * Indices of the tabs to show (ascending) given each tab's width, the room available and the width of the
+ * "More" button. Everything is shown if it fits; otherwise room is kept for More and the active tab is
+ * always shown, replacing the last one that fit.
+ */
+export function fitTabs(widths: number[], available: number, active: number, moreWidth: number): number[] {
+  const all = widths.map((_, i) => i);
+  if (widths.reduce((a, b) => a + b, 0) <= available) return all;
+  let room = available - moreWidth;
+  const shown: number[] = [];
+  for (const i of all) {
+    if (widths[i] > room) break;
+    room -= widths[i];
+    shown.push(i);
+  }
+  if (active >= 0 && !shown.includes(active)) {
+    if (shown.length) shown.pop();
+    shown.push(active);
+  }
+  return shown;
+}

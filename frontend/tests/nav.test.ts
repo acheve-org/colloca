@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SCREENS } from '../src/lib/router.svelte';
-import { AREAS, areaOf, visibleTabs } from '../src/lib/nav';
+import { AREAS, areaOf, fitTabs, visibleTabs } from '../src/lib/nav';
 
 describe('nav model', () => {
   it('every screen belongs to exactly one area', () => {
@@ -32,5 +32,22 @@ describe('nav model', () => {
 
   it('settings is the bottom area', () => {
     expect(AREAS.filter((a) => a.bottom).map((a) => a.id)).toEqual(['settings']);
+  });
+
+  it('fitTabs shows everything that fits', () => {
+    expect(fitTabs([50, 50, 50], 200, 0, 40)).toEqual([0, 1, 2]);
+  });
+
+  it('fitTabs reserves room for More and folds the rest', () => {
+    expect(fitTabs([100, 100, 100, 100], 250, 0, 50)).toEqual([0, 1]);
+  });
+
+  it('fitTabs keeps the active tab shown by replacing the last one', () => {
+    expect(fitTabs([100, 100, 100, 100], 250, 3, 50)).toEqual([0, 3]);
+    expect(fitTabs([100, 100, 100, 100], 250, 1, 50)).toEqual([0, 1]);
+  });
+
+  it('fitTabs shows the active tab even when nothing fits', () => {
+    expect(fitTabs([100, 100, 100], 50, 2, 40)).toEqual([2]);
   });
 });
