@@ -1,7 +1,6 @@
 <script module lang="ts">
   type EditForm = Meta & { title: string };
 
-  const PAIRS_ACCEPT = '.tmx,.xlf,.xliff,.tsv,.csv,.docx';
   const LANG_BADGE: Record<string, string> = { mismatch: 'src.check.mismatch', uncertain: 'src.check.uncertain' };
 
   const emptyFacets = () => ({ tags: [], text_types: [], date_min: '', date_max: '' });
@@ -11,7 +10,7 @@
   import { onMount, tick, untrack } from 'svelte';
   import { del, get, patch, post } from '../lib/api';
   import {
-    act, draft, metaSummary, still, uploadPairs, watch, work,
+    act, draft, metaSummary, still, watch, work,
     type Meta,
   } from '../lib/addDocuments.svelte';
   import { CORPUS_CHANGED, corpusStore } from '../lib/corpus.svelte';
@@ -20,8 +19,7 @@
   import { JOBS_DONE, jobLogs } from '../lib/jobs.svelte';
   import { messages } from '../lib/messages.svelte';
   import { projectStore, reloadProjects } from '../lib/projects.svelte';
-  import type { Doc, Facets, Job, Languages, NearDupMatch, NearDupReport } from '../lib/types';
-  import AlignDocuments from './AlignDocuments.svelte';
+  import type { Doc, Facets, Job, NearDupMatch, NearDupReport } from '../lib/types';
   import TmxExport from './TmxExport.svelte';
   import Badge from '../lib/ui/Badge.svelte';
   import Button from '../lib/ui/Button.svelte';
@@ -58,18 +56,6 @@
   // Corpus settings
   let setName = $state('');
   let setProject = $state('');
-
-  // Aligned pairs
-  let pairInput: HTMLInputElement | undefined = $state();
-  // A new partner corpus needs its language when more than one other language is set up.
-  let langs = $state.raw<Languages>({});
-  const otherLangs = $derived(Object.keys(langs).filter((l) => l !== corpusStore.current?.lang));
-  $effect(() => {
-    if (!otherLangs.includes(draft.pairLang)) draft.pairLang = otherLangs[0] ?? '';
-  });
-  $effect(() => {
-    draft.multiLang = otherLangs.length > 1;
-  });
 
   // Dialogs
   let editOpen = $state(false);
@@ -137,19 +123,6 @@
     ...(setProject ? [] : [{ value: '', label: t('src.chooseProject'), disabled: true }]),
     ...projectStore.list.map((p) => ({ value: String(p.id), label: p.name })),
   ]);
-
-  const partnerOptions = $derived.by(() => {
-    const cur = corpusStore.current;
-    const others = cur ? corpusStore.list.filter((c) => c.id !== cur.id && c.lang !== cur.lang) : [];
-    return [
-      ...others.map((c) => ({ value: String(c.id), label: `${c.name} [${c.lang}]` })),
-      { value: 'new', label: t('src.pair.newCorpus') },
-    ];
-  });
-  // Like the old select (re-rendered after every reload): the first option until one is picked.
-  $effect(() => {
-    if (!draft.partnerPicked || !partnerOptions.some((o) => o.value === draft.partner)) draft.partner = partnerOptions[0].value;
-  });
 
   // The settings follow the current corpus (as the old tab did after every reload).
   const settingsKey = $derived.by(() => {
@@ -252,17 +225,12 @@
   });
 
   onMount(() => {
-    const offPair = draft.onClear('pair', () => pairInput && (pairInput.value = ''));
     window.addEventListener(CORPUS_CHANGED, onCorpusChanged);
     window.addEventListener(JOBS_DONE, onJobsDone);
     reloadProjects().catch((err) => messages.say(errMsg(err), 'err'));
-    get<Languages>('/api/languages')
-      .then((l) => (langs = l))
-      .catch(() => {}); // without the list the server picks the only other language, as before
     return () => {
       window.removeEventListener(CORPUS_CHANGED, onCorpusChanged);
       window.removeEventListener(JOBS_DONE, onJobsDone);
-      offPair();
       seq++;
     };
   });
@@ -470,33 +438,6 @@
       {/if}
 
       <div class="cards">
-        <section class="card">
-          <h3>{t('src.pair.title')}</h3>
-          <input
-            bind:this={pairInput}
-            type="file"
-            accept={PAIRS_ACCEPT}
-            aria-label={t('src.pair.file')}
-            onchange={(e) => (draft.pairFile = e.currentTarget.files?.[0] ?? null)}
-          />
-          <Field label={t('src.pair.partner')}>
-            <Select label={t('src.pair.partner')} bind:value={draft.partner} options={partnerOptions} onchange={() => (draft.partnerPicked = true)} />
-          </Field>
-          {#if draft.partner === 'new'}
-            <input bind:value={draft.pairName} maxlength="120" placeholder={t('src.pair.namePlaceholder')} aria-label={t('src.pair.name')} />
-            {#if otherLangs.length > 1}
-              <Select label={t('src.pair.lang')} bind:value={draft.pairLang} options={otherLangs.map((l) => ({ value: l, label: langs[l] }))} />
-            {/if}
-          {/if}
-          <Toggle bind:checked={draft.swap} label={t('src.pair.swap')} />
-          <div class="row">
-            <span class="grow"></span>
-            <Button variant="primary" disabled={work.busy !== null} onclick={uploadPairs}>{t('src.pair.go')}</Button>
-          </div>
-          <p class="hint">{t('src.pair.hint')}</p>
-        </section>
-
-        <AlignDocuments />
         <TmxExport />
       </div>
     </div>
@@ -769,24 +710,6 @@
     grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
     gap: var(--s-3);
     padding: var(--s-3);
-  }
-  .card {
-    display: flex;
-    flex-direction: column;
-    gap: var(--s-2);
-    min-width: 0;
-    padding: var(--s-2) var(--s-3);
-    border: 1px solid var(--line);
-    border-radius: var(--radius);
-    background: var(--bg);
-  }
-  .card :global(.field) {
-    display: flex;
-  }
-  .card input[type='file'] {
-    height: auto;
-    padding: var(--s-1);
-    max-width: 100%;
   }
   .strip {
     display: flex;

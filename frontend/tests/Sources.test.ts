@@ -151,45 +151,6 @@ describe('Sources', () => {
     expect(calls.filter((c) => c.path === '/api/corpora').length).toBe(1);
   });
 
-  it('imports aligned pairs into the chosen partner corpus with the metadata', async () => {
-    await ready();
-    await fireEvent.input(screen.getByLabelText('Type'), { target: { value: 'manual' } });
-    await fireEvent.change(screen.getByLabelText('Aligned file'), { target: { files: [new File(['<tmx/>'], 'tm.tmx')] } });
-    expect((screen.getByLabelText('Translations go to') as HTMLSelectElement).value).toBe('2');
-    await fireEvent.click(screen.getByRole('button', { name: 'Import' }));
-    await waitFor(() => expect(calls.some((c) => c.path === '/api/corpora/1/upload-pairs')).toBe(true));
-    const c = calls.find((x) => x.path === '/api/corpora/1/upload-pairs')!;
-    expect(c.params.get('partner_corpus_id')).toBe('2');
-    expect(c.params.get('swap')).toBe('false');
-    expect(c.params.get('text_type')).toBe('manual');
-    expect((c.body as FormData).getAll('files').length).toBe(1);
-  });
-
-  it('asks for a name when the translations go to a new corpus', async () => {
-    await ready();
-    await fireEvent.change(screen.getByLabelText('Aligned file'), { target: { files: [new File(['x'], 'tm.tmx')] } });
-    await fireEvent.change(screen.getByLabelText('Translations go to'), { target: { value: 'new' } });
-    await fireEvent.click(screen.getByRole('button', { name: 'Import' }));
-    expect(messages.current?.kind).toBe('err');
-    expect(calls.some((c) => c.path === '/api/corpora/1/upload-pairs')).toBe(false);
-    await fireEvent.input(screen.getByLabelText('Name of the new corpus'), { target: { value: 'Traduzioni' } });
-    await fireEvent.click(screen.getByRole('button', { name: 'Import' }));
-    await waitFor(() => expect(calls.some((c) => c.path === '/api/corpora/1/upload-pairs')).toBe(true));
-    expect(calls.find((x) => x.path === '/api/corpora/1/upload-pairs')!.params.get('partner_name')).toBe('Traduzioni');
-  });
-
-  it('a new partner corpus gets the chosen language when several are set up', async () => {
-    langsReply = { es: 'Spanish', it: 'Italian', fr: 'French' };
-    await ready();
-    await fireEvent.change(screen.getByLabelText('Aligned file'), { target: { files: [new File(['x'], 'tm.tmx')] } });
-    await fireEvent.change(screen.getByLabelText('Translations go to'), { target: { value: 'new' } });
-    await fireEvent.input(screen.getByLabelText('Name of the new corpus'), { target: { value: 'Traductions' } });
-    await fireEvent.change(await screen.findByLabelText('Language of the new corpus'), { target: { value: 'fr' } });
-    await fireEvent.click(screen.getByRole('button', { name: 'Import' }));
-    await waitFor(() => expect(calls.some((c) => c.path === '/api/corpora/1/upload-pairs')).toBe(true));
-    expect(calls.find((x) => x.path === '/api/corpora/1/upload-pairs')!.params.get('partner_lang')).toBe('fr');
-  });
-
   it('deleting a document asks for confirmation', async () => {
     await ready();
     await fireEvent.click(bodyRows()[0]);

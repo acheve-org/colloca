@@ -5,6 +5,7 @@ import { CORPUS_CHANGED, corpusStore } from './corpus.svelte';
 import { t } from './i18n';
 import { trackJobs } from './jobs.svelte';
 import { messages } from './messages.svelte';
+import type { Languages } from './types';
 
 export interface Quality {
   score: number;
@@ -60,8 +61,16 @@ class AddDraft {
   pasteText = $state('');
   /** Like the old select: the first option until one is picked. Not reactive on purpose. */
   partnerPicked = false;
-  /** Whether more than one other language is set up, so a new partner needs its language. Set by the pairs form. */
-  multiLang = false;
+  /** The languages set up, loaded by the pairs form. */
+  langs = $state.raw<Languages>({});
+  /** The languages other than the current corpus's. */
+  get otherLangs(): string[] {
+    return Object.keys(this.langs).filter((l) => l !== corpusStore.current?.lang);
+  }
+  /** Whether more than one other language is set up, so a new partner needs its language. */
+  get multiLang(): boolean {
+    return this.otherLangs.length > 1;
+  }
   /** File inputs register how to empty themselves, so an action can clear them after a submit. */
   #clears: Partial<Record<'files' | 'pair', () => void>> = {};
 
@@ -387,15 +396,19 @@ export const uploadPairs = () =>
       ...metaParams(),
     });
     if (!still(id)) return false;
+    const bad = res.filter((r) => !r.ok);
+    watch(true);
+    if (bad.length) {
+      // Stays on the page with the file, so it can be fixed or replaced.
+      messages.say(t('src.pair.rejected', { error: bad[0].error ?? '' }), 'err');
+      return false;
+    }
     draft.pairFile = null;
     draft.pairName = '';
     draft.partnerPicked = false; // back to the first option, which may be the corpus just created
     draft.partner = '';
     draft.clearInput('pair');
-    const bad = res.filter((r) => !r.ok);
-    if (bad.length) messages.say(t('src.pair.rejected', { error: bad[0].error ?? '' }), 'err');
-    else messages.say(t('src.queuedProgress'), 'ok');
-    watch(true);
+    messages.say(t('src.queuedProgress'), 'ok');
     return true;
   });
 

@@ -1,12 +1,13 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import {
-    actionFor, addPaste, addPreview, addUrlList, draft, importSelected, metaSummary, resetDraft, uploadFiles, work,
+    actionFor, addPaste, addPreview, addUrlList, draft, importSelected, metaSummary, resetDraft, uploadFiles, uploadPairs, work,
     type Method,
   } from '../lib/addDocuments.svelte';
   import { corpusStore } from '../lib/corpus.svelte';
   import { t } from '../lib/i18n';
   import { go, route } from '../lib/router.svelte';
+  import AddAligned from '../lib/ui/add/AddAligned.svelte';
   import AddFromWeb from '../lib/ui/add/AddFromWeb.svelte';
   import AddPaste from '../lib/ui/add/AddPaste.svelte';
   import AddUpload from '../lib/ui/add/AddUpload.svelte';
@@ -44,12 +45,12 @@
     resetDraft();
     go('sources');
   }
-  // The aligned-texts submit arrives with its form.
   async function submit() {
     const run =
       m === 'web' ? (sub === 'list' ? addUrlList : sub === 'index' ? importSelected : addPreview)
       : m === 'up' ? (draft.preview?.kind === 'file' ? addPreview : uploadFiles)
       : m === 'paste' ? addPaste
+      : sub === 'tm' ? uploadPairs
       : null;
     if (run && (await run())) {
       // The details of the documents and the language override stay for the next batch.
@@ -83,7 +84,7 @@
           {:else if m === 'paste'}
             <div data-method={m} data-sub={sub}><AddPaste /></div>
           {:else}
-            <div data-method={m} data-sub={sub}></div>
+            <div data-method={m} data-sub={sub}><AddAligned /></div>
           {/if}
         </div>
         {#if !standalone && !narrow}
