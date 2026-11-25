@@ -60,7 +60,7 @@ textarea {
 
 button {
   cursor: pointer;
-  background: var(--surface);
+  background: var(--panel);
 }
 button:hover:not(:disabled) {
   border-color: var(--muted);

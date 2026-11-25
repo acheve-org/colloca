@@ -55,6 +55,7 @@ const pairs: [string, string, string][] = [
   ['--status-candidate', '--accent-soft', 'status-candidate on accent-soft'],
   ['--status-approved', '--accent-soft', 'status-approved on accent-soft'],
   ['--status-forbidden', '--accent-soft', 'status-forbidden on accent-soft'],
+  ['--accent', '--accent-soft', 'accent on accent-soft'],
   ['--rail-fg', '--rail-bg', 'rail text on rail'],
   ['--rail-muted', '--rail-bg', 'rail muted on rail'],
   ['--rail-fg', '--rail-hover', 'rail text on rail hover'],
@@ -117,6 +118,7 @@ describe('base.css heading scale and controls', () => {
   });
   it('inputs and buttons take the --panel background', () => {
     expect(baseCss).toMatch(/button,\s*input,\s*select,\s*textarea\s*\{[^}]*background:\s*var\(--panel\)/);
+    expect(baseCss).toMatch(/^button\s*\{[^}]*background:\s*var\(--panel\)/m);
   });
 });
 

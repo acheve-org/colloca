@@ -49,10 +49,11 @@ Thresholds: 4.5:1 = AA (normal text), 7:1 = AAA. All pairs are at least AA.
 | muted on panel | `--muted` on `--panel` | 5.86 (AA) | 6.45 (AA) |
 | accent on panel | `--accent` on `--panel` | 5.29 (AA) | 7.19 (AAA) |
 | danger on panel | `--danger` on `--panel` | 6.27 (AA) | 6.59 (AA) |
-| fg on accent-soft | `--fg` on `--accent-soft` | 12.68 (AAA) | 8.62 (AAA) |
-| status-candidate on accent-soft | `--status-candidate` on `--accent-soft` | 4.78 (AA) | 6.22 (AA) |
-| status-approved on accent-soft | `--status-approved` on `--accent-soft` | 5.75 (AA) | 6.03 (AA) |
-| status-forbidden on accent-soft | `--status-forbidden` on `--accent-soft` | 5.30 (AA) | 5.04 (AA) |
+| fg on accent-soft | `--fg` on `--accent-soft` | 13.08 (AAA) | 8.62 (AAA) |
+| status-candidate on accent-soft | `--status-candidate` on `--accent-soft` | 4.93 (AA) | 6.22 (AA) |
+| status-approved on accent-soft | `--status-approved` on `--accent-soft` | 5.93 (AA) | 6.03 (AA) |
+| status-forbidden on accent-soft | `--status-forbidden` on `--accent-soft` | 5.47 (AA) | 5.04 (AA) |
+| accent on accent-soft | `--accent` on `--accent-soft` | 4.61 (AA) | 5.50 (AA) |
 | rail text on rail | `--rail-fg` on `--rail-bg` | 11.39 (AAA) | 13.49 (AAA) |
 | rail muted on rail | `--rail-muted` on `--rail-bg` | 5.61 (AA) | 6.65 (AA) |
 | rail text on rail hover | `--rail-fg` on `--rail-hover` | 10.03 (AAA) | 10.03 (AAA) |
