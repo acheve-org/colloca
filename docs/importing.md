@@ -2,7 +2,7 @@
 
 ## Input formats
 
-Accepted by *Sources* upload and *Analyse a job*.
+Accepted by *Upload files* on the *Add documents* page (*Sources* > *+ Add documents*) and *Analyse a job*.
 
 | Format | Imported |
 |---|---|
@@ -24,7 +24,7 @@ Accepted by *Sources* upload and *Analyse a job*.
   - Three or more consecutive lines of short, aligned cells become table rows (`a | b | c`).
   - Running headers and page numbers removed.
 - **Quality score** (0–100: *good*, *fair*, *poor*). Penalises undecodable characters, many symbols, words without vowels, words split into letters, very short lines, lines that stop mid-sentence.
-  - URL and *Preview file* (one file in *Upload documents*): score and reasons shown above the editable text.
+  - URL and *Preview file* (one file in *Upload files*, via *Preview file*): score and reasons shown above the editable text.
   - Upload scoring below *good*: warning in the job.
 - **Limits**:
   - Positions only (no ruling lines or font metrics): tables with long cells may read as columns.
@@ -59,10 +59,10 @@ Check low-confidence OCR text before trusting lemmas.
   - Result stored per document (`lang_check`).
   - Needs at least two languages set up; text in a language you have not set up is "unclear" or may be reported as the closest set-up language.
 - **Near-duplicates**: besides identical texts, a MinHash sketch of 5-word shingles (case, punctuation, whitespace ignored; stored in `documents.fingerprint`).
-  - At `NEAR_DUP_THRESHOLD` (default 85 %, range 0.5–1) the import stops. *Sources* shows the older document, shared paragraphs and a few new or changed ones.
+  - At `NEAR_DUP_THRESHOLD` (default 85 %, range 0.5–1) the import stops. *Sources* (the job log) shows the older document, shared paragraphs and a few new or changed ones.
   - Choices: *Import anyway*, *Replace* (most similar older document), *Skip*.
   - Held file stays in server memory until decided (max 20, lost on restart).
-  - *Find near-duplicates* lists existing pairs: `GET /api/corpora/{id}/near-duplicates?threshold=`.
+  - *Find near-duplicates* (button above the document list on *Sources*) lists existing pairs: `GET /api/corpora/{id}/near-duplicates?threshold=`.
   - Older documents are fingerprinted on first use. Sentence files and aligned texts are not compared.
   - Estimate ±5 points on long texts. Measures shared wording: a short text inside a long one is not flagged.
   - Timing script: `scripts/bench_dedup.py`.
@@ -76,5 +76,5 @@ Check low-confidence OCR text before trusting lemmas.
   | `MAX_TEXT_MB` | 10 per document |
   | `MAX_DOWNLOAD_MB` | 15 per URL |
 
-- **Background imports**: uploads, URLs and pasted texts are queued, processed one at a time. *Sources* shows progress and per-file errors, whatever screen is open.
+- **Background imports**: uploads, URLs and pasted texts are queued, processed one at a time. After *Add documents* returns to *Sources*, its job log shows progress and per-file errors, whatever screen is open.
 - **Re-annotate**: after changing `SPACY_SIZE` or updating spaCy, documents annotated with another model are flagged *older model*. *Re-annotate with current model* (`POST /api/corpora/{id}/reannotate`) redoes them from stored text.

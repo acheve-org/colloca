@@ -20,14 +20,18 @@ docker compose up
 ## Workflow
 
 1. **Project and corpus** (*Projects*): create a **project** for the client or job, then *New corpus* (name + language, e.g. es, it) inside it. Every working corpus belongs to a project. On first run the empty screens lead you through Languages → Projects → Sources.
-2. **Add sources** (*Sources*):
+2. **Add documents** (*Sources* > *+ Add documents*). *Sources* lists the corpus's documents; *+ Add documents* (also the four tiles on an empty corpus) opens the *Add documents* page. Choose a method in its tabs:
 
    | Method | Behaviour |
    |---|---|
-   | One URL | *Fetch & preview*, trim noise, *Add*. |
-   | *Add several addresses* | One URL per line, no preview. Each is a background job. Limits: `MAX_URL_LIST` 50 per list, `MAX_URLS_PER_HOST` 20, `URL_DELAY_SECONDS` 1 s between requests to one site. API: `POST /api/corpora/{id}/urls`. |
-   | *Import from an index page* | Index page or RSS/Atom feed. Lists its links (navigation, footer, account, search and tag links excluded). You filter and select. Imported in batches of at most 20, no preview. One page only: no crawling. API: `POST /api/discover-links`. |
-   | Upload | Formats in [importing.md](importing.md). Exact duplicates are rejected. |
+   | *From the web* > *One page* | *Fetch & preview*, trim noise, *Add to corpus*. |
+   | *From the web* > *Several addresses* | One URL per line, no preview; *Add all*. Each is a background job. Limits: `MAX_URL_LIST` 50 per list, `MAX_URLS_PER_HOST` 20, `URL_DELAY_SECONDS` 1 s between requests to one site. API: `POST /api/corpora/{id}/urls`. |
+   | *From the web* > *From an index page* | Index page or RSS/Atom feed; *Find links* lists its links (navigation, footer, account, search and tag links excluded). You filter and select, then *Import N pages*. Imported in batches of at most 20, no preview. One page only: no crawling. API: `POST /api/discover-links`. |
+   | *Upload files* | *Upload*. Formats in [importing.md](importing.md). Exact duplicates are rejected. |
+   | *Paste text* | Title and text; *Add text*. |
+   | *Aligned texts* | *Translation memory* (TMX, XLIFF, two columns; *Import*) or *Align two documents* (*Propose alignment*). See [aligned-texts.md](aligned-texts.md). |
+
+   The *About these documents* card (Tags, Text type, Date, Author, *Import even if the language looks wrong*) applies to everything added in that step. The bar at the foot of the page shows what will be added and where, with *Cancel* and the action of the current method. After a successful add the app returns to the document list, where the job log shows progress; the *About* values are kept for the next add.
 
    Index imports flag in the job report: very short texts, cookie/JavaScript/paywall boilerplate, landing-page titles, repeated titles. Flagged documents are still added.
 3. **Explore**: pick Explore in the rail, then a tab.
@@ -55,7 +59,7 @@ Screen details: [analysis.md](analysis.md).
   | Date | `2024`, `2024-05`, `2024-05-17` |
   | Author | free |
 
-  Set before adding (*Details* box in *Sources*; applies to URL, upload, pasted text) or later with *Edit*.
+  Set before adding (*About these documents* on the *Add documents* page; applies to URL, upload and pasted text) or later with *Edit details* on *Sources*.
 - **Document filter** (*Only documents with…*): above every analysis screen and the Job screen.
   - Criteria: all given tags, a text type, a date range.
   - Everything is recomputed on the subset: sizes behind *per million*, *Docs %*, collocation statistics, keyness. The reference corpus stays whole.
