@@ -1,16 +1,18 @@
 /* Colloca design tokens. Light is the default; dark applies via
    data-theme="dark" or, when no data-theme is set, prefers-color-scheme. */
 :root {
-  --bg: #f0f2f5;
-  --surface: #e5e8ee;
-  --line: #c3c9d4;
+  --bg: #f1f4f3;
+  --surface: #e3eae8;
+  --panel: #f8faf9;
+  --line: #c2cfcc;
   --fg: #1d2330;
   --muted: #596273;
-  --accent: #1f5fbf;
+  --accent: #0f756d;
   --accent-fg: #ffffff;
+  --accent-soft: #d3ece8;
   --danger: #b42318;
 
-  --hit-query-bg: #fff3c4;
+  --hit-query-bg: #fdecb0;
   --hit-query-fg: #5c4400;
   --hit-equiv-bg: #e2f4e6;
   --hit-equiv-fg: #135b2a;
@@ -24,11 +26,11 @@
   --status-forbidden: #b42318;
 
   /* Rail: dark in every theme. */
-  --rail-bg: #1f2430;
+  --rail-bg: #12302e;
   --rail-fg: #e4e7ec;
   --rail-muted: #9aa4b5;
   --rail-hover: #2d3445;
-  --rail-accent: #6ba3f5;
+  --rail-accent: #5fd1c4;
 
   --s-1: 4px;
   --s-2: 8px;
@@ -36,27 +38,34 @@
   --s-4: 16px;
   --s-5: 20px;
   --s-6: 24px;
-  --radius: 4px;
-  --row-h: 28px;
+  --radius: 6px;
+  --radius-lg: 8px;
+  --row-h: 32px;
+  --page-pad: 20px;
+  --gap: 14px;
 
   --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  --fs-base: 13px;
-  --fs-small: 12px;
+  --fs-base: 14px;
+  --fs-small: 12.5px;
   --lh: 1.4;
 
   color-scheme: light;
 }
 
 :root[data-theme="dark"] {
-  --bg: #262d3b;
-  --surface: #2f374a;
-  --line: #434c5e;
+  --bg: #1f2b2b;
+  --surface: #283636;
+  --panel: #243131;
+  --line: #3b4d4c;
   --fg: #e8ebf0;
   --muted: #aab4c6;
-  --accent: #7fb2ff;
-  --accent-fg: #0b1220;
+  --accent: #4fd1c0;
+  --accent-fg: #06201d;
+  --accent-soft: #1f4742;
   --danger: #ff9a90;
+
+  --rail-bg: #14201f;
 
   --hit-query-bg: #5a4a12;
   --hit-query-fg: #fbe38b;
@@ -76,14 +85,18 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
-    --bg: #262d3b;
-    --surface: #2f374a;
-    --line: #434c5e;
+    --bg: #1f2b2b;
+    --surface: #283636;
+    --panel: #243131;
+    --line: #3b4d4c;
     --fg: #e8ebf0;
     --muted: #aab4c6;
-    --accent: #7fb2ff;
-    --accent-fg: #0b1220;
+    --accent: #4fd1c0;
+    --accent-fg: #06201d;
+    --accent-soft: #1f4742;
     --danger: #ff9a90;
+
+    --rail-bg: #14201f;
 
     --hit-query-bg: #5a4a12;
     --hit-query-fg: #fbe38b;
