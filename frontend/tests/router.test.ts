@@ -129,3 +129,34 @@ describe('areaHref', () => {
     expect(areaHref('job')).toBe('#/job');
   });
 });
+
+describe('sources-add route', () => {
+  beforeEach(() => {
+    location.hash = '';
+  });
+
+  it('parses the address and its params', async () => {
+    location.hash = '#/sources/add?m=up';
+    const { route } = await load();
+    expect(route.screen).toBe('sources-add');
+    expect(route.params).toEqual({ m: 'up' });
+  });
+
+  it('go() writes the address', async () => {
+    const { go } = await load();
+    go('sources-add', { m: 'al', sub: 'two' });
+    expect(location.hash).toBe('#/sources/add?m=al&sub=two');
+  });
+
+  it('hrefFor builds an address', async () => {
+    const { hrefFor } = await load();
+    expect(hrefFor('sources-add', { m: 'web' })).toBe('#/sources/add?m=web');
+  });
+
+  it('never becomes the last screen of the corpus area', async () => {
+    const { go, areaHref } = await load();
+    go('sources');
+    go('sources-add');
+    expect(areaHref('corpus')).toBe('#/sources');
+  });
+});

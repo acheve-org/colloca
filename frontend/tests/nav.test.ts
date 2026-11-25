@@ -4,9 +4,14 @@ import { AREAS, areaOf, fitTabs, visibleTabs } from '../src/lib/nav';
 
 describe('nav model', () => {
   it('every screen belongs to exactly one area', () => {
-    const all = AREAS.flatMap((a) => a.tabs);
+    const all = AREAS.flatMap((a) => [...a.tabs, ...(a.extra ?? [])]);
     expect(new Set(all).size).toBe(all.length);
     expect(new Set(all)).toEqual(new Set(SCREENS));
+  });
+
+  it('extras belong to their area but are not tabs', () => {
+    expect(areaOf('sources-add')).toBe('corpus');
+    expect(visibleTabs('corpus', false)).toEqual(['sources']);
   });
 
   it('areaOf maps screens', () => {

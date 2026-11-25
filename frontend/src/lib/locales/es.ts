@@ -15,6 +15,8 @@ export const es: Messages = {
   'common.export': 'Exportar CSV',
   'common.noResults': 'Sin resultados',
   'table.loading': 'Cargando…',
+  'nav.sources-add': 'Añadir documentos',
+  'src.backToDocuments': 'Documentos',
   'nav.sources': 'Fuentes',
   'nav.languages': 'Idiomas',
   'lang.intro': 'Los idiomas con los que trabajas. De cada uno puedes gestionar su modelo de spaCy, sus datos de OCR y su corpus base. Un idioma solo se puede quitar cuando ningún corpus lo usa.',
