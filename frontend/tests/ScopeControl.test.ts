@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CORPUS_CHANGED, corpusStore } from '../src/lib/corpus.svelte';
 import { setLang } from '../src/lib/i18n';
+import { go } from '../src/lib/router.svelte';
 import { scopeView } from '../src/lib/scope.svelte';
 import ScopeControl from '../src/lib/ui/ScopeControl.svelte';
 
@@ -76,6 +77,15 @@ describe('ScopeControl', () => {
     expect(screen.getByText('Tags: wind')).toBeInTheDocument();
     await waitFor(() => expect(pill()).toHaveTextContent('5 of 12 documents'));
     expect(screen.getByText(/5 of 12 documents · 20,?244 of 48,?200 words/)).toBeInTheDocument();
+  });
+
+  it('closes the panel when the screen changes', async () => {
+    go('concordance');
+    render(ScopeControl);
+    await openPanel();
+    go('keyness');
+    await waitFor(() => expect(screen.queryByRole('group', { name: 'Scope: which documents?' })).toBeNull());
+    go('sources');
   });
 
   it('removes a part through its chip', async () => {

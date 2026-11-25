@@ -296,7 +296,6 @@ export const it: Messages = {
   'doc.original': 'Documento',
   'doc.translation': 'Traduzione allineata',
   'shortcuts.addTerm': 'Aggiungi come termine il risultato selezionato (o il testo selezionato)',
-  'filter.label': 'Filtro dei documenti',
   'filter.tags': 'Etichette',
   'filter.tagsPlaceholder': 'tutte: a, b',
   'filter.type': 'Tipo',
@@ -751,7 +750,7 @@ export const it: Messages = {
   'proj.moveOf': 'Sposta {name}',
   'proj.colActions': 'Azioni',
   'job.intro':
-    'Analizza un testo prima di tradurlo rispetto a questo corpus e alla base terminologica del suo progetto: quanta parte del suo vocabolario è coperta dal corpus, dove mancano dati, quali termini caratterizzano il testo, quali voci della base terminologica compaiono (e quali traduzioni evitare) e quali frasi ripete. Il testo viene analizzato e dimenticato; non si aggiunge nulla al corpus. La barra dei filtri restringe il corpus usato come evidenza.',
+    'Analizza un testo prima di tradurlo rispetto a questo corpus e alla base terminologica del suo progetto: quanta parte del suo vocabolario è coperta dal corpus, dove mancano dati, quali termini caratterizzano il testo, quali voci della base terminologica compaiono (e quali traduzioni evitare) e quali frasi ripete. Il testo viene analizzato e dimenticato; non si aggiunge nulla al corpus. Il filtro dei documenti nell’intestazione restringe il corpus usato come evidenza.',
   'job.toolbar': 'Testo da analizzare',
   'job.file': 'File da analizzare',
   'job.paste': 'Oppure incolla il testo qui',

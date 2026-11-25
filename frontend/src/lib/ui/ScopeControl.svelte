@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { corpusStore } from '../corpus.svelte';
   import { t } from '../i18n';
+  import { route } from '../router.svelte';
   import {
     clearScope,
     clearScopePart,
@@ -52,6 +53,12 @@
     clearScopePart(key);
     trigger?.focus();
   }
+
+  // Moving to another screen closes the panel (the control stays mounted in the header).
+  $effect(() => {
+    void route.screen;
+    open = false;
+  });
 
   onMount(() => startScope());
 </script>

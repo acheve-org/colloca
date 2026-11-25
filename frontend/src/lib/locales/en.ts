@@ -296,7 +296,6 @@ export const en: Messages = {
   'doc.original': 'Document',
   'doc.translation': 'Aligned translation',
   'shortcuts.addTerm': 'Add the selected hit (or selected text) as a term',
-  'filter.label': 'Document filter',
   'filter.tags': 'Tags',
   'filter.tagsPlaceholder': 'all of: a, b',
   'filter.type': 'Type',
@@ -752,7 +751,7 @@ export const en: Messages = {
   'proj.moveOf': 'Move {name}',
   'proj.colActions': 'Actions',
   'job.intro':
-    'Analyse a text before you translate it against this corpus and its project’s termbase: how much of its vocabulary the corpus covers, where it has no evidence, which terms are characteristic of the text, which termbase entries occur (and which translations to avoid), and which phrases it repeats. The text is analysed and forgotten; nothing is added to the corpus. The filter bar narrows the corpus used as evidence.',
+    'Analyse a text before you translate it against this corpus and its project’s termbase: how much of its vocabulary the corpus covers, where it has no evidence, which terms are characteristic of the text, which termbase entries occur (and which translations to avoid), and which phrases it repeats. The text is analysed and forgotten; nothing is added to the corpus. The document filter in the header narrows the corpus used as evidence.',
   'job.toolbar': 'Text to analyse',
   'job.file': 'File to analyse',
   'job.paste': 'Or paste the text here',
