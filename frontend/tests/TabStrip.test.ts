@@ -8,11 +8,13 @@ import { setLang } from '../src/lib/i18n';
 
 let containerWidth = 10000;
 let measured = 0;
+let tabWidth = 100;
 let observers: ResizeObserverCallback[] = [];
 
 beforeEach(() => {
   containerWidth = 10000;
   measured = 0;
+  tabWidth = 100;
   observers = [];
   vi.stubGlobal('ResizeObserver', class {
     constructor(cb: ResizeObserverCallback) { observers.push(cb); }
@@ -22,7 +24,7 @@ beforeEach(() => {
   });
   Object.defineProperty(HTMLElement.prototype, 'offsetWidth', {
     configurable: true,
-    get() { measured++; return 100; },
+    get() { measured++; return tabWidth; },
   });
   Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
     configurable: true,
@@ -122,14 +124,43 @@ describe('TabStrip', () => {
     expect(screen.getAllByRole('link').map((a) => a.textContent?.trim())).toEqual(['Concordance']);
   });
 
-  it('re-measures when the language changes', async () => {
+  it('re-measures when the language changes and folds when the new names are wider', async () => {
     go('concordance');
     render(TabStrip, { area: 'explore' });
-    await tick();
+    await narrow(850);
+    expect(screen.getAllByRole('link')).toHaveLength(8);
+    expect(screen.queryByRole('button', { name: 'More' })).toBeNull();
     const before = measured;
+    tabWidth = 200; // longer names arrive with the new language
     setLang('es');
     await tick();
     await tick();
     expect(measured).toBeGreaterThan(before);
+    expect(screen.getAllByRole('link').length).toBeLessThan(8);
+    expect(screen.getByRole('button', { name: 'Más' })).toBeInTheDocument();
+  });
+
+  it('focuses the active tab after choosing one from More', async () => {
+    await overflowing();
+    await fireEvent.click(screen.getByRole('button', { name: 'More' }));
+    await fireEvent.click(screen.getByRole('link', { name: 'Collocations' }));
+    await new Promise((r) => setTimeout(r, 20));
+    await tick();
+    expect(screen.getByRole('link', { name: 'Collocations' })).toHaveFocus();
+  });
+
+  it('does not announce the More popover as a menu', async () => {
+    await overflowing();
+    expect(screen.getByRole('button', { name: 'More' })).not.toHaveAttribute('aria-haspopup');
+  });
+
+  it('closes the popover when focus leaves it', async () => {
+    await overflowing();
+    const more = screen.getByRole('button', { name: 'More' });
+    await fireEvent.click(more);
+    const link = screen.getByRole('link', { name: 'Collocations' });
+    await fireEvent.focusOut(link, { relatedTarget: document.body });
+    await tick();
+    expect(more).toHaveAttribute('aria-expanded', 'false');
   });
 });

@@ -44,7 +44,7 @@ export function visibleTabs(area: AreaId, aligned: boolean): ScreenId[] {
 /**
  * Indices of the tabs to show (ascending) given each tab's width, the room available and the width of the
  * "More" button. Everything is shown if it fits; otherwise room is kept for More and the active tab is
- * always shown, replacing the last one that fit.
+ * always shown, replacing the last one that fit (and more, if it is wider).
  */
 export function fitTabs(widths: number[], available: number, active: number, moreWidth: number): number[] {
   const all = widths.map((_, i) => i);
@@ -59,6 +59,13 @@ export function fitTabs(widths: number[], available: number, active: number, mor
   if (active >= 0 && !shown.includes(active)) {
     if (shown.length) shown.pop();
     shown.push(active);
+    // The swapped-in tab may be wider than the one it replaced: drop others until it fits with More.
+    const total = () => shown.reduce((sum, i) => sum + widths[i], 0) + moreWidth;
+    while (total() > available) {
+      const drop = shown.filter((i) => i !== active).pop();
+      if (drop === undefined) break;
+      shown.splice(shown.indexOf(drop), 1);
+    }
   }
   return shown;
 }

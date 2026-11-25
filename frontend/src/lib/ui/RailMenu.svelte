@@ -15,7 +15,6 @@
   <button
     type="button"
     class="trigger"
-    aria-haspopup="true"
     aria-expanded={open}
     bind:this={trigger}
     onclick={() => (open = !open)}

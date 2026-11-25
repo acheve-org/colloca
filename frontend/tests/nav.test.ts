@@ -50,4 +50,14 @@ describe('nav model', () => {
   it('fitTabs shows the active tab even when nothing fits', () => {
     expect(fitTabs([100, 100, 100], 50, 2, 40)).toEqual([2]);
   });
+
+  it('fitTabs drops tabs until the swapped-in active tab and More fit', () => {
+    expect(fitTabs([75, 90, 233], 310, 2, 48)).toEqual([2]);
+    expect(fitTabs([50, 50, 50, 200], 250, 3, 40)).toEqual([3]);
+    expect(fitTabs([50, 50, 50, 120], 250, 3, 40)).toEqual([0, 3]);
+  });
+
+  it('fitTabs keeps only the active tab when it alone overflows', () => {
+    expect(fitTabs([75, 90, 400], 310, 2, 48)).toEqual([2]);
+  });
 });

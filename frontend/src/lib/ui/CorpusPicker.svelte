@@ -25,6 +25,7 @@
 
   async function choose(id: number) {
     open = false;
+    trigger?.focus(); // the item is about to unmount: keep focus in the header
     await corpusStore.select(id);
   }
 </script>
@@ -34,7 +35,6 @@
     <button
       type="button"
       class="trigger"
-      aria-haspopup="true"
       aria-expanded={open}
       bind:this={trigger}
       onclick={() => (open = !open)}
@@ -53,18 +53,20 @@
     {/if}
   </div>
   {#if open}
-    <div class="pop" role="menu" use:dismiss={{ close: () => (open = false), trigger }}>
+    <div class="pop" use:dismiss={{ close: () => (open = false), trigger }}>
       {#each groups as g (g.key)}
-        <div class="heading" role="presentation">{g.name}</div>
-        {#each g.items as c (c.id)}
-          <button
-            type="button"
-            role="menuitem"
-            class="item"
-            aria-current={c.id === corpusStore.currentId ? 'true' : undefined}
-            onclick={() => choose(c.id)}>{c.name}</button
-          >
-        {/each}
+        <div role="group" aria-labelledby="picker-h-{g.key}">
+          <div class="heading" id="picker-h-{g.key}">{g.name}</div>
+          {#each g.items as c (c.id)}
+            <button
+              type="button"
+              class="item"
+              title={c.name}
+              aria-current={c.id === corpusStore.currentId ? 'true' : undefined}
+              onclick={() => choose(c.id)}>{c.name}</button
+            >
+          {/each}
+        </div>
       {/each}
       <a class="manage" href={screenHref('projects')} onclick={() => (open = false)}>{t('ctx.manage')}</a>
     </div>
@@ -136,6 +138,8 @@
   .item,
   .manage {
     display: block;
+    width: 100%;
+    box-sizing: border-box;
     padding: var(--s-1) var(--s-3) var(--s-1) var(--s-4);
     color: var(--fg);
     text-align: left;

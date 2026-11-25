@@ -66,6 +66,14 @@ describe('Rail', () => {
     expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '#/languages');
   });
 
+  it('an area whose last screen is hidden links to its first visible tab', () => {
+    go('equivalents');
+    go('termbase');
+    corpusStore.aligned = false;
+    render(Rail);
+    expect(screen.getByRole('link', { name: 'Explore' }).getAttribute('href')).toMatch(/^#\/concordance/);
+  });
+
   describe('Equivalents redirect', () => {
     it('keeps a deep link while loading, then while aligned turns true', async () => {
       go('equivalents');

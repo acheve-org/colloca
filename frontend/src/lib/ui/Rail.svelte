@@ -1,8 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { t } from '../i18n';
-  import { areaHref, go, route } from '../router.svelte';
-  import { AREAS, ALIGNED_ONLY, areaOf } from '../nav';
+  import { areaHref, go, route, screenHref, type ScreenId } from '../router.svelte';
+  import { AREAS, ALIGNED_ONLY, areaOf, visibleTabs, type AreaId } from '../nav';
   import { corpusStore } from '../corpus.svelte';
   import { loadSession } from '../session.svelte';
   import { ensureLanguageName, loadLanguageNames } from '../context.svelte';
@@ -12,6 +12,14 @@
   import RailMenu from './RailMenu.svelte';
 
   const active = $derived(areaOf(route.screen));
+
+  /** The area's last screen, unless the corpus has since hidden it: then its first visible tab. */
+  function railHref(area: AreaId): string {
+    const href = areaHref(area);
+    const last = href.slice(2).split('?')[0] as ScreenId;
+    const tabs = visibleTabs(area, corpusStore.aligned);
+    return tabs.includes(last) ? href : screenHref(tabs[0]);
+  }
 
   onMount(() => {
     void loadSession();
@@ -41,7 +49,7 @@
   <nav aria-label={t('nav.label')}>
     {#each AREAS as a (a.id)}
       <a
-        href={areaHref(a.id)}
+        href={railHref(a.id)}
         class:bottom={a.bottom}
         class:active={active === a.id}
         title={t(a.label)}

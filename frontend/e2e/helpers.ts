@@ -40,6 +40,7 @@ export async function newCorpus(page: Page, name: string, lang?: string, project
   return proj;
 }
 
+// Display names are English UI strings: call openScreen while the interface is in English.
 const AREA_OF: Record<string, string> = {
   Sources: 'Corpus',
   Concordance: 'Explore',

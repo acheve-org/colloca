@@ -4,7 +4,7 @@ export interface DismissOptions {
   trigger?: HTMLElement | null;
 }
 
-/** Svelte action for popovers: an outside press or Esc calls `close`; Esc also focuses `trigger`. */
+/** Svelte action for popovers: an outside press, Esc or focus moving elsewhere calls `close`; Esc also focuses `trigger`. */
 export function dismiss(node: HTMLElement, options: DismissOptions) {
   let opts = options;
   const onPointer = (e: Event) => {
@@ -17,6 +17,13 @@ export function dismiss(node: HTMLElement, options: DismissOptions) {
     opts.close();
     opts.trigger?.focus();
   };
+  const onFocusOut = (e: FocusEvent) => {
+    const next = e.relatedTarget as Node | null;
+    if (!next) return; // focus left the window, or went nowhere in particular
+    if (node.contains(next) || opts.trigger?.contains(next)) return;
+    opts.close();
+  };
+  node.addEventListener('focusout', onFocusOut);
   document.addEventListener('pointerdown', onPointer);
   document.addEventListener('keydown', onKey);
   return {
@@ -24,6 +31,7 @@ export function dismiss(node: HTMLElement, options: DismissOptions) {
       opts = next;
     },
     destroy() {
+      node.removeEventListener('focusout', onFocusOut);
       document.removeEventListener('pointerdown', onPointer);
       document.removeEventListener('keydown', onKey);
     },

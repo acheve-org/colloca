@@ -35,7 +35,7 @@ afterEach(() => {
 const trigger = () => screen.getByRole('button', { expanded: false });
 const open = async () => {
   await fireEvent.click(trigger());
-  return screen.getByRole('menu');
+  return document.querySelector('.pop') as HTMLElement;
 };
 
 describe('CorpusPicker', () => {
@@ -52,19 +52,38 @@ describe('CorpusPicker', () => {
     render(CorpusPicker);
     const menu = await open();
     for (const h of ['Acme', 'Bolt', 'No project']) expect(within(menu).getByText(h, { selector: '.heading' })).toBeInTheDocument();
-    for (const n of ['A1', 'A2', 'B1', 'Loose']) expect(within(menu).getByRole('menuitem', { name: new RegExp(n) })).toBeInTheDocument();
+    for (const n of ['A1', 'A2', 'B1', 'Loose']) expect(within(menu).getByRole('button', { name: new RegExp(n) })).toBeInTheDocument();
     expect(within(menu).queryByText('RefCorpus')).toBeNull();
-    expect(within(menu).getByRole('menuitem', { name: /A1/ })).toHaveAttribute('aria-current', 'true');
-    expect(within(menu).getByRole('menuitem', { name: /A2/ })).not.toHaveAttribute('aria-current');
+    expect(within(menu).getByRole('button', { name: /A1/ })).toHaveAttribute('aria-current', 'true');
+    expect(within(menu).getByRole('button', { name: /A2/ })).not.toHaveAttribute('aria-current');
+  });
+
+  it('exposes each project as a named group and is not announced as a menu', async () => {
+    render(CorpusPicker);
+    const menu = await open();
+    expect(screen.getByRole('button', { expanded: true })).not.toHaveAttribute('aria-haspopup');
+    expect(menu).not.toHaveAttribute('role');
+    const acme = within(menu).getByRole('group', { name: 'Acme' });
+    expect(within(acme).getAllByRole('button').map((b) => b.textContent?.trim())).toEqual(['A1', 'A2']);
+    expect(within(menu).getByRole('group', { name: 'No project' })).toBeInTheDocument();
+    expect(within(menu).getByRole('button', { name: 'A2' })).toHaveAttribute('title', 'A2');
+  });
+
+  it('choosing a corpus returns focus to the trigger', async () => {
+    render(CorpusPicker);
+    const menu = await open();
+    await fireEvent.click(within(menu).getByRole('button', { name: /B1/ }));
+    await tick();
+    expect(screen.getByRole('button', { name: /B1/ })).toHaveFocus();
   });
 
   it('choosing a corpus selects it and closes the menu', async () => {
     render(CorpusPicker);
     const menu = await open();
-    await fireEvent.click(within(menu).getByRole('menuitem', { name: /B1/ }));
+    await fireEvent.click(within(menu).getByRole('button', { name: /B1/ }));
     await tick();
     expect(corpusStore.currentId).toBe(3);
-    expect(screen.queryByRole('menu')).toBeNull();
+    expect(document.querySelector('.pop')).toBeNull();
   });
 
   it('Manage projects goes to Projects', async () => {
@@ -104,7 +123,7 @@ describe('CorpusPicker', () => {
     await open();
     await fireEvent.keyDown(document, { key: 'Escape' });
     await tick();
-    expect(screen.queryByRole('menu')).toBeNull();
+    expect(document.querySelector('.pop')).toBeNull();
     expect(screen.getByRole('button')).toHaveFocus();
   });
 
@@ -113,6 +132,6 @@ describe('CorpusPicker', () => {
     await open();
     await fireEvent.pointerDown(document.body);
     await tick();
-    expect(screen.queryByRole('menu')).toBeNull();
+    expect(document.querySelector('.pop')).toBeNull();
   });
 });

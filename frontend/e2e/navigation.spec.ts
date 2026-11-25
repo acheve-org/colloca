@@ -30,7 +30,7 @@ test('the corpus picker switches corpus and the header shows the new name', asyn
   const picker = page.getByRole('group', { name: 'Working in' });
   await expect(picker).toContainText(second);
   await picker.getByRole('button').click();
-  await picker.getByRole('menuitem', { name: first, exact: true }).click();
+  await picker.getByRole('group', { name: /.+/ }).getByRole('button', { name: first, exact: true }).click();
   await expect(picker).toContainText(first);
   await expect(picker).not.toContainText(second);
 });

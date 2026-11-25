@@ -52,6 +52,15 @@
   $effect(() => {
     if (folded.length === 0) open = false;
   });
+
+  // The More popover unmounts when a tab is chosen from it: put focus on the newly active tab instead.
+  let refocus = false;
+  $effect(() => {
+    void route.screen;
+    if (!refocus) return;
+    refocus = false;
+    tick().then(() => strip?.querySelector<HTMLElement>('a[aria-current="page"]')?.focus());
+  });
 </script>
 
 {#if tabs.length >= 2}
@@ -68,6 +77,7 @@
           class="tab"
           class:active={route.screen === tabs[i]}
           href={screenHref(tabs[i])}
+          title={t('nav.' + tabs[i])}
           aria-current={route.screen === tabs[i] ? 'page' : undefined}>{t('nav.' + tabs[i])}</a
         >
       {/each}
@@ -76,7 +86,6 @@
           <button
             type="button"
             class="tab more"
-            aria-haspopup="true"
             aria-expanded={open}
             bind:this={moreBtn}
             onclick={() => (open = !open)}>{t('nav.more')}</button
@@ -87,7 +96,10 @@
                 <a
                   href={screenHref(tabs[i])}
                   aria-current={route.screen === tabs[i] ? 'page' : undefined}
-                  onclick={() => (open = false)}>{t('nav.' + tabs[i])}</a
+                  onclick={() => {
+                    open = false;
+                    refocus = true;
+                  }}>{t('nav.' + tabs[i])}</a
                 >
               {/each}
             </div>
@@ -131,6 +143,12 @@
     border-radius: 0;
     font: inherit;
     cursor: pointer;
+  }
+  /* A lone active tab wider than the row shrinks (the strip itself must not clip the More popover). */
+  .strip > .tab {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .tab:hover {
     color: var(--fg);
