@@ -18,7 +18,7 @@
   import { viewport } from '../viewport.svelte';
   import { sourceRanges, targetIsGuess, targetRanges, termRanges } from '../highlight';
   import DataTable from './DataTable.svelte';
-  import { rowMatchesFilter, type Column } from './DataTable.types';
+  import { foldText, rowHaystack, type Column } from './DataTable.types';
   import Highlight from './Highlight.svelte';
 
   interface Props {
@@ -77,10 +77,13 @@
     ];
   });
 
-  // --- Card list (narrow screens). Same filter as DataTable (rowMatchesFilter).
-  const cardLines = $derived(
-    filter.trim() ? lines.filter((l) => rowMatchesFilter(l, columns, filter)) : lines,
-  );
+  // --- Card list (narrow screens). Same filter as DataTable: the haystack is cached per line.
+  const haystack = $derived(lines.map((l) => rowHaystack(l, columns)));
+  const cardLines = $derived.by(() => {
+    const q = foldText(filter.trim());
+    if (!q) return lines;
+    return lines.filter((_, i) => haystack[i].includes(q));
+  });
   const selKey = $derived(selected ? lineKey(selected) : null);
   const focusKey = $derived(
     selKey !== null && cardLines.some((l) => lineKey(l) === selKey)

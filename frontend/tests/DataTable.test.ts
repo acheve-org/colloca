@@ -357,3 +357,27 @@ describe('rowMatchesFilter', () => {
     expect(rowMatchesFilter(row, plain, 'vital')).toBe(true);
   });
 });
+
+describe('DataTable filter cache', () => {
+  it('does not re-evaluate column values when only the filter text changes', async () => {
+    const word = vi.fn((r: R) => r.word);
+    const cols: Column<R>[] = [
+      { key: 'word', label: 'Word', value: word },
+      { key: 'n', label: 'Count', num: true, value: (r) => r.n },
+    ];
+    const rows = mk(Array.from({ length: 300 }, (_, i) => `w${i}`));
+    const probe = { selected: null, set() {}, setFilter() {}, setRows() {} } as {
+      selected: R | null; set: (r: R | null) => void; setFilter: (f: string) => void; setRows: (r: R[]) => void;
+    };
+    render(Host, { rows, columns: cols, probe });
+    probe.setFilter('w1');
+    await tick();
+    expect(word).toHaveBeenCalled();
+    word.mockClear();
+    probe.setFilter('zzz');
+    await tick();
+    await tick();
+    expect(word).not.toHaveBeenCalled();
+    expect(document.querySelectorAll('.td')).toHaveLength(0);
+  });
+});

@@ -11,7 +11,7 @@
 <script lang="ts" generics="Row">
   import { tick, untrack, type Snippet } from 'svelte';
   import { t, locale } from '../i18n';
-  import { cellValue, rowMatchesFilter, type Column, type SortState } from './DataTable.types';
+  import { cellValue, foldText, rowHaystack, type Column, type SortState } from './DataTable.types';
 
   interface Props {
     columns: Column<Row>[];
@@ -51,9 +51,13 @@
   let wrap: HTMLElement | undefined = $state();
   let headEl: HTMLElement | undefined = $state();
 
+  // Searchable text per row, rebuilt only when rows/columns change: typing in the filter does not re-fold every row.
+  const haystack = $derived(rows.map((r) => rowHaystack(r, columns)));
+
   const view = $derived.by(() => {
+    const q = foldText(filter.trim());
     let idx = rows.map((_, i) => i);
-    if (filter.trim()) idx = idx.filter((i) => rowMatchesFilter(rows[i], columns, filter));
+    if (q) idx = idx.filter((i) => haystack[i].includes(q));
     if (sort) {
       const col = columns.find((c) => c.key === sort!.key);
       if (col) {

@@ -31,9 +31,14 @@ export function foldText(s: string): string {
   return s.normalize('NFD').replace(/\p{M}+/gu, '').toLowerCase();
 }
 
-/** Quick filter: the folded values of all columns, joined, must contain the trimmed filter. An empty filter matches. */
+/** The searchable text of a row: the folded values of all columns, joined. */
+export function rowHaystack<Row>(row: Row, columns: Column<Row>[]): string {
+  return foldText(columns.map((c) => String(cellValue(row, c))).join('\u0001'));
+}
+
+/** Quick filter: the row's haystack must contain the trimmed, folded filter. An empty filter matches. */
 export function rowMatchesFilter<Row>(row: Row, columns: Column<Row>[], filter: string): boolean {
   const q = foldText(filter.trim());
   if (!q) return true;
-  return foldText(columns.map((c) => String(cellValue(row, c))).join('\u0001')).includes(q);
+  return rowHaystack(row, columns).includes(q);
 }
