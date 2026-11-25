@@ -32,6 +32,7 @@
   import { t } from '../lib/i18n';
   import { messages } from '../lib/messages.svelte';
   import { go, route } from '../lib/router.svelte';
+  import { clearScope, scopeActive, scopeChips, scopeView } from '../lib/scope.svelte';
   import { formatKeys, registerShortcut, withKeys } from '../lib/shortcuts.svelte';
   import { openTerm, termStore } from '../lib/term.svelte';
   import type { BilingualResult, ConcLine, ConcordanceResult, DocContext, QueryExplanation } from '../lib/types';
@@ -39,7 +40,7 @@
   import Button from '../lib/ui/Button.svelte';
   import DetailStrip from '../lib/ui/DetailStrip.svelte';
   import DocViewer from '../lib/ui/DocViewer.svelte';
-  import EmptyState from '../lib/ui/EmptyState.svelte';
+  import EmptyCard from '../lib/ui/EmptyCard.svelte';
   import NoCorpus from '../lib/ui/NoCorpus.svelte';
   import ReadyHint from '../lib/ui/ReadyHint.svelte';
   import Field from '../lib/ui/Field.svelte';
@@ -225,6 +226,37 @@
     } finally {
       if (n === seq) loading = false;
     }
+  }
+
+  const lemmaMiss = $derived(result?.params.unit === 'lemma');
+  const noHitReasons = $derived.by(() => {
+    const reasons: string[] = [];
+    if (lemmaMiss) reasons.push(t('empty.reason.lemma'));
+    if (scopeActive()) {
+      const info = scopeView.info;
+      reasons.push(
+        info?.filtered
+          ? t('empty.reason.filter', {
+              chips: scopeChips().map((c) => c.text).join(', '),
+              docs: info.docs,
+              total: info.total_docs,
+            })
+          : t('empty.reason.filterPlain'),
+      );
+    }
+    return reasons;
+  });
+
+  function searchExactForm(): void {
+    if (result) q = result.query;
+    unit = 'form';
+    void search();
+  }
+
+  function clearFilterAndSearch(): void {
+    if (result) q = result.query;
+    clearScope();
+    void search();
   }
 
   function onsubmit(e: SubmitEvent): void {
@@ -429,7 +461,16 @@
 
     <div class="table" bind:this={tableEl}>
       {#if result && !lines.length && !loading}
-        <EmptyState title={t('cc.noHits', { q: result.query })} hint={t('cc.noHitsHint')} />
+        <EmptyCard icon="none" live title={t('cc.noHits', { q: result.query })} hint={t('cc.noHitsHint')} reasons={noHitReasons}>
+          {#snippet actions()}
+            {#if scopeActive()}
+              <Button variant="primary" onclick={clearFilterAndSearch}>{t('empty.search.clear')}</Button>
+            {/if}
+            {#if lemmaMiss}
+              <Button variant={scopeActive() ? 'default' : 'primary'} onclick={searchExactForm}>{t('empty.search.exact')}</Button>
+            {/if}
+          {/snippet}
+        </EmptyCard>
       {:else if result || loading}
         <Kwic
           lines={shown}

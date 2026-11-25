@@ -7,10 +7,11 @@
   import { t } from '../lib/i18n';
   import { messages } from '../lib/messages.svelte';
   import { go } from '../lib/router.svelte';
+  import { clearScope, scopeActive } from '../lib/scope.svelte';
   import { theme } from '../lib/theme.svelte';
   import type { FrequencyRow, KeynessRow } from '../lib/types';
   import Button from '../lib/ui/Button.svelte';
-  import EmptyState from '../lib/ui/EmptyState.svelte';
+  import EmptyCard from '../lib/ui/EmptyCard.svelte';
   import ReadyHint from '../lib/ui/ReadyHint.svelte';
   import Field from '../lib/ui/Field.svelte';
   import Select from '../lib/ui/Select.svelte';
@@ -71,6 +72,11 @@
     });
   }
 
+  function clearAndRedraw(): void {
+    clearScope();
+    run();
+  }
+
   function draw(c: HTMLCanvasElement, list: CloudItem[]): void {
     const ctx = c.getContext('2d');
     if (!ctx) return;
@@ -126,7 +132,13 @@
   {/snippet}
 
   {#if items && !items.length}
-    <EmptyState title={t('ex.cloud.empty')} />
+    <EmptyCard icon="none" title={t('ex.cloud.empty')}>
+      {#snippet actions()}
+        {#if scopeActive()}
+          <Button variant="primary" onclick={clearAndRedraw}>{t('empty.cloud.clear')}</Button>
+        {/if}
+      {/snippet}
+    </EmptyCard>
   {:else if items}
     <div class="cloud" role="img" aria-label={t('ex.cloud.alt')}>
       <canvas bind:this={canvas} width={W} height={H}></canvas>

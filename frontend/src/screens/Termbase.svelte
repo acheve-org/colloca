@@ -23,7 +23,8 @@
   import { cellValue, type Column, type SortState } from '../lib/ui/DataTable.types';
   import DetailStrip from '../lib/ui/DetailStrip.svelte';
   import Dialog from '../lib/ui/Dialog.svelte';
-  import EmptyState from '../lib/ui/EmptyState.svelte';
+  import EmptyCard from '../lib/ui/EmptyCard.svelte';
+  import LinkButton from '../lib/ui/LinkButton.svelte';
   import Field from '../lib/ui/Field.svelte';
   import Select from '../lib/ui/Select.svelte';
   import Toggle from '../lib/ui/Toggle.svelte';
@@ -542,7 +543,12 @@
 
   <div class="table" bind:this={tableEl}>
     {#if loadedOnce && !terms.length && !loading}
-      <EmptyState title={t('tb.empty')} hint={t('tb.emptyHint')} />
+      <EmptyCard icon="book" title={t('tb.empty')} hint={t('tb.emptyHint')}>
+        {#snippet actions()}
+          <Button variant="primary" onclick={() => (importOpen = true)}>{t('empty.tb.import')}</Button>
+          <LinkButton href="#/concordance">{t('empty.tb.concordance')}</LinkButton>
+        {/snippet}
+      </EmptyCard>
     {:else}
       <DataTable
         {columns}

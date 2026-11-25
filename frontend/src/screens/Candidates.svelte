@@ -24,7 +24,8 @@
   import { TERM_SAVED } from '../lib/term.svelte';
   import DataTable from '../lib/ui/DataTable.svelte';
   import { cellValue, type Column } from '../lib/ui/DataTable.types';
-  import EmptyState from '../lib/ui/EmptyState.svelte';
+  import EmptyCard from '../lib/ui/EmptyCard.svelte';
+  import LinkButton from '../lib/ui/LinkButton.svelte';
   import NoCorpus from '../lib/ui/NoCorpus.svelte';
   import ReviewControls from '../lib/ui/ReviewControls.svelte';
   import ReviewStatus from '../lib/ui/ReviewStatus.svelte';
@@ -181,7 +182,11 @@
         />
       </div>
     {:else}
-      <EmptyState title={t('cand.empty')} hint={t('cand.emptyHint')} />
+      <EmptyCard icon="list" title={t('cand.empty')} hint={t('cand.emptyHint')}>
+        {#snippet actions()}
+          <LinkButton href="#/frequency" variant="primary">{t('empty.cand.open')}</LinkButton>
+        {/snippet}
+      </EmptyCard>
     {/if}
     <details class="stop" open={stop.length > 0}>
       <summary>{t('cand.stoplist', { n: stop.length })}</summary>

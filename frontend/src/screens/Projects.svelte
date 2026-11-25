@@ -10,7 +10,7 @@
   import Badge from '../lib/ui/Badge.svelte';
   import Button from '../lib/ui/Button.svelte';
   import Dialog from '../lib/ui/Dialog.svelte';
-  import EmptyState from '../lib/ui/EmptyState.svelte';
+  import EmptyCard from '../lib/ui/EmptyCard.svelte';
   import ReadyHint from '../lib/ui/ReadyHint.svelte';
   import NewCorpusDialog from './NewCorpusDialog.svelte';
 
@@ -313,7 +313,11 @@
           </tbody>
         </table>
       {:else if selected}
-        <EmptyState title={t('proj.noCorpusTitle')} hint={t('proj.noCorpusHint')} />
+        <EmptyCard icon="folder" title={t('proj.noCorpusTitle')} hint={t('proj.noCorpusHint')}>
+          {#snippet actions()}
+            <Button variant="primary" onclick={() => (newOpen = true)}>{t('corpus.new')}</Button>
+          {/snippet}
+        </EmptyCard>
       {:else}
         <p class="muted">{t('corpus.none')}</p>
       {/if}

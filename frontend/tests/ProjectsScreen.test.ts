@@ -95,7 +95,10 @@ describe('Projects screen empty states', () => {
     corpusStore.currentId = null;
     render(Projects);
     await waitFor(() => expect(screen.getByText('Create a corpus')).toBeInTheDocument());
-    expect(screen.getByRole('button', { name: 'New corpus' })).toBeEnabled();
+    // the toolbar button and the card's own button
+    const buttons = screen.getAllByRole('button', { name: 'New corpus' });
+    expect(buttons).toHaveLength(2);
+    for (const b of buttons) expect(b).toBeEnabled();
   });
 });
 
