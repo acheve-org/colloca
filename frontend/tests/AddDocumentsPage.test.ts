@@ -178,6 +178,23 @@ describe('actionFor', () => {
     expect(actionFor('web', 'one')).toMatchObject({ label: 'Add to corpus', enabled: true });
   });
 
+  it('a preview from the other method never enables the primary', () => {
+    draft.preview = { source: 'a.pdf', title: 't', text: 'x', kind: 'file', warnings: [] };
+    expect(actionFor('web', 'one').enabled).toBe(false);
+    draft.preview = { source: 's', title: 't', text: 'x', kind: 'url', warnings: [] };
+    expect(actionFor('up', 'one')).toMatchObject({ label: 'Upload', enabled: false });
+    draft.files = [new File(['x'], 'a.txt')];
+    expect(actionFor('up', 'one')).toMatchObject({ label: 'Upload', enabled: true });
+  });
+
+  it('upload: with a file preview the primary adds it', () => {
+    draft.files = [new File(['x'], 'a.pdf')];
+    draft.preview = { source: 'a.pdf', title: 't', text: 'x', kind: 'file', warnings: [] };
+    expect(actionFor('up', 'one')).toMatchObject({ label: 'Add to corpus', enabled: true });
+    draft.preview.text = '  ';
+    expect(actionFor('up', 'one').enabled).toBe(false);
+  });
+
   it('web: several addresses', () => {
     expect(actionFor('web', 'list')).toMatchObject({ label: 'Add all', enabled: false });
     draft.urlList = '\n  \n';

@@ -1,10 +1,15 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { actionFor, addPreview, addUrlList, importSelected, metaSummary, resetDraft, work, type Method } from '../lib/addDocuments.svelte';
+  import {
+    actionFor, addPaste, addPreview, addUrlList, draft, importSelected, metaSummary, resetDraft, uploadFiles, work,
+    type Method,
+  } from '../lib/addDocuments.svelte';
   import { corpusStore } from '../lib/corpus.svelte';
   import { t } from '../lib/i18n';
   import { go, route } from '../lib/router.svelte';
   import AddFromWeb from '../lib/ui/add/AddFromWeb.svelte';
+  import AddPaste from '../lib/ui/add/AddPaste.svelte';
+  import AddUpload from '../lib/ui/add/AddUpload.svelte';
   import AboutDocuments from '../lib/ui/AboutDocuments.svelte';
   import ActionBar from '../lib/ui/ActionBar.svelte';
   import EmptyState from '../lib/ui/EmptyState.svelte';
@@ -39,12 +44,16 @@
     resetDraft();
     go('sources');
   }
-  // The other methods' submit actions arrive with their forms.
+  // The aligned-texts submit arrives with its form.
   async function submit() {
-    if (m !== 'web') return;
-    const run = sub === 'list' ? addUrlList : sub === 'index' ? importSelected : addPreview;
-    if (await run()) {
-      resetDraft();
+    const run =
+      m === 'web' ? (sub === 'list' ? addUrlList : sub === 'index' ? importSelected : addPreview)
+      : m === 'up' ? (draft.preview?.kind === 'file' ? addPreview : uploadFiles)
+      : m === 'paste' ? addPaste
+      : null;
+    if (run && (await run())) {
+      // The details of the documents and the language override stay for the next batch.
+      resetDraft({ keepMeta: true });
       go('sources');
     }
   }
@@ -69,6 +78,10 @@
         <div class="source" role="tabpanel" id="{uid}-panel" aria-labelledby="{uid}-tab-{m}">
           {#if m === 'web'}
             <div data-method={m} data-sub={sub}><AddFromWeb /></div>
+          {:else if m === 'up'}
+            <div data-method={m} data-sub={sub}><AddUpload /></div>
+          {:else if m === 'paste'}
+            <div data-method={m} data-sub={sub}><AddPaste /></div>
           {:else}
             <div data-method={m} data-sub={sub}></div>
           {/if}

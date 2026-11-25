@@ -1043,4 +1043,7 @@ export const en: Messages = {
   'add.web.one': 'One page',
   'add.web.list': 'Several addresses',
   'add.web.index': 'From an index page',
+  'add.up.drop': 'Drop files here or',
+  'add.up.choose': 'Choose files',
+  'add.paste.placeholder': 'Paste the text here',
 };

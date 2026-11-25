@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/sve
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Sources from '../src/screens/Sources.svelte';
 import { CORPUS_CHANGED, corpusStore } from '../src/lib/corpus.svelte';
-import { jobs, stopAllJobs } from '../src/lib/jobs.svelte';
+import { jobs, stopAllJobs, trackJobs } from '../src/lib/jobs.svelte';
 import { messages } from '../src/lib/messages.svelte';
 import type { Doc, Job } from '../src/lib/types';
 
@@ -131,71 +131,12 @@ describe('Sources', () => {
     expect(within(bodyRows()[0]).getByText('legal')).toBeInTheDocument();
   });
 
-  it('previews one file with the quality of its text before anything is added', async () => {
-    previewFileReply = {
-      source: 'scan.pdf', title: 'scan', text: 'xqzt kjhs wvbn pfrm', warnings: ['The text of this PDF may be unreliable (quality 30/100, poor): garbled. Check the preview before adding it.'],
-      quality: { score: 30, level: 'poor', issues: [{ code: 'garbled', message: 'Many words have no vowels: the text looks garbled.' }] },
-    };
-    await ready();
-    expect(screen.getByRole('button', { name: 'Preview file' })).toBeDisabled();            // nothing chosen yet
-    await fireEvent.change(screen.getByLabelText('Documents to upload'), { target: { files: [new File(['x'], 'scan.pdf')] } });
-    await fireEvent.click(screen.getByRole('button', { name: 'Preview file' }));
-    expect(await screen.findByText('Text quality: poor')).toBeInTheDocument();
-    expect(screen.getByText('30 / 100')).toBeInTheDocument();
-    expect(screen.getByText('Many words have no vowels: the text looks garbled.')).toBeInTheDocument();
-    expect(screen.getByRole('alert')).toHaveTextContent('Text quality: poor');
-    const c = calls.find((x) => x.path === '/api/preview-file')!;
-    expect(c.params.get('corpus_id')).toBe('1');
-    expect((c.body as FormData).get('file')).toBeInstanceOf(File);
-    expect(calls.some((x) => x.path === '/api/corpora/1/documents' && x.method === 'POST')).toBe(false);   // nothing added
-    // the text can be trimmed, then added as a file document
-    await fireEvent.input(screen.getByLabelText('Text of the page'), { target: { value: 'texto limpio' } });
-    await fireEvent.click(screen.getByRole('button', { name: 'Add to corpus' }));
-    await waitFor(() => expect(calls.some((x) => x.path === '/api/corpora/1/documents' && x.method === 'POST')).toBe(true));
-    const add = calls.find((x) => x.path === '/api/corpora/1/documents' && x.method === 'POST')!;
-    expect(add.body).toMatchObject({ title: 'scan', text: 'texto limpio', source: 'scan.pdf', kind: 'file' });
-  });
-
-  it('a good text shows the quality without raising an alert; preview needs exactly one file', async () => {
-    previewFileReply = { source: 'two.pdf', title: 'two', text: 'Una columna', warnings: [], quality: { score: 96, level: 'good', issues: [] } };
-    await ready();
-    const input = screen.getByLabelText('Documents to upload');
-    await fireEvent.change(input, { target: { files: [new File(['x'], 'a.pdf'), new File(['y'], 'b.pdf')] } });
-    expect(screen.getByRole('button', { name: 'Preview file' })).toBeDisabled();
-    await fireEvent.change(input, { target: { files: [new File(['x'], 'two.pdf')] } });
-    await fireEvent.click(screen.getByRole('button', { name: 'Preview file' }));
-    expect(await screen.findByText('Text quality: good')).toBeInTheDocument();
-    expect(screen.queryByRole('alert')).toBeNull();
-  });
-
-  it('uploading two files calls /upload once with both and then starts job polling', async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    await ready();
-    const before = jobCalls().length;
-    jobList = [[job(7, 'running'), job(8, 'queued')], [job(7, 'done'), job(8, 'done')]];
-    const a = new File(['hola'], 'a.txt', { type: 'text/plain' });
-    const b = new File(['x'], 'b.docx');
-    await fireEvent.change(screen.getByLabelText('Documents to upload'), { target: { files: [a, b] } });
-    await fireEvent.click(screen.getByRole('button', { name: 'Upload' }));
-    await waitFor(() => expect(jobCalls().length).toBe(before + 1));
-    const ups = calls.filter((c) => c.path === '/api/corpora/1/upload');
-    expect(ups.length).toBe(1);
-    const fd = ups[0].body as FormData;
-    expect(fd.getAll('files').map((f) => (f as File).name)).toEqual(['a.txt', 'b.docx']);
-    expect(messages.current).toEqual({ text: '2 queued.', kind: 'ok' });
-    await waitFor(() => expect(jobs.running).toBe(2));
-    const docsBefore = docCalls().length;
-    await vi.advanceTimersByTimeAsync(1000);
-    await waitFor(() => expect(docCalls().length).toBe(docsBefore + 1));
-    expect(jobs.running).toBe(0);
-  });
-
   it('a job keeps being followed after the screen unmounts; the store reloads once when it ends', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const r = await ready();
+    // a job started elsewhere (the Add documents page): the list follows it by the app-wide watcher
     jobList = [[job(7, 'running')], [job(7, 'running')], [job(7, 'done')]];
-    await fireEvent.change(screen.getByLabelText('Documents to upload'), { target: { files: [new File(['x'], 'a.txt')] } });
-    await fireEvent.click(screen.getByRole('button', { name: 'Upload' }));
+    trackJobs(1, true);
     await waitFor(() => expect(jobs.running).toBe(1));
     r.unmount();
     const before = jobCalls().length;
@@ -208,22 +149,6 @@ describe('Sources', () => {
     await waitFor(() => expect(calls.some((c) => c.path === '/api/corpora/1/parallel')).toBe(true));
     await vi.advanceTimersByTimeAsync(3000);
     expect(calls.filter((c) => c.path === '/api/corpora').length).toBe(1);
-  });
-
-  it('a failing upload shows the server detail message', async () => {
-    await ready();
-    uploadReply = { status: 413, body: { detail: 'Too many files in one upload (limit 50)' } };
-    await fireEvent.change(screen.getByLabelText('Documents to upload'), { target: { files: [new File(['x'], 'a.txt')] } });
-    await fireEvent.click(screen.getByRole('button', { name: 'Upload' }));
-    await waitFor(() => expect(messages.current).toEqual({ text: 'Too many files in one upload (limit 50)', kind: 'err' }));
-  });
-
-  it('reports files the server rejected', async () => {
-    await ready();
-    uploadReply = { status: 202, body: [{ file: 'a.txt', ok: true, job_id: 7 }, { file: 'big.pdf', ok: false, error: 'File is larger than 25 MB' }] };
-    await fireEvent.change(screen.getByLabelText('Documents to upload'), { target: { files: [new File(['x'], 'a.txt')] } });
-    await fireEvent.click(screen.getByRole('button', { name: 'Upload' }));
-    await waitFor(() => expect(messages.current).toEqual({ text: '1 queued; rejected: big.pdf (File is larger than 25 MB)', kind: 'err' }));
   });
 
   it('imports aligned pairs into the chosen partner corpus with the metadata', async () => {
@@ -263,16 +188,6 @@ describe('Sources', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Import' }));
     await waitFor(() => expect(calls.some((c) => c.path === '/api/corpora/1/upload-pairs')).toBe(true));
     expect(calls.find((x) => x.path === '/api/corpora/1/upload-pairs')!.params.get('partner_lang')).toBe('fr');
-  });
-
-  it('pastes text with a default title', async () => {
-    await ready();
-    await fireEvent.input(screen.getByLabelText('Pasted text'), { target: { value: 'hola mundo' } });
-    await fireEvent.click(screen.getByRole('button', { name: 'Add text' }));
-    await waitFor(() => expect(calls.some((c) => c.method === 'POST' && c.path === '/api/corpora/1/documents')).toBe(true));
-    expect(calls.find((c) => c.method === 'POST' && c.path === '/api/corpora/1/documents')!.body).toMatchObject({
-      title: 'Pasted text', text: 'hola mundo', kind: 'paste',
-    });
   });
 
   it('deleting a document asks for confirmation', async () => {
@@ -392,10 +307,8 @@ describe('Sources', () => {
     });
 
     it('shows what overlaps in a held import and sends the decision', async () => {
+      jobList = [[held]];   // the job log of the list shows the held import found on load
       await ready();
-      jobList = [[held]];
-      await fireEvent.change(screen.getByLabelText('Documents to upload'), { target: { files: [new File(['x'], 'v2.txt')] } });
-      await fireEvent.click(screen.getByRole('button', { name: 'Upload' }));
       expect(await screen.findByText('“Contract v1” — 93% alike')).toBeInTheDocument();
       expect(screen.getByText('11 of 12 paragraphs also appear there.')).toBeInTheDocument();
       expect(screen.getByText('A new clause replaces the old one.')).toBeInTheDocument();

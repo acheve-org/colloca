@@ -66,6 +66,56 @@ describe('draft', () => {
     expect(draft.preview).toBeNull();
   });
 
+  it('resetDraft({ keepMeta }) clears the source inputs but keeps the details and the language override', () => {
+    draft.meta.tags = 'x';
+    draft.meta.author = 'Ana';
+    draft.force = true;
+    draft.url = 'u';
+    draft.urlList = 'l';
+    draft.catalogUrl = 'c';
+    draft.picked.add('a');
+    draft.pasteText = 'hi';
+    draft.pasteTitle = 'T';
+    draft.textColumns = '2';
+    draft.files = [new File(['a'], 'a.txt')];
+    draft.preview = { source: 's', title: 't', text: 'x', kind: 'file', warnings: [] };
+    const clear = vi.fn();
+    draft.onClear('files', clear);
+    resetDraft({ keepMeta: true });
+    expect(draft.meta).toEqual({ tags: 'x', text_type: '', doc_date: '', author: 'Ana' });
+    expect(draft.force).toBe(true);
+    expect(draft.url).toBe('');
+    expect(draft.urlList).toBe('');
+    expect(draft.catalogUrl).toBe('');
+    expect(draft.picked.size).toBe(0);
+    expect(draft.pasteText).toBe('');
+    expect(draft.pasteTitle).toBe('');
+    expect(draft.textColumns).toBe('');
+    expect(draft.files).toEqual([]);
+    expect(draft.preview).toBeNull();
+    expect(clear).toHaveBeenCalledTimes(1);
+  });
+
+  it('the file input clear callbacks are registered and removed per key', () => {
+    const files = vi.fn();
+    const pair = vi.fn();
+    const offFiles = draft.onClear('files', files);
+    const offPair = draft.onClear('pair', pair);
+    offFiles();
+    resetDraft();
+    expect(files).not.toHaveBeenCalled();
+    expect(pair).toHaveBeenCalledTimes(1);
+    offPair();
+    // a stale unregister does not remove a newer registration of the same key
+    const newer = vi.fn();
+    const stale = draft.onClear('files', files);
+    draft.onClear('files', newer);
+    stale();
+    resetDraft();
+    expect(newer).toHaveBeenCalledTimes(1);
+    expect(files).not.toHaveBeenCalled();
+  });
+
   it('metaSummary joins the filled pieces', () => {
     draft.meta.tags = ' wind ';
     draft.meta.text_type = 'news';

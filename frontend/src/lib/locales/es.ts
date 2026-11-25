@@ -1042,4 +1042,7 @@ export const es: Messages = {
   'add.web.one': 'Una página',
   'add.web.list': 'Varias direcciones',
   'add.web.index': 'Desde una página índice',
+  'add.up.drop': 'Suelta los archivos aquí o',
+  'add.up.choose': 'Elegir archivos',
+  'add.paste.placeholder': 'Pega aquí el texto',
 };

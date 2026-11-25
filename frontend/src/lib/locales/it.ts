@@ -1042,4 +1042,7 @@ export const it: Messages = {
   'add.web.one': 'Una pagina',
   'add.web.list': 'Più indirizzi',
   'add.web.index': 'Da una pagina indice',
+  'add.up.drop': 'Trascina qui i file oppure',
+  'add.up.choose': 'Scegli i file',
+  'add.paste.placeholder': 'Incolla qui il testo',
 };

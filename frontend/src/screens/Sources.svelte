@@ -1,19 +1,17 @@
 <script module lang="ts">
   type EditForm = Meta & { title: string };
 
-  const UPLOAD_ACCEPT = '.docx,.pdf,.odt,.rtf,.xlsx,.csv,.tsv,.xlf,.xliff,.srt,.vtt,.txt,.md,.html,.htm';
   const PAIRS_ACCEPT = '.tmx,.xlf,.xliff,.tsv,.csv,.docx';
   const LANG_BADGE: Record<string, string> = { mismatch: 'src.check.mismatch', uncertain: 'src.check.uncertain' };
 
   const emptyFacets = () => ({ tags: [], text_types: [], date_min: '', date_max: '' });
-  const countWords = (s: string) => s.split(/\s+/).filter(Boolean).length;
 </script>
 
 <script lang="ts">
   import { onMount, tick, untrack } from 'svelte';
   import { del, get, patch, post } from '../lib/api';
   import {
-    act, addPaste, addPreview, draft, metaSummary, previewFile, still, uploadFiles, uploadPairs, watch, work,
+    act, draft, metaSummary, still, uploadPairs, watch, work,
     type Meta,
   } from '../lib/addDocuments.svelte';
   import { CORPUS_CHANGED, corpusStore } from '../lib/corpus.svelte';
@@ -61,10 +59,7 @@
   let setName = $state('');
   let setProject = $state('');
 
-  const previewWords = $derived(draft.preview ? countWords(draft.preview.text) : 0);
-
-  // Upload card
-  let fileInput: HTMLInputElement | undefined = $state();
+  // Aligned pairs
   let pairInput: HTMLInputElement | undefined = $state();
   // A new partner corpus needs its language when more than one other language is set up.
   let langs = $state.raw<Languages>({});
@@ -257,10 +252,7 @@
   });
 
   onMount(() => {
-    draft.clearInputs = {
-      files: () => fileInput && (fileInput.value = ''),
-      pair: () => pairInput && (pairInput.value = ''),
-    };
+    const offPair = draft.onClear('pair', () => pairInput && (pairInput.value = ''));
     window.addEventListener(CORPUS_CHANGED, onCorpusChanged);
     window.addEventListener(JOBS_DONE, onJobsDone);
     reloadProjects().catch((err) => messages.say(errMsg(err), 'err'));
@@ -270,7 +262,7 @@
     return () => {
       window.removeEventListener(CORPUS_CHANGED, onCorpusChanged);
       window.removeEventListener(JOBS_DONE, onJobsDone);
-      draft.clearInputs = {};
+      offPair();
       seq++;
     };
   });
@@ -478,27 +470,8 @@
       {/if}
 
       <div class="cards">
-        <section class="card" aria-labelledby="{uid}-up">
-          <h3 id="{uid}-up">{t('src.upload.title')}</h3>
-          <input
-            bind:this={fileInput}
-            type="file"
-            multiple
-            accept={UPLOAD_ACCEPT}
-            aria-label={t('src.upload.files')}
-            onchange={(e) => (draft.files = [...(e.currentTarget.files ?? [])])}
-          />
-          <label class="field">
-            {t('src.upload.columns')}
-            <input type="text" bind:value={draft.textColumns} placeholder={t('src.upload.columnsHint')} />
-          </label>
-          <div class="row">
-            <span class="hint grow">{t('src.upload.hint')}</span>
-            <Button disabled={work.busy !== null || draft.files.length !== 1} title={t('src.preview.fileHint')} onclick={previewFile}>{t('src.preview.file')}</Button>
-            <Button variant="primary" disabled={work.busy !== null} onclick={uploadFiles}>{t('src.upload.go')}</Button>
-          </div>
-
-          <h3 class="sub">{t('src.pair.title')}</h3>
+        <section class="card">
+          <h3>{t('src.pair.title')}</h3>
           <input
             bind:this={pairInput}
             type="file"
@@ -525,50 +498,7 @@
 
         <AlignDocuments />
         <TmxExport />
-
-        <section class="card" aria-labelledby="{uid}-paste">
-          <h3 id="{uid}-paste">{t('src.paste.title')}</h3>
-          <input bind:value={draft.pasteTitle} placeholder={t('src.paste.titlePlaceholder')} aria-label={t('src.paste.titleLabel')} />
-          <textarea rows="6" bind:value={draft.pasteText} aria-label={t('src.paste.text')}></textarea>
-          <div class="row">
-            <span class="grow"></span>
-            <Button disabled={work.busy !== null} onclick={addPaste}>{t('src.paste.go')}</Button>
-          </div>
-        </section>
       </div>
-
-      {#if draft.preview?.kind === 'file'}
-        <section class="card preview" aria-labelledby="{uid}-pv">
-          <h3 id="{uid}-pv">{t('src.preview.title')}: {draft.preview.source}</h3>
-          {#if draft.preview.quality}
-            <p class="quality" role={draft.preview.quality.level === 'good' ? undefined : 'alert'}>
-              <Badge
-                kind={draft.preview.quality.level === 'good' ? 'approved' : draft.preview.quality.level === 'fair' ? 'candidate' : 'forbidden'}
-                label={t(`src.quality.${draft.preview.quality.level}`)}
-              />
-              {t('src.quality.score', { n: draft.preview.quality.score })}
-            </p>
-            {#if draft.preview.quality.issues.length}
-              <ul class="issues">
-                {#each draft.preview.quality.issues as i (i.code)}<li>{i.message}</li>{/each}
-              </ul>
-            {/if}
-          {/if}
-          {#each draft.preview.warnings.filter((w) => !draft.preview?.quality || !w.includes('may be unreliable')) as w (w)}<p class="hint">{w}</p>{/each}
-          <Field label={t('src.url.pvTitle')}>
-            <input bind:value={draft.preview.title} />
-          </Field>
-          <Field label={t('src.url.pvText')}>
-            <textarea rows="10" bind:value={draft.preview.text}></textarea>
-          </Field>
-          <div class="row">
-            <span class="muted grow">{previewWords === 1 ? t('src.word1') : t('src.words', { n: fmt(previewWords) })}</span>
-            <Button onclick={() => (draft.preview = null)}>{t('src.url.discard')}</Button>
-            <Button variant="primary" disabled={work.busy !== null || !draft.preview.text.trim()} onclick={addPreview}>{t('src.url.add')}</Button>
-          </div>
-          <p class="hint">{t('src.url.hint')}</p>
-        </section>
-      {/if}
     </div>
 
     <div class="strip">
@@ -853,33 +783,10 @@
   .card :global(.field) {
     display: flex;
   }
-  .card.preview {
-    margin: 0 var(--s-3) var(--s-3);
-  }
-  .quality {
-    display: flex;
-    align-items: center;
-    gap: var(--s-2);
-    margin: 0;
-  }
-  .issues {
-    margin: 0;
-    padding-left: 1.2rem;
-    color: var(--muted);
-    font-size: var(--fs-small);
-  }
-  .card .sub {
-    margin-top: var(--s-2);
-    padding-top: var(--s-2);
-    border-top: 1px solid var(--line);
-  }
   .card input[type='file'] {
     height: auto;
     padding: var(--s-1);
     max-width: 100%;
-  }
-  textarea {
-    width: 100%;
   }
   .strip {
     display: flex;

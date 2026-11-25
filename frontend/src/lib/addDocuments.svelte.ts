@@ -63,11 +63,26 @@ class AddDraft {
   /** Whether more than one other language is set up, so a new partner needs its language. Set by the pairs form. */
   multiLang = false;
   /** File inputs register how to empty themselves, so an action can clear them after a submit. */
-  clearInputs: { files?: () => void; pair?: () => void } = {};
+  #clears: Partial<Record<'files' | 'pair', () => void>> = {};
 
-  reset(): void {
-    this.meta = emptyMeta();
-    this.force = false;
+  /** Registers how the input for `key` empties itself; the returned function unregisters it (only if it is still the current one). */
+  onClear(key: 'files' | 'pair', fn: () => void): () => void {
+    this.#clears[key] = fn;
+    return () => {
+      if (this.#clears[key] === fn) delete this.#clears[key];
+    };
+  }
+
+  clearInput(key: 'files' | 'pair'): void {
+    this.#clears[key]?.();
+  }
+
+  /** Clears the source inputs; with `keepMeta` the details of the documents and the language override stay. */
+  reset(keepMeta = false): void {
+    if (!keepMeta) {
+      this.meta = emptyMeta();
+      this.force = false;
+    }
     this.textColumns = '';
     this.url = '';
     this.urlList = '';
@@ -86,13 +101,14 @@ class AddDraft {
     this.pasteTitle = '';
     this.pasteText = '';
     this.partnerPicked = false;
-    this.clearInputs.files?.();
-    this.clearInputs.pair?.();
+    this.clearInput('files');
+    this.clearInput('pair');
   }
 }
 
 export const draft = new AddDraft();
-export const resetDraft = (): void => draft.reset();
+/** Clears everything, or with `keepMeta` only the source inputs (what a successful submit does). */
+export const resetDraft = (opts: { keepMeta?: boolean } = {}): void => draft.reset(opts.keepMeta);
 
 /** What is being sent; the matching buttons are disabled meanwhile. */
 export const work = $state<{ busy: string | null }>({ busy: null });
@@ -180,8 +196,12 @@ export function actionFor(m: Method, sub: string): { label: string; enabled: boo
     what = found ? t('add.what.selected', { n, total: visibleLinks().length }) : t('add.what.findLinks');
   } else if (m === 'web') {
     label = t('src.url.add');
-    enabled = draft.preview !== null;
+    enabled = draft.preview?.kind === 'url';
     what = enabled ? t('add.what.page') : t('add.what.fetchFirst');
+  } else if (m === 'up' && draft.preview?.kind === 'file') {
+    label = t('src.url.add');
+    enabled = draft.preview.text.trim() !== '';
+    what = t('add.what.page');
   } else if (m === 'up') {
     const n = draft.files.length;
     label = t('src.upload.go');
@@ -337,7 +357,7 @@ export const uploadFiles = () =>
     });
     if (!still(id)) return false;
     draft.files = [];
-    draft.clearInputs.files?.();
+    draft.clearInput('files');
     reportUpload(res);
     watch(true);
     return true;
@@ -371,7 +391,7 @@ export const uploadPairs = () =>
     draft.pairName = '';
     draft.partnerPicked = false; // back to the first option, which may be the corpus just created
     draft.partner = '';
-    draft.clearInputs.pair?.();
+    draft.clearInput('pair');
     const bad = res.filter((r) => !r.ok);
     if (bad.length) messages.say(t('src.pair.rejected', { error: bad[0].error ?? '' }), 'err');
     else messages.say(t('src.queuedProgress'), 'ok');
