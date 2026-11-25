@@ -1,11 +1,12 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { corpusStore } from '../corpus.svelte';
   import { t } from '../i18n';
   import { route } from '../router.svelte';
   import {
     clearScope,
     clearScopePart,
+    loadScope,
     refreshScope,
     refreshScopeSoon,
     scopeActive,
@@ -23,6 +24,7 @@
   const scope = $derived(corpusStore.scope);
   let open = $state(false);
   let trigger = $state<HTMLButtonElement | null>(null);
+  let tagsInput = $state<HTMLInputElement | null>(null);
 
   const active = $derived(scopeActive());
   const chips = $derived(scopeChips());
@@ -42,6 +44,14 @@
       ? [{ value: scope.type, label: scope.type }]
       : []),
   ]);
+
+  async function toggle() {
+    open = !open;
+    if (!open) return;
+    void loadScope(); // an import may have finished since the last load; keeps the current summary meanwhile
+    await tick();
+    tagsInput?.focus();
+  }
 
   function done() {
     open = false;
@@ -70,9 +80,10 @@
       class="pill"
       class:on={filtered}
       class:muted={!ready}
+      aria-label={t('scope.label') + ': ' + pillText}
       aria-expanded={open}
       bind:this={trigger}
-      onclick={() => (open = !open)}
+      onclick={toggle}
     >
       <span>{pillText}</span>
       <span aria-hidden="true">▾</span>
@@ -84,6 +95,7 @@
         <div class="fields">
           <Field label={t('filter.tags')}>
             <input
+              bind:this={tagsInput}
               bind:value={scope.tags}
               list="{uid}-tags"
               placeholder={t('filter.tagsPlaceholder')}
@@ -143,6 +155,11 @@
   }
   .pill.muted {
     color: var(--muted);
+  }
+  @media (max-width: 600px) {
+    .scope {
+      flex: 1 1 100%;
+    }
   }
   .chip {
     display: inline-flex;

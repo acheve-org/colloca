@@ -55,6 +55,33 @@ const type = async (label: string, value: string) => {
 };
 
 describe('ScopeControl', () => {
+  it('focuses the Tags field right after the pill is clicked and keeps the panel open', async () => {
+    render(ScopeControl);
+    await fireEvent.click(pill());
+    await waitFor(() => expect(screen.getByLabelText('Tags')).toHaveFocus());
+    expect(screen.getByRole('group', { name: 'Scope: which documents?' })).toBeInTheDocument();
+    expect(pill()).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('reloads facets and the summary when the panel opens', async () => {
+    render(ScopeControl);
+    await waitFor(() => expect(pill().className).not.toMatch(/muted/));
+    calls.length = 0;
+    await openPanel();
+    await waitFor(() => {
+      expect(calls.some((c) => c.includes('/facets'))).toBe(true);
+      expect(calls.some((c) => c.includes('/scope'))).toBe(true);
+    });
+  });
+
+  it('gives the pill a Document filter accessible name', async () => {
+    render(ScopeControl);
+    expect(pill()).toHaveAccessibleName('Document filter: All documents');
+    await openPanel();
+    await type('Tags', 'wind');
+    await waitFor(() => expect(pill()).toHaveAccessibleName('Document filter: 5 of 12 documents'));
+  });
+
   it('reads All documents, muted, before the first summary, with no chips', async () => {
     replies['/api/corpora/1/scope'] = () => new Promise(() => {}) as never;
     render(ScopeControl);

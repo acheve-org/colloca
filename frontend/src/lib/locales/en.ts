@@ -6,6 +6,7 @@ export const en: Messages = {
   'corpus.none': 'No corpus yet',
   'corpus.working': 'Working…',
   'corpus.selectFirst': 'Create or select a corpus first.',
+  'scope.label': 'Document filter',
   'scope.all': 'All documents',
   'scope.summary': '{docs} of {total} documents',
   'scope.clear': 'Clear filters',

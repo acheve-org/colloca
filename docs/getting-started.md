@@ -60,7 +60,7 @@ Screen details: [analysis.md](analysis.md).
   | Author | free |
 
   Set before adding (*About these documents* on the *Add documents* page; applies to URL, upload, pasted text and translation-memory imports, not to *Align two documents*) or later with *Edit details* on *Sources*.
-- **Document filter**: the *All documents* pill in the page header (next to the corpus picker) on every analysis screen, *Segment lookup* and the Job screen. It reads *N of M documents* when active; each active part also shows as a chip with a remove button. The pill opens a panel with *Tags*, *Type*, *From*, *To*, the summary, *Clear* and *Done* (*Esc* or a click outside closes it).
+- **Document filter**: the *All documents* pill in the page header (next to the corpus picker) on every analysis screen, *Segment lookup* (aligned corpora) and the Job screen. It reads *N of M documents* when active; each active part also shows as a chip with a remove button. The pill opens a panel with *Tags*, *Type*, *From*, *To*, the summary, *Clear* (when a filter is active) and *Done* (*Esc* or a click outside closes it).
   - It persists when you move between screens and resets when you switch corpus. Changing it does not re-run a search: search again.
   - Criteria: all given tags, a text type, a date range.
   - Everything is recomputed on the subset: sizes behind *per million*, *Docs %*, collocation statistics, keyness. The reference corpus stays whole.

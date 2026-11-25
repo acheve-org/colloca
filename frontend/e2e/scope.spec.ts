@@ -22,7 +22,7 @@ test('Scope: pill, chip and panel in the page header', async ({ page }) => {
   }
 
   await openScreen(page, 'Concordance');
-  const pill = page.getByRole('button', { name: /^(All documents|\d+ of \d+ documents)/ });
+  const pill = page.getByRole('button', { name: /^Document filter: (All documents|\d+ of \d+ documents)/ });
   await expect(pill).toHaveText(/All documents/);
 
   await pill.click();
@@ -63,5 +63,5 @@ test('Scope: pill, chip and panel in the page header', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/#/termbase');
   await expect(page.getByRole('heading', { level: 1, name: 'Termbase' })).toBeVisible();
-  await expect(page.getByRole('button', { name: /^(All documents|\d+ of \d+ documents)/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /^Document filter: (All documents|\d+ of \d+ documents)/ })).toHaveCount(0);
 });
