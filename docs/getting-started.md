@@ -19,7 +19,7 @@ docker compose up
 
 ## Workflow
 
-1. **Project and corpus** (*Projects*): create a **project** for the client or job, then *New corpus* (name + language, e.g. es, it) inside it. Every working corpus belongs to a project. On first run the empty screens lead you through Languages → Projects → Sources.
+1. **Project and corpus** (*Projects*): create a **project** for the client or job, then *New corpus* (name + language, e.g. es, it) inside it. Every working corpus belongs to a project. On first run, every screen shows a three-step checklist (add a language, start a project, create a corpus) with a button for the current step, until all three exist.
 2. **Add documents** (*Sources* > *+ Add documents*). *Sources* lists the corpus's documents; *+ Add documents* (also the four tiles on an empty corpus) opens the *Add documents* page. Choose a method in its tabs:
 
    | Method | Behaviour |

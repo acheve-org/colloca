@@ -29,7 +29,7 @@ export async function newProject(page: Page, prefix = 'Project'): Promise<string
  */
 export async function newCorpus(page: Page, name: string, lang?: string, project?: string): Promise<string> {
   const proj = project ?? (await newProject(page));
-  await page.getByRole('button', { name: 'New corpus' }).click();
+  await page.getByRole('button', { name: 'New corpus' }).first().click(); // a project without corpora also shows the guided card's button
   const dialog = page.getByRole('dialog', { name: 'New corpus' });
   await dialog.getByLabel('Name').fill(name);
   if (lang) await dialog.getByLabel('Language').selectOption(lang);
