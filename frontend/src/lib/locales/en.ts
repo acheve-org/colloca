@@ -108,7 +108,7 @@ export const en: Messages = {
   'ctx.working': 'Working in',
   'ctx.change': 'Change',
   'ctx.noProject': 'No project',
-  'ctx.noCorpus': 'No corpus selected',
+  'ctx.noCorpus': 'No corpus selected',  'ctx.manage': 'Manage projects…',
   'nav.group.corpus': 'Corpus',
   'nav.group.explore': 'Explore',
   'nav.group.terms': 'Terms',
