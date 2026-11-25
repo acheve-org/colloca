@@ -104,3 +104,28 @@ describe('router', () => {
     });
   });
 });
+
+describe('areaHref', () => {
+  beforeEach(() => {
+    location.hash = '';
+  });
+
+  it('returns the last screen of the area', async () => {
+    const { go, areaHref } = await load();
+    go('keyness');
+    go('termbase');
+    expect(areaHref('explore')).toBe('#/keyness');
+  });
+
+  it('keeps the last params of that screen', async () => {
+    const { go, areaHref } = await load();
+    go('concordance', { q: 'x' });
+    expect(areaHref('explore')).toBe('#/concordance?q=x');
+  });
+
+  it('starts as the first tab of an unvisited area', async () => {
+    const { areaHref } = await load();
+    expect(areaHref('settings')).toBe('#/languages');
+    expect(areaHref('job')).toBe('#/job');
+  });
+});
