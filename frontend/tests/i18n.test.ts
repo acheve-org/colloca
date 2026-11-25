@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/svelte';
+import { fireEvent, render, screen } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Rail from '../src/lib/ui/Rail.svelte';
@@ -13,7 +13,7 @@ const placeholders = (s: string) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1
 
 // Values that are legitimately the same as the English ones: product and format names, statistics, cognates, symbols.
 const SAME = new Set([
-  'app.name', 'theme.auto', 'nav.group.corpus', 'trash.corpus', 'shortcuts.global', 'filter.docs',
+  'app.name', 'theme.auto', 'nav.menu', 'nav.group.corpus', 'trash.corpus', 'shortcuts.global', 'filter.docs',
   'ex.col.docs', 'ex.col.logdice', 'ex.col.tscore', 'ex.col.logRatio', 'ex.col.dice', 'term.langs', 'imp.langs',
   'cand.measure', 'cc.csv', 'tb.csv', 'tb.tbx', 'tb.xlsx', 'job.csv', 'job.csvOf', 'job.glossary.csv', 'job.glossary.tbx',
   'job.glossary.xlsx', 'base.leipzig', 'proj.corpora1', 'bk.k.corpora', 'trash.corpora', 'proj.corpora', 'cc.unit.lemma',
@@ -56,24 +56,23 @@ describe('language switch', () => {
 
   it('re-renders already mounted screens without remounting them', async () => {
     render(Rail);
-    expect(screen.getByRole('link', { name: 'Sources' })).toBeInTheDocument();
-    const link = screen.getByRole('link', { name: 'Sources' });
+    const link = screen.getByRole('link', { name: 'Explore' });
     setLang('es');
     await tick();
-    expect(screen.getByRole('link', { name: 'Fuentes' })).toBe(link);
+    expect(screen.getByRole('link', { name: 'Explorar' })).toBe(link);
     setLang('it');
     await tick();
-    expect(screen.getByRole('link', { name: 'Fonti' })).toBe(link);
+    expect(screen.getByRole('link', { name: 'Esplora' })).toBe(link);
   });
 
-  it('is offered in the rail, names each language in itself, and marks the current one', async () => {
+  it('is offered in the rail menu, names each language in itself, and marks the current one', async () => {
     render(Rail);
+    await fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
     const group = screen.getByRole('group', { name: 'Language' });
     expect(group.querySelectorAll('button')).toHaveLength(LANGS.length);
     const spanish = screen.getByRole('button', { name: 'Español' });
     expect(spanish).toHaveAttribute('aria-pressed', 'false');
-    spanish.click();
-    await tick();
+    await fireEvent.click(spanish);
     expect(spanish).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('group', { name: 'Idioma' })).toBeInTheDocument();
   });

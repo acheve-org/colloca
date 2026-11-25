@@ -23,7 +23,7 @@ export const AREAS: readonly Area[] = [
   },
   { id: 'terms', label: 'nav.group.terms', tabs: ['termbase', 'candidates', 'check'] },
   { id: 'job', label: 'nav.group.job', tabs: ['job'] },
-  { id: 'settings', label: 'nav.group.setup', tabs: ['languages', 'projects', 'trash'], bottom: true },
+  { id: 'settings', label: 'nav.group.settings', tabs: ['languages', 'projects', 'trash'], bottom: true },
 ];
 
 /** Screens shown only when the current corpus is aligned. */
