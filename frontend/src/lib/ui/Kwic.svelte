@@ -121,11 +121,16 @@
 
   function onlistkeydown(e: KeyboardEvent) {
     if (e.ctrlKey || e.altKey || e.metaKey) return;
-    const cur = selKey === null ? -1 : cardLines.findIndex((l) => lineKey(l) === selKey);
+    // The current card is the focused one, else the selected one.
+    const focusedKey = (e.target as HTMLElement | null)?.closest<HTMLElement>('[role="option"]')?.dataset.key;
+    const curKey = focusedKey ?? selKey;
+    const cur = curKey == null ? -1 : cardLines.findIndex((l) => lineKey(l) === curKey);
     if (e.key === 'ArrowDown') moveTo(cur + 1);
     else if (e.key === 'ArrowUp') moveTo(cur < 0 ? cardLines.length - 1 : cur - 1);
-    else if (e.key === 'Enter' && cur >= 0) onactivate?.(cardLines[cur]);
-    else return;
+    else if (e.key === 'Enter' && cur >= 0) {
+      if (lineKey(cardLines[cur]) !== selKey) choose(cardLines[cur]);
+      onactivate?.(cardLines[cur]);
+    } else return;
     e.preventDefault();
   }
 </script>
@@ -260,6 +265,7 @@
   .card.selected {
     background: var(--accent-soft);
     border-color: var(--accent);
+    box-shadow: inset 4px 0 0 var(--accent); /* left-edge bar like the table: not colour-only */
   }
   .card-text {
     overflow-wrap: anywhere;

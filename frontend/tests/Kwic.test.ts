@@ -266,6 +266,27 @@ describe('Kwic cards (narrow)', () => {
     expect(cards()[0]).toHaveAttribute('aria-selected', 'true');
   });
 
+  it('Enter on a focused, unselected card selects and activates that card', async () => {
+    narrow();
+    const onactivate = vi.fn();
+    const lines = [line(1), line(2), line(3)];
+    render(Kwic, { lines, mode: 'kwic', query: 'casa', selected: null, onactivate });
+    cards()[1].focus();
+    await fireEvent.keyDown(cards()[1], { key: 'Enter' });
+    expect(onactivate).toHaveBeenCalledWith(lines[1]);
+    expect(cards()[1]).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('ArrowDown from a focused unselected card moves to the next card', async () => {
+    narrow();
+    const onselect = vi.fn();
+    const lines = [line(1), line(2), line(3)];
+    render(Kwic, { lines, mode: 'kwic', query: 'casa', selected: null, onselect });
+    cards()[1].focus();
+    await fireEvent.keyDown(cards()[1], { key: 'ArrowDown' });
+    expect(onselect).toHaveBeenLastCalledWith(lines[2]);
+  });
+
   it('bilingual mode shows source then target with highlights', () => {
     narrow();
     render(Kwic, {
