@@ -1039,4 +1039,7 @@ export const es: Messages = {
   'add.what.nameCorpus': 'Primero pon nombre al corpus nuevo',
   'add.act.import': 'Importar {n} páginas',
   'add.act.importNone': 'Importar seleccionados',
+  'add.web.one': 'Una página',
+  'add.web.list': 'Varias direcciones',
+  'add.web.index': 'Desde una página índice',
 };

@@ -278,13 +278,14 @@ export const addUrlList = () =>
   });
 
 export const findLinks = () =>
-  act('catalog', async () => {
+  act('catalog', async (id) => {
     const u = draft.catalogUrl.trim();
     if (!u) {
       messages.say(t('src.url.needed'), 'err');
       return false;
     }
     const found = await post<Discovery>('/api/discover-links', { url: u });
+    if (!still(id)) return false;
     draft.catalog = found;
     draft.picked.clear();
     for (const l of filterLinks(found.links, '', true)) draft.picked.add(l.url);

@@ -12,9 +12,8 @@
 <script lang="ts">
   import { onMount, tick, untrack } from 'svelte';
   import { del, get, patch, post } from '../lib/api';
-    import {
-    act, addPaste, addPreview, addUrlList, draft, fetchPreview, findLinks, importSelected, metaSummary, pickedCount,
-    pickLinks, previewFile, still, uploadFiles, uploadPairs, visibleLinks, watch, work,
+  import {
+    act, addPaste, addPreview, draft, metaSummary, previewFile, still, uploadFiles, uploadPairs, watch, work,
     type Meta,
   } from '../lib/addDocuments.svelte';
   import { CORPUS_CHANGED, corpusStore } from '../lib/corpus.svelte';
@@ -63,8 +62,6 @@
   let setProject = $state('');
 
   const previewWords = $derived(draft.preview ? countWords(draft.preview.text) : 0);
-  const visible = $derived(visibleLinks());
-  const nPicked = $derived(pickedCount());
 
   // Upload card
   let fileInput: HTMLInputElement | undefined = $state();
@@ -481,62 +478,6 @@
       {/if}
 
       <div class="cards">
-        <section class="card" aria-labelledby="{uid}-url">
-          <h3 id="{uid}-url">{t('src.url.title')}</h3>
-          <form
-            class="row"
-            onsubmit={(e) => {
-              e.preventDefault();
-              fetchPreview();
-            }}
-          >
-            <input class="grow" type="text" inputmode="url" bind:value={draft.url} placeholder="https://…" aria-label={t('src.url.address')} />
-            <Button type="submit" disabled={work.busy !== null}>{t('src.url.fetch')}</Button>
-          </form>
-
-          <h3 class="sub">{t('src.urls.title')}</h3>
-          <Field label={t('src.urls.label')}>
-            <textarea rows="4" bind:value={draft.urlList} placeholder="https://…" spellcheck="false"></textarea>
-          </Field>
-          <div class="row">
-            <span class="hint grow">{t('src.urls.hint')}</span>
-            <Button variant="primary" disabled={work.busy !== null} onclick={addUrlList}>{t('src.urls.go')}</Button>
-          </div>
-
-          <h3 class="sub">{t('src.catalog.title')}</h3>
-          <form class="row" onsubmit={(e) => { e.preventDefault(); findLinks(); }}>
-            <input class="grow" type="text" inputmode="url" bind:value={draft.catalogUrl} placeholder="https://…" aria-label={t('src.catalog.address')} />
-            <Button type="submit" disabled={work.busy !== null}>{t('src.catalog.find')}</Button>
-          </form>
-          {#if draft.catalog}
-            <div class="row">
-              <input class="grow" type="text" bind:value={draft.linkFilter} placeholder={t('src.catalog.filterPlaceholder')} aria-label={t('src.catalog.filter')} />
-              <Toggle bind:checked={draft.sameHostOnly} label={t('src.catalog.sameHost')} />
-            </div>
-            <div class="row">
-              <Button onclick={() => pickLinks(visible.map((l) => l.url), true)}>{t('src.catalog.selectAll')}</Button>
-              <Button onclick={() => pickLinks(visible.map((l) => l.url), false)}>{t('src.catalog.selectNone')}</Button>
-              <span class="hint grow">{t('src.catalog.count', { n: nPicked, total: draft.catalog.links.length })}</span>
-            </div>
-            <ul class="catalog-links">
-              {#each visible as l (l.url)}
-                <li>
-                  <label>
-                    <input type="checkbox" checked={draft.picked.has(l.url)} onchange={(e) => pickLinks([l.url], e.currentTarget.checked)} />
-                    <span class="ctext">{l.text}</span>
-                    <small class="curl">{l.url}</small>
-                  </label>
-                </li>
-              {/each}
-            </ul>
-            {#if draft.catalog.truncated}<p class="hint">{t('src.catalog.truncated')}</p>{/if}
-            <div class="row">
-              <span class="hint grow">{t('src.catalog.hint')}</span>
-              <Button variant="primary" disabled={work.busy !== null} onclick={importSelected}>{t('src.catalog.import')}</Button>
-            </div>
-          {/if}
-        </section>
-
         <section class="card" aria-labelledby="{uid}-up">
           <h3 id="{uid}-up">{t('src.upload.title')}</h3>
           <input
@@ -596,7 +537,7 @@
         </section>
       </div>
 
-      {#if draft.preview}
+      {#if draft.preview?.kind === 'file'}
         <section class="card preview" aria-labelledby="{uid}-pv">
           <h3 id="{uid}-pv">{t('src.preview.title')}: {draft.preview.source}</h3>
           {#if draft.preview.quality}
@@ -864,28 +805,6 @@
     justify-content: space-between;
     gap: var(--s-2);
     padding: var(--s-1) 0;
-  }
-  .catalog-links {
-    margin: 0;
-    padding: 0;
-    list-style: none;
-    max-height: 18rem;
-    overflow: auto;
-    border: 1px solid var(--line);
-  }
-  .catalog-links label {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: var(--s-2);
-    padding: var(--s-1) var(--s-2);
-  }
-  .ctext {
-    overflow-wrap: anywhere;
-  }
-  .curl {
-    color: var(--muted);
-    overflow-wrap: anywhere;
   }
   .jobs {
     margin: 0;

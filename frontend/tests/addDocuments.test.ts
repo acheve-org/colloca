@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   act,
   addPaste,
+  findLinks,
   draft,
   metaSummary,
   resetDraft,
@@ -162,5 +163,26 @@ describe('submit actions', () => {
     expect(await uploadFiles()).toBe(false);
     expect(calls).toHaveLength(0);
     expect(messages.current?.text).toBe(t('src.upload.choose'));
+  });
+
+  it('a late discover-links reply after a corpus change does not repopulate the catalog', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const inner = (globalThis.fetch as unknown as (u: string, i?: RequestInit) => Promise<unknown>);
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (String(url).startsWith('/api/discover-links')) {
+        await gate;
+        return { ok: true, status: 200, statusText: 'x', json: async () => ({ url: 'https://n.example/', title: 'N', links: [{ url: 'https://n.example/1', text: 'One', same_host: true }], max_per_request: 20, truncated: false }) };
+      }
+      return inner(url, init);
+    }));
+    draft.catalogUrl = 'https://n.example/';
+    const pending = findLinks();
+    corpusStore.currentId = 2;
+    release();
+    expect(await pending).toBe(false);
+    expect(draft.catalog).toBeNull();
+    expect(draft.picked.size).toBe(0);
+    corpusStore.currentId = 1;
   });
 });

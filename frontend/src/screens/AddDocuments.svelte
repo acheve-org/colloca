@@ -1,9 +1,10 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { actionFor, metaSummary, resetDraft, work, type Method } from '../lib/addDocuments.svelte';
+  import { actionFor, addPreview, addUrlList, importSelected, metaSummary, resetDraft, work, type Method } from '../lib/addDocuments.svelte';
   import { corpusStore } from '../lib/corpus.svelte';
   import { t } from '../lib/i18n';
   import { go, route } from '../lib/router.svelte';
+  import AddFromWeb from '../lib/ui/add/AddFromWeb.svelte';
   import AboutDocuments from '../lib/ui/AboutDocuments.svelte';
   import ActionBar from '../lib/ui/ActionBar.svelte';
   import EmptyState from '../lib/ui/EmptyState.svelte';
@@ -38,8 +39,15 @@
     resetDraft();
     go('sources');
   }
-  // The submit actions arrive with the method forms.
-  const submit = () => {};
+  // The other methods' submit actions arrive with their forms.
+  async function submit() {
+    if (m !== 'web') return;
+    const run = sub === 'list' ? addUrlList : sub === 'index' ? importSelected : addPreview;
+    if (await run()) {
+      resetDraft();
+      go('sources');
+    }
+  }
 </script>
 
 <div class="page">
@@ -59,7 +67,11 @@
       {/if}
       <div class="grid" class:solo={standalone || narrow}>
         <div class="source" role="tabpanel" id="{uid}-panel" aria-labelledby="{uid}-tab-{m}">
-          <div data-method={m} data-sub={sub}></div>
+          {#if m === 'web'}
+            <div data-method={m} data-sub={sub}><AddFromWeb /></div>
+          {:else}
+            <div data-method={m} data-sub={sub}></div>
+          {/if}
         </div>
         {#if !standalone && !narrow}
           <aside class="side"><AboutDocuments /></aside>
