@@ -160,6 +160,47 @@ function reportUpload(res: UploadResult[]): void {
 export const visibleLinks = () => (draft.catalog ? filterLinks(draft.catalog.links, draft.linkFilter, draft.sameHostOnly) : []);
 export const pickedCount = () => visibleLinks().filter((l) => draft.picked.has(l.url)).length;
 
+export type Method = 'web' | 'up' | 'paste' | 'al';
+
+/** The primary action of the add page for a method and sub-choice: its label, whether it can run, and the summary line. */
+export function actionFor(m: Method, sub: string): { label: string; enabled: boolean; summary: string } {
+  let label: string;
+  let enabled: boolean;
+  let what: string;
+  if (m === 'web' && sub === 'list') {
+    const n = draft.urlList.split('\n').filter((l) => l.trim()).length;
+    label = t('src.urls.go');
+    enabled = n > 0;
+    what = n ? t('add.what.addresses', { n }) : t('add.what.typeAddresses');
+  } else if (m === 'web' && sub === 'index') {
+    const n = pickedCount();
+    const found = draft.catalog !== null;
+    label = found ? t('add.act.import', { n }) : t('add.act.importNone');
+    enabled = found && n > 0;
+    what = found ? t('add.what.selected', { n, total: visibleLinks().length }) : t('add.what.findLinks');
+  } else if (m === 'web') {
+    label = t('src.url.add');
+    enabled = draft.preview !== null;
+    what = enabled ? t('add.what.page') : t('add.what.fetchFirst');
+  } else if (m === 'up') {
+    const n = draft.files.length;
+    label = t('src.upload.go');
+    enabled = n > 0;
+    what = n ? t('add.what.files', { n }) : t('add.what.chooseFiles');
+  } else if (m === 'paste') {
+    label = t('src.paste.go');
+    enabled = draft.pasteText.trim() !== '';
+    what = enabled ? t('add.what.text') : t('add.what.pasteFirst');
+  } else {
+    label = t('src.pair.go');
+    const named = draft.partner !== 'new' || draft.pairName.trim() !== '';
+    enabled = draft.pairFile !== null && named;
+    what = draft.pairFile === null ? t('add.what.chooseFile') : named ? draft.pairFile.name : t('add.what.nameCorpus');
+  }
+  const into = t('add.summary.into', { name: corpusStore.current?.name ?? '' });
+  return { label, enabled, summary: [what, into, metaSummary() || t('add.noMeta')].join(' · ') };
+}
+
 export function pickLinks(urls: string[], on: boolean): void {
   for (const u of urls) {
     if (on) draft.picked.add(u);

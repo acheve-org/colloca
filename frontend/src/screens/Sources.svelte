@@ -18,6 +18,7 @@
     type Meta,
   } from '../lib/addDocuments.svelte';
   import { CORPUS_CHANGED, corpusStore } from '../lib/corpus.svelte';
+  import { hrefFor } from '../lib/router.svelte';
   import { t, fmt } from '../lib/i18n';
   import { JOBS_DONE, jobLogs } from '../lib/jobs.svelte';
   import { messages } from '../lib/messages.svelte';
@@ -642,6 +643,7 @@
           <Button disabled={work.busy !== null} onclick={reannotate}>{t('src.reann.go')}</Button>
         </span>
       {/if}
+      <a class="addlink" href={hrefFor('sources-add')}>{t('add.add')}</a>
     </div>
 
     <div class="table" bind:this={tableEl}>
@@ -968,6 +970,19 @@
     padding: var(--s-1) var(--s-3);
     font-size: var(--fs-small);
     border-bottom: 1px solid var(--line);
+  }
+  /* A link that looks like the primary button. */
+  .addlink {
+    display: inline-flex;
+    align-items: center;
+    height: calc(var(--row-h) - var(--s-1));
+    margin-left: auto;
+    padding: 0 var(--s-2);
+    background: var(--accent);
+    color: var(--accent-fg);
+    border: 1px solid var(--accent);
+    border-radius: var(--radius);
+    text-decoration: none;
   }
   .count {
     font-weight: 600;
