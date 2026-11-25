@@ -11,7 +11,7 @@
   const tabs = $derived(visibleTabs(area, corpusStore.aligned));
   const active = $derived(tabs.indexOf(route.screen));
 
-  let strip: HTMLElement | undefined = $state();
+  let strip: HTMLElement | undefined = $state(); // the tab row: no padding, so clientWidth is the usable width
   let measure: HTMLElement | undefined = $state();
   let moreProbe: HTMLElement | undefined = $state();
   let moreBtn: HTMLButtonElement | null = $state(null);
@@ -55,14 +55,14 @@
 </script>
 
 {#if tabs.length >= 2}
-  <div class="wrap" bind:this={strip}>
+  <div class="wrap">
     <div class="measure" aria-hidden="true" bind:this={measure}>
       {#each tabs as tab (tab)}
         <span class="tab" data-tab>{t('nav.' + tab)}</span>
       {/each}
       <span class="tab more" bind:this={moreProbe}>{t('nav.more')}</span>
     </div>
-    <div class="strip" role="group" aria-label={t('nav.tabs')}>
+    <div class="strip" role="group" aria-label={t('nav.tabs')} bind:this={strip}>
       {#each shown as i (tabs[i])}
         <a
           class="tab"
@@ -108,14 +108,14 @@
   .strip {
     display: flex;
     align-items: flex-end;
-    padding: 0 var(--s-3);
-    overflow: visible;
+    margin: 0 var(--s-3);
   }
   .measure {
     position: absolute;
     visibility: hidden;
     pointer-events: none;
     white-space: nowrap;
+    font-weight: 600; /* the active tab is bold: measure every tab at that weight */
     height: 0;
     overflow: hidden;
   }

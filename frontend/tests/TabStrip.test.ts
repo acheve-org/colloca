@@ -26,7 +26,8 @@ beforeEach(() => {
   });
   Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
     configurable: true,
-    get() { return containerWidth; },
+    // the tab row is the element whose width is usable; its parent is wider (side margins)
+    get(this: HTMLElement) { return this.getAttribute('role') === 'group' ? containerWidth : containerWidth + 24; },
   });
 });
 
@@ -110,6 +111,15 @@ describe('TabStrip', () => {
     await fireEvent.pointerDown(document.body);
     expect(more).toHaveAttribute('aria-expanded', 'false');
     expect(screen.queryByRole('link', { name: 'Collocations' })).toBeNull();
+  });
+
+  it('fits tabs to the width of the tab row, not of its padded parent', async () => {
+    go('concordance');
+    render(TabStrip, { area: 'explore' });
+    await tick();
+    // row 299: 199 left after More, so one 100px tab; the parent reports 323, which would wrongly allow two
+    await narrow(299);
+    expect(screen.getAllByRole('link').map((a) => a.textContent?.trim())).toEqual(['Concordance']);
   });
 
   it('re-measures when the language changes', async () => {
