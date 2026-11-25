@@ -392,7 +392,7 @@ describe('Projects screen corpora as cards below 640px', () => {
 
   const cards = () => screen.getAllByRole('listitem').filter((li) => li.classList.contains('ccard'));
   const cardOf = (name: string) => cards().find((c) => within(c).queryByText(name))!;
-  const more = (name: string) => within(cardOf(name)).getByRole('button', { name: 'More actions' });
+  const more = (name: string) => within(cardOf(name)).getByRole('button', { name: /^More actions/ });
   const openMenu = async (name: string) => {
     await fireEvent.click(more(name));
     await tick();
@@ -456,7 +456,7 @@ describe('Projects screen corpora as cards below 640px', () => {
     await tick();
     await fireEvent.input(screen.getByLabelText('Name of project A2'), { target: { value: 'Zed' } });
     // the name is an input now: reach the card through it
-    await fireEvent.click(within(screen.getByLabelText('Name of project A2').closest('li')!).getByRole('button', { name: 'More actions' }));
+    await fireEvent.click(within(screen.getByLabelText('Name of project A2').closest('li')!).getByRole('button', { name: /^More actions/ }));
     await tick();
     menu = screen.getByRole('menu');
     expect(within(menu).queryByRole('menuitem', { name: 'Rename' })).toBeNull();
@@ -516,6 +516,23 @@ describe('Projects screen corpora as cards below 640px', () => {
     expect(Object.values(src)[0] as string).toMatch(/\.cname[^}]*overflow-wrap:\s*anywhere/s);
   });
 
+  it('the trigger names its corpus and duplicate project names do not break the menu', async () => {
+    projects = [...projects, { id: 10, name: 'Bolt', corpora: 0, trashed: 0, terms: 0 }];
+    render(Projects);
+    await waitFor(() => expect(projectStore.list).toHaveLength(4));
+    await tick();
+    expect(more('A2')).toHaveAccessibleName('More actions: A2');
+    const menu = await openMenu('A2');
+    expect(within(menu).getAllByRole('menuitem', { name: 'Move: Bolt' })).toHaveLength(2);
+  });
+
+  it('the pane overflow is visible so the menu overlays the page', async () => {
+    await show();
+    expect(document.querySelector('section.right')).toHaveClass('cardsOn');
+    const src = import.meta.glob('../src/screens/Projects.svelte', { query: '?raw', import: 'default', eager: true });
+    expect(Object.values(src)[0] as string).toMatch(/\.right\.cardsOn[^}]*overflow:\s*visible/s);
+  });
+
   it('with no corpora the empty-state card is unchanged', async () => {
     projects = [{ id: 9, name: 'Empty', corpora: 0, trashed: 0, terms: 0 }];
     corpora = [];
@@ -545,9 +562,9 @@ describe('Projects screen corpora as cards below 640px', () => {
   it('the menu label is translated', async () => {
     setLang('es');
     await show();
-    expect(within(cardOf('A2')).getByRole('button', { name: 'Más acciones' })).toBeInTheDocument();
+    expect(within(cardOf('A2')).getByRole('button', { name: /^Más acciones/ })).toBeInTheDocument();
     setLang('it');
     await tick();
-    expect(within(cardOf('A2')).getByRole('button', { name: 'Altre azioni' })).toBeInTheDocument();
+    expect(within(cardOf('A2')).getByRole('button', { name: /^Altre azioni/ })).toBeInTheDocument();
   });
 });

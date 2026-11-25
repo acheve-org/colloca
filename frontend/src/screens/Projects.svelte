@@ -275,7 +275,7 @@
       </form>
     </section>
 
-    <section class="right">
+    <section class="right" class:cardsOn={viewport.narrow}>
       <header>
         <h2>{heading}</h2>
         <Button variant="primary" disabled={!projectStore.list.length} onclick={() => (newOpen = true)}>{t('corpus.new')}</Button>
@@ -302,7 +302,7 @@
                 {:else}
                   <span class="cname">{c.name}</span>
                 {/if}
-                <ActionMenu label={t('proj.more')} disabled={busy} items={menuItems(c)} />
+                <ActionMenu label={t('proj.more') + ': ' + c.name} disabled={busy} items={menuItems(c)} />
               </div>
               <div class="cmeta">
                 <span>{languageName(c.lang)}</span>
@@ -450,6 +450,9 @@
     }
     .right {
       overflow-x: auto; /* a wide corpus table scrolls inside its pane, not the page */
+    }
+    .right.cardsOn {
+      overflow: visible; /* cards have no wide table, and the menu popover must overlay the page, not grow a scroll area */
     }
   }
   .left,

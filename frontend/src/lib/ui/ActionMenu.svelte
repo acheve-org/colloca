@@ -50,7 +50,7 @@
   >
   {#if open}
     <div class="pop" role="menu" aria-label={label} tabindex="-1" bind:this={menu} {onkeydown} use:dismiss={{ close: () => (open = false), trigger }}>
-      {#each items as item (item.label)}
+      {#each items as item, i (i)}
         <button type="button" role="menuitem" class="item" class:danger={item.danger} onclick={() => choose(item)}>{item.label}</button>
       {/each}
     </div>
