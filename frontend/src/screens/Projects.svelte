@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { del, patch, post } from '../lib/api';
   import { languageName } from '../lib/context.svelte';
   import { corpusStore } from '../lib/corpus.svelte';
@@ -55,9 +55,12 @@
   const heading = $derived(t('proj.corporaOf', { name: selected?.name ?? t('ctx.noProject') }));
 
   const collapsed = $derived(viewport.stacked && !listOpen);
+  const hasChoices = $derived(projectStore.list.length > 0 || loose.length > 0);
   const choose = (id: number | null) => {
     picked = id;
     listOpen = false;
+    // The clicked project button unmounts: put focus back on the control that opened the list.
+    tick().then(() => document.getElementById('proj-change')?.focus());
   };
 
   const nameOf = (p: Project) => names[p.id] ?? p.name;
@@ -193,7 +196,12 @@
 <div class="page">
   <div class="panes">
     <section class="left">
-      <ul class="plist">
+      {#if viewport.stacked && hasChoices}
+        <div class="change">
+          <Button id="proj-change" expanded={listOpen} controls="proj-list" onclick={() => (listOpen = !listOpen)}>{t('proj.change')}</Button>
+        </div>
+      {/if}
+      <ul class="plist" id="proj-list">
         {#each projectStore.list as p (p.id)}
           {#if !collapsed || p.id === selectedId}
           <li class:sel={p.id === selectedId}>
@@ -201,9 +209,6 @@
               <span class="pname">{p.name}</span>
               <span class="muted">{corporaLabel(p.corpora)}</span>
             </button>
-            {#if collapsed}
-              <div class="change"><Button onclick={() => (listOpen = true)}>{t('proj.change')}</Button></div>
-            {/if}
             {#if p.id === selectedId}
               <div class="edit">
                 <input
@@ -240,9 +245,6 @@
               <span class="pname">{t('ctx.noProject')}</span>
               <span class="muted">{corporaLabel(loose.length)}</span>
             </button>
-            {#if collapsed}
-              <div class="change"><Button onclick={() => (listOpen = true)}>{t('proj.change')}</Button></div>
-            {/if}
           </li>
         {/if}
       </ul>
@@ -385,7 +387,7 @@
   }
   .panes {
     display: grid;
-    grid-template-columns: minmax(0, 22rem) minmax(0, 1fr);
+    grid-template-columns: minmax(14rem, 22rem) minmax(0, 1fr);
     gap: var(--s-3);
     align-items: start;
   }
@@ -393,9 +395,9 @@
     .panes {
       grid-template-columns: minmax(0, 1fr);
     }
-  }
-  .right {
-    overflow-x: auto; /* a wide corpus table scrolls inside its pane, not the page */
+    .right {
+      overflow-x: auto; /* a wide corpus table scrolls inside its pane, not the page */
+    }
   }
   .left,
   .right {
@@ -441,9 +443,6 @@
     display: flex;
     align-items: center;
     gap: var(--s-1);
-  }
-  .change {
-    padding: 0 var(--s-2) var(--s-1);
   }
   .edit {
     padding: 0 var(--s-2) var(--s-1);

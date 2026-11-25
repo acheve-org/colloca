@@ -319,6 +319,28 @@ describe('Projects screen stacked below 900px', () => {
     expect(screen.getByRole('button', { name: 'Change' })).toBeInTheDocument();
   });
 
+  it('Change is a toggle: aria-expanded, stays mounted, closes the list without picking', async () => {
+    await show();
+    const change = screen.getByRole('button', { name: 'Change' });
+    expect(change).toHaveAttribute('aria-expanded', 'false');
+    expect(change).toHaveAttribute('aria-controls', 'proj-list');
+    await fireEvent.click(change);
+    expect(screen.getByRole('button', { name: 'Change' })).toBe(change);
+    expect(change).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('button', { name: /^Bolt/ })).toBeInTheDocument();
+    await fireEvent.click(change);
+    expect(change).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('button', { name: /^Bolt/ })).toBeNull();
+    expect(screen.getByRole('button', { name: /^Acme/ })).toBeInTheDocument();
+  });
+
+  it('returns focus to Change after choosing a project', async () => {
+    await show();
+    await fireEvent.click(screen.getByRole('button', { name: 'Change' }));
+    await fireEvent.click(screen.getByRole('button', { name: /^Bolt/ }));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Change' })));
+  });
+
   it('keeps the chosen project and its corpora when stacked is toggled', async () => {
     await show();
     await fireEvent.click(screen.getByRole('button', { name: 'Change' }));

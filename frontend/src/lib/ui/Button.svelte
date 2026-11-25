@@ -10,14 +10,18 @@
     title?: string;
     /** Accessible name when the text alone is not enough (a row action: which row?). */
     ariaLabel?: string;
+    /** For a button that shows or hides something: its state and the element it controls. */
+    expanded?: boolean;
+    controls?: string;
+    id?: string;
     onclick?: (e: MouseEvent) => void;
     children: Snippet;
   }
-  let { variant = 'default', type = 'button', disabled = false, pending = false, title, ariaLabel, onclick, children }: Props =
+  let { variant = 'default', type = 'button', disabled = false, pending = false, title, ariaLabel, expanded, controls, id, onclick, children }: Props =
     $props();
 </script>
 
-<button class="btn {variant}" class:pending {type} {disabled} {title} aria-label={ariaLabel} {onclick}>{@render children()}</button>
+<button class="btn {variant}" class:pending {type} {disabled} {title} aria-label={ariaLabel} aria-expanded={expanded} aria-controls={controls} {id} {onclick}>{@render children()}</button>
 
 <style>
   .btn.pending {
