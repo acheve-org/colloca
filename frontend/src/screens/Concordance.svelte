@@ -460,17 +460,16 @@
     {/if}
 
     <div class="table" bind:this={tableEl}>
+      {#snippet noHitActions()}
+        {#if scopeActive()}
+          <Button variant="primary" onclick={clearFilterAndSearch}>{t('empty.search.clear')}</Button>
+        {/if}
+        {#if lemmaMiss}
+          <Button variant={scopeActive() ? 'default' : 'primary'} onclick={searchExactForm}>{t('empty.search.exact')}</Button>
+        {/if}
+      {/snippet}
       {#if result && !lines.length && !loading}
-        <EmptyCard icon="none" live title={t('cc.noHits', { q: result.query })} hint={t('cc.noHitsHint')} reasons={noHitReasons}>
-          {#snippet actions()}
-            {#if scopeActive()}
-              <Button variant="primary" onclick={clearFilterAndSearch}>{t('empty.search.clear')}</Button>
-            {/if}
-            {#if lemmaMiss}
-              <Button variant={scopeActive() ? 'default' : 'primary'} onclick={searchExactForm}>{t('empty.search.exact')}</Button>
-            {/if}
-          {/snippet}
-        </EmptyCard>
+        <EmptyCard icon="none" live title={t('cc.noHits', { q: result.query })} hint={t('cc.noHitsHint')} reasons={noHitReasons} actions={scopeActive() || lemmaMiss ? noHitActions : undefined} />
       {:else if result || loading}
         <Kwic
           lines={shown}

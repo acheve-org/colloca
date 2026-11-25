@@ -146,6 +146,15 @@ describe('Termbase empty', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Import a glossary' }));
     expect(await screen.findByRole('dialog')).toBeInTheDocument();
   });
+
+  it('a filtered miss is not "empty": no glossary card, the table says no entry matches', async () => {
+    render(Termbase);
+    await screen.findByText('No entries here yet.');
+    await fireEvent.input(screen.getByPlaceholderText('search terms'), { target: { value: 'zzz' } });
+    expect(await screen.findByText('No entry matches the filter')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Import a glossary' })).toBeNull();
+    expect(screen.queryByText('No entries here yet.')).toBeNull();
+  });
 });
 
 describe('Candidates empty', () => {

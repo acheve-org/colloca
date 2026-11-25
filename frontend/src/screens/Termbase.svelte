@@ -542,7 +542,7 @@
   {/if}
 
   <div class="table" bind:this={tableEl}>
-    {#if loadedOnce && !terms.length && !loading}
+    {#if loadedOnce && !terms.length && !loading && !filtered}
       <EmptyCard icon="book" title={t('tb.empty')} hint={t('tb.emptyHint')}>
         {#snippet actions()}
           <Button variant="primary" onclick={() => (importOpen = true)}>{t('empty.tb.import')}</Button>
