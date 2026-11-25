@@ -54,7 +54,7 @@ Appears when the corpus has aligned texts. Run it on the target-language corpus 
 
 ## Equivalents
 
-In the rail only when the corpus has aligned texts.
+A tab in Explore, shown only when the corpus has aligned texts.
 
 - Candidate translations of a word or phrase: target lemmas recurring in the aligned segments of its occurrences, scored by Dice against overall target frequency (everyday words score low).
 - Single words only on the target side. A hint, not a verdict.

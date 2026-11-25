@@ -6,7 +6,7 @@ Colour, contrast and screen-reader notes: [accessibility.md](accessibility.md).
 
 | Area | Content |
 |---|---|
-| Icon rail | Narrow bar on the left with five areas: **Corpus** (Sources) · **Explore** · **Terms** · **Job**, and **Settings** at the bottom. *Menu* (at the foot) holds the theme (Auto, Light, Dark), the language (EN, ES, IT) and *Log out* when a password is set. |
+| Icon rail | Narrow bar on the left with five areas: **Corpus** (Sources), **Explore**, **Terms** and **Job**, with **Settings** at the bottom. *Menu* (at the foot) holds the theme (Auto, Light, Dark), the language (EN, ES, IT) and *Log out* when a password is set. |
 | Page header | Above the work area: the working-corpus picker, the screen title and the tabs of the current area. |
 | Corpus picker | Shows the working corpus and its project; a dropdown lists corpora grouped by project and ends with *Manage projects…*. Hidden on *Languages* and *Projects*. |
 | Tabs | **Explore**: Concordance, Collocations, N-grams, Frequency list, Dispersion plot, Keyness, Word cloud, Related terms; Equivalents and Segment lookup only for aligned corpora. **Terms**: Termbase, Candidates, Check text. **Settings**: Languages, Projects, Backup and Trash. Tabs that do not fit fold into a *More* menu; the current tab is always shown. |
