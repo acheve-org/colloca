@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { escapeRegExp, newCorpus } from './helpers';
+import { escapeRegExp, newCorpus, openScreen } from './helpers';
 
 test('job report: save it, reopen it after a reload, delete it', async ({ page }) => {
   const project = await newCorpus(page, 'Informes');
@@ -9,7 +9,7 @@ test('job report: save it, reopen it after a reload, delete it', async ({ page }
   await page.getByRole('button', { name: 'Add text' }).click();
   await expect(page.getByRole('row', { name: /Pasted text|parque/i }).first()).toBeVisible({ timeout: 60_000 });
 
-  await page.getByRole('navigation').getByRole('link', { name: 'Job' }).click();
+  await openScreen(page, 'Job');
   await page.getByLabel('Or paste the text here').fill('El parque eólico necesita energía. El parque nuevo produce mucho.');
   await page.getByLabel('keep the text with a saved report').check();
   await page.getByRole('button', { name: 'Analyse', exact: true }).click();
@@ -28,10 +28,10 @@ test('job report: save it, reopen it after a reload, delete it', async ({ page }
 
   // leave and come back to a fresh page: the report is still there
   await page.reload();
-  await page.getByRole('navigation').getByRole('link', { name: 'Projects' }).click();
+  await openScreen(page, 'Projects');
   await page.getByRole('button', { name: new RegExp(`^${escapeRegExp(project)}`) }).click();
   await page.getByRole('button', { name: 'Open Informes' }).click();
-  await page.getByRole('navigation').getByRole('link', { name: 'Job' }).click();
+  await openScreen(page, 'Job');
   await page.getByRole('button', { name: /^Open report/ }).click();
   await expect(page.getByText('Saved', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Show the text' }).click();

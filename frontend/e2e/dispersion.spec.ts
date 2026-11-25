@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { newCorpus } from './helpers';
+import { newCorpus, openScreen } from './helpers';
 
 test('dispersion plot: see where a word occurs and open the passage', async ({ page }) => {
   await newCorpus(page, 'Plot');
@@ -11,7 +11,7 @@ test('dispersion plot: see where a word occurs and open the passage', async ({ p
   await page.getByRole('button', { name: 'Add text' }).click();
   await expect(page.getByRole('row', { name: /Contrato A/ })).toBeVisible({ timeout: 60_000 });
 
-  await page.getByRole('navigation').getByRole('link', { name: 'Dispersion plot' }).click();
+  await openScreen(page, 'Dispersion plot');
   await page.getByLabel('Word or phrase').fill('contrato');
   await page.getByRole('button', { name: 'Plot', exact: true }).click();
   await expect(page.getByText(/2 hits in 1 of 1 documents/)).toBeVisible();

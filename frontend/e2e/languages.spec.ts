@@ -1,9 +1,9 @@
 import { expect, test } from '@playwright/test';
-import { newProject, unique } from './helpers';
+import { newProject, unique, openScreen } from './helpers';
 
 test('the Languages screen adds a language from the catalog and removes it again', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('navigation').getByRole('link', { name: 'Languages' }).click();
+  await openScreen(page, 'Languages');
   await expect(page.getByRole('region', { name: 'Spanish' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Italian' })).toBeVisible();
 
@@ -20,13 +20,13 @@ test('the Languages screen adds a language from the catalog and removes it again
   await expect(fr.getByText('Model not installed')).toBeVisible();
 
   // the new language is offered when creating a corpus
-  await page.getByRole('navigation').getByRole('link', { name: 'Projects' }).click();
+  await openScreen(page, 'Projects');
   await newProject(page);
   await page.getByRole('button', { name: 'New corpus' }).click();
   await expect(page.getByRole('dialog').getByRole('option', { name: 'French' })).toHaveCount(1);
   await page.keyboard.press('Escape');
 
-  await page.getByRole('navigation').getByRole('link', { name: 'Languages' }).click();
+  await openScreen(page, 'Languages');
   await page.getByRole('button', { name: 'Remove French' }).click();
   await page.getByRole('dialog', { name: 'Remove French?' }).getByRole('button', { name: 'Remove', exact: true }).click();
   await expect(page.getByRole('region', { name: 'French' })).toHaveCount(0);

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
-import { newCorpus } from './helpers';
+import { newCorpus, openScreen } from './helpers';
 
 const TERM = 'parque eólico';
 
@@ -42,10 +42,10 @@ test('translator workflow', async ({ page }) => {
   await dialog.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(dialog).toBeHidden();
 
-  await page.getByRole('navigation').getByRole('link', { name: 'Termbase' }).click();
+  await openScreen(page, 'Termbase');
   await expect(page.getByRole('row', { name: /wind farm/ })).toBeVisible();
 
-  await page.getByRole('navigation').getByRole('link', { name: 'Concordance' }).click();
+  await openScreen(page, 'Concordance');
   // Leaving the screen drops the search: run it again to get the CSV link.
   await page.getByLabel('Word or phrase').fill(TERM);
   await page.getByRole('button', { name: 'Search', exact: true }).click();

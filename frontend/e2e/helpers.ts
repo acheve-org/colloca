@@ -36,6 +36,60 @@ export async function newCorpus(page: Page, name: string, lang?: string, project
   await dialog.getByRole('button', { name: 'Create' }).click();
   await expect(dialog).toBeHidden();
   await expect(page.getByRole('row', { name: new RegExp(escapeRegExp(name)) }).getByText('Working', { exact: true })).toBeVisible();
-  await page.getByRole('navigation').getByRole('link', { name: 'Sources' }).click();
+  await openScreen(page, 'Sources');
   return proj;
+}
+
+const AREA_OF: Record<string, string> = {
+  Sources: 'Corpus',
+  Concordance: 'Explore',
+  Collocations: 'Explore',
+  'N-grams': 'Explore',
+  'Frequency list': 'Explore',
+  'Dispersion plot': 'Explore',
+  Keyness: 'Explore',
+  'Word cloud': 'Explore',
+  'Related terms': 'Explore',
+  Equivalents: 'Explore',
+  'Segment lookup': 'Explore',
+  Termbase: 'Terms',
+  Candidates: 'Terms',
+  'Check text': 'Terms',
+  Job: 'Job',
+  Languages: 'Settings',
+  Projects: 'Settings',
+  'Backup and Trash': 'Settings',
+};
+
+/** Single-screen areas have no tab strip. */
+const SINGLE = new Set(['Corpus', 'Job']);
+
+/** Opens a screen by its display name: the rail area first, then its tab (through More when folded). */
+export async function openScreen(page: Page, name: string): Promise<void> {
+  const area = AREA_OF[name];
+  if (!area) throw new Error(`Unknown screen: ${name}`);
+  await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: area, exact: true }).click();
+  if (SINGLE.has(area)) {
+    await expect(page.getByRole('heading', { level: 1, name })).toBeVisible();
+    return;
+  }
+  const strip = page.getByRole('group', { name: 'Section screens' });
+  await expect(strip).toBeVisible();
+  const tab = strip.getByRole('link', { name, exact: true });
+  const more = strip.getByRole('button', { name: 'More' });
+  await expect(tab.or(more)).toBeVisible(); // the strip measures itself after it renders
+  if (!(await tab.isVisible())) await more.click();
+  await tab.click();
+  // The route changes after the click: wait for it, or the next step may act on the screen being left.
+  await expect(page.getByRole('heading', { level: 1, name })).toBeVisible();
+}
+
+const LANG_BUTTON = { EN: 'English', ES: 'Español', IT: 'Italiano' } as const;
+
+/** Switches the interface language through the rail Menu. */
+export async function setInterfaceLanguage(page: Page, code: 'EN' | 'ES' | 'IT'): Promise<void> {
+  const menu = page.getByRole('button', { name: /^(Menu|Menú|Menù)$/ });
+  await menu.click();
+  await page.getByRole('button', { name: LANG_BUTTON[code], exact: true }).click();
+  await page.keyboard.press('Escape');
 }

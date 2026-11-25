@@ -1,24 +1,25 @@
 import { expect, test } from '@playwright/test';
+import { setInterfaceLanguage } from './helpers';
 
 test('the interface switches between English, Spanish and Italian and remembers the choice', async ({ page }) => {
   await page.goto('/');
-  const nav = page.getByRole('navigation');
-  await expect(nav.getByRole('link', { name: 'Sources' })).toBeVisible();
+  const title = page.getByRole('heading', { level: 1 });
+  await expect(title).toHaveText('Sources');
   await expect(page.locator('html')).toHaveAttribute('lang', 'en');
 
-  await page.getByRole('button', { name: 'Español' }).click();
-  await expect(nav.getByRole('link', { name: 'Fuentes' })).toBeVisible();
+  await setInterfaceLanguage(page, 'ES');
+  await expect(title).toHaveText('Fuentes');
   await expect(page.locator('html')).toHaveAttribute('lang', 'es');
 
   await page.reload();
-  await expect(nav.getByRole('link', { name: 'Fuentes' })).toBeVisible();
+  await expect(title).toHaveText('Fuentes');
 
-  await page.getByRole('button', { name: 'Italiano' }).click();
-  await expect(nav.getByRole('link', { name: 'Fonti' })).toBeVisible();
+  await setInterfaceLanguage(page, 'IT');
+  await expect(title).toHaveText('Fonti');
   await page.goto('/#/projects');
   await expect(page.getByRole('button', { name: 'New corpus' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Nuovo corpus' })).toBeVisible();
 
-  await page.getByRole('button', { name: 'English' }).click();
-  await expect(nav.getByRole('link', { name: 'Sources' })).toBeVisible();
+  await setInterfaceLanguage(page, 'EN');
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Projects');
 });
