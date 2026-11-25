@@ -642,11 +642,12 @@
   .row-options {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: var(--s-2);
     width: 100%;
   }
   .row-options > :global(.btn:first-child) {
-    flex: 1;
+    flex: 1 1 60%; /* below 60% of the row the buttons wrap under it instead of squeezing it */
     min-width: 0;
     display: flex;
     flex-wrap: wrap;
