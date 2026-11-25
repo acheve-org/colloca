@@ -440,7 +440,7 @@
             <Button
               id="cc-options-btn"
               expanded={optionsOpen}
-              controls="cc-options"
+              controls={optionsOpen ? 'cc-options' : undefined}
               onclick={() => (optionsOpen = !optionsOpen)}
             >
               <span class="opt-label">{t('cc.options')}</span>

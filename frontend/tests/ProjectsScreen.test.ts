@@ -483,6 +483,17 @@ describe('Projects screen corpora as cards below 640px', () => {
     await waitFor(() => expect(calls.some((c) => c.method === 'DELETE' && c.path === '/api/corpora/2')).toBe(true));
   });
 
+  it('Delete then Cancel returns focus to the ⋯ trigger', async () => {
+    await show();
+    const btn = more('A2');
+    const menu = await openMenu('A2');
+    await fireEvent.click(within(menu).getByRole('menuitem', { name: 'Delete' }));
+    await tick();
+    const dlg = screen.getByRole('dialog', { name: 'Delete corpus' });
+    await fireEvent.click(within(dlg).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(document.activeElement).toBe(btn));
+  });
+
   it('keyboard: Enter opens on the first item, arrows move, Escape closes and refocuses ⋯', async () => {
     await show();
     const btn = more('A2');

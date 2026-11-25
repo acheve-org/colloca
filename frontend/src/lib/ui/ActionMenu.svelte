@@ -23,6 +23,8 @@
   }
 
   function choose(item: Item): void {
+    // The focused item is about to unmount: park focus on the trigger so a dialog opened next returns here.
+    trigger?.focus();
     open = false;
     item.onclick();
   }
