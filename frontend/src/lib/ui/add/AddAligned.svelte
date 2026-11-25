@@ -32,6 +32,7 @@
       { value: 'new', label: t('src.pair.newCorpus') },
     ];
   });
+  // The `new` option is always present, so partnerOptions[0] exists.
   // Like the old select (re-rendered after every reload): the first option until one is picked.
   $effect(() => {
     if (!draft.partnerPicked || !partnerOptions.some((o) => o.value === draft.partner)) draft.partner = partnerOptions[0].value;

@@ -396,6 +396,7 @@ export const uploadPairs = () =>
       ...metaParams(),
     });
     if (!still(id)) return false;
+    // On a mixed response the whole selection is kept (the endpoint takes one file today).
     const bad = res.filter((r) => !r.ok);
     watch(true);
     if (bad.length) {

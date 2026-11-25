@@ -22,7 +22,6 @@ interface Call { method: string; path: string; params: URLSearchParams; body?: u
 let calls: Call[];
 let docs: { status: number; body: unknown };
 let jobList: Job[][];
-let langsReply: Record<string, string> | null;
 let uploadReply: { status: number; body: unknown };
 let previewFileReply: Record<string, unknown>;
 let docsGate: Promise<void> | null;
@@ -36,7 +35,6 @@ beforeEach(() => {
   docsGate = null;
   urlsReply = null;
   discovered = { links: [], max_per_request: 20, truncated: false };
-  langsReply = null;
   docs = { status: 200, body: [doc(1), doc(2, { tags: [], text_type: 'manual' })] };
   jobList = [[]];
   uploadReply = { status: 202, body: [{ file: 'a.txt', ok: true, job_id: 7 }, { file: 'b.docx', ok: true, job_id: 8 }] };
@@ -52,7 +50,6 @@ beforeEach(() => {
     const body = typeof raw === 'string' ? JSON.parse(raw) : raw;
     calls.push({ method, path: u.pathname, params: u.searchParams, body });
     const p = u.pathname;
-    if (p === '/api/languages' && langsReply) return res(200, langsReply);
     if (p === '/api/corpora/1/documents' && method === 'GET') {
       if (docsGate) await docsGate;
       return res(docs.status, docs.body);
@@ -76,7 +73,6 @@ beforeEach(() => {
         { url: 'https://a.example/1', ok: true, job_id: 31 },
       ]);
     }
-    if (p === '/api/corpora/1/upload-pairs') return res(202, [{ file: 'tm.tmx', ok: true, job_id: 11, partner_corpus_id: 2 }]);
     if (p === '/api/jobs/5/resolve') return res(202, { job_id: 20 });
     if (p === '/api/corpora/1/near-duplicates') {
       return res(200, {

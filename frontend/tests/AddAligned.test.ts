@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AddDocuments from '../src/screens/AddDocuments.svelte';
-import { draft, resetDraft, work } from '../src/lib/addDocuments.svelte';
+import { draft, resetDraft, uploadPairs, work } from '../src/lib/addDocuments.svelte';
 import { corpusStore } from '../src/lib/corpus.svelte';
 import { stopAllJobs } from '../src/lib/jobs.svelte';
 import { messages } from '../src/lib/messages.svelte';
@@ -129,5 +129,21 @@ describe('Aligned texts', () => {
     expect(screen.queryByText('About these documents')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Import' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument();
+  });
+
+  it('uploadPairs refuses a new partner without a name and sends nothing', async () => {
+    draft.pairFile = new File(['x'], 'tm.tmx');
+    draft.partner = 'new';
+    draft.pairName = '  ';
+    expect(await uploadPairs()).toBe(false);
+    expect(messages.current).toEqual({ text: 'Name the new corpus for the translations.', kind: 'err' });
+    expect(pairCalls()).toHaveLength(0);
+  });
+
+  it('uploadPairs refuses without a file and sends nothing', async () => {
+    draft.partner = '2';
+    expect(await uploadPairs()).toBe(false);
+    expect(messages.current).toEqual({ text: 'Choose a TMX or two-column file first.', kind: 'err' });
+    expect(pairCalls()).toHaveLength(0);
   });
 });
