@@ -85,6 +85,7 @@ describe('ScopeControl', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Remove Tags: wind' }));
     expect(corpusStore.scope.tags).toBe('');
     expect(screen.queryByText('Tags: wind')).toBeNull();
+    expect(pill()).toHaveFocus();
   });
 
   it('lists the facet types with counts and filters by the chosen one', async () => {

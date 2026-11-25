@@ -7,6 +7,19 @@ import { go } from '../src/lib/router.svelte';
 import { setLang } from '../src/lib/i18n';
 
 beforeEach(() => {
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => ({
+    ok: true,
+    status: 200,
+    statusText: 'OK',
+    json: async () =>
+      url.includes('/facets')
+        ? { tags: [], text_types: [], date_min: '', date_max: '' }
+        : url.includes('/scope')
+          ? { filtered: false, docs: 2, total_docs: 2, words: 10, total_words: 10 }
+          : [],
+  })));
+  corpusStore.currentId = 1;
+  corpusStore.clearScope();
   vi.stubGlobal('ResizeObserver', class {
     observe() {}
     disconnect() {}
@@ -91,5 +104,43 @@ describe('PageHeader', () => {
     render(PageHeader);
     await tick();
     expect(screen.queryByRole('link', { name: /Documents/ })).not.toBeInTheDocument();
+  });
+
+  describe('scope control', () => {
+    const pill = () => screen.queryByRole('button', { name: /All documents|of .* documents/ });
+
+    it.each(['concordance', 'frequency', 'job'] as const)('shows the pill beside the picker on %s', async (id) => {
+      go(id);
+      render(PageHeader);
+      await tick();
+      expect(pill()).toBeInTheDocument();
+      expect(screen.getByRole('group', { name: 'Working in' })).toBeInTheDocument();
+    });
+
+    it.each(['sources', 'termbase', 'languages', 'sources-add'] as const)('has no pill on %s', async (id) => {
+      go(id);
+      render(PageHeader);
+      await tick();
+      expect(pill()).toBeNull();
+    });
+
+    it('has no pill without a corpus', async () => {
+      corpusStore.currentId = null;
+      go('concordance');
+      render(PageHeader);
+      await tick();
+      expect(pill()).toBeNull();
+    });
+
+    it('keeps the scope when moving between screens', async () => {
+      corpusStore.scope.tags = 'wind';
+      go('concordance');
+      render(PageHeader);
+      await tick();
+      expect(screen.getByText('Tags: wind')).toBeInTheDocument();
+      go('keyness');
+      await tick();
+      expect(screen.getByText('Tags: wind')).toBeInTheDocument();
+    });
   });
 });

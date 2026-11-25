@@ -297,7 +297,6 @@ export const it: Messages = {
   'doc.translation': 'Traduzione allineata',
   'shortcuts.addTerm': 'Aggiungi come termine il risultato selezionato (o il testo selezionato)',
   'filter.label': 'Filtro dei documenti',
-  'filter.only': 'Solo documenti con',
   'filter.tags': 'Etichette',
   'filter.tagsPlaceholder': 'tutte: a, b',
   'filter.type': 'Tipo',

@@ -28,7 +28,6 @@
   import ReviewControls from '../lib/ui/ReviewControls.svelte';
   import ReviewStatus from '../lib/ui/ReviewStatus.svelte';
   import WordLink from '../lib/ui/WordLink.svelte';
-  import ScopeFilter from './ScopeFilter.svelte';
 
   /** The key of the column holding the `+ Term` button. */
   const TERM_KEY = '_term';
@@ -363,7 +362,6 @@
         </span>
       </div>
     </Toolbar>
-    <ScopeFilter />
     <div class="body">
       <p class="intro">{t('job.intro')}</p>
       <textarea

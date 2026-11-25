@@ -47,7 +47,6 @@
   import Select from '../lib/ui/Select.svelte';
   import Toggle from '../lib/ui/Toggle.svelte';
   import Toolbar from '../lib/ui/Toolbar.svelte';
-  import ScopeFilter from './ScopeFilter.svelte';
 
   // Form state, restored from the route so a reload keeps the search.
   const initial = untrack(() => ({ ...route.params }));
@@ -382,7 +381,6 @@
         <p class="parsed bad" role="alert">{t('cc.queryError', { text: explanation.error })}</p>
       {/if}
     {/if}
-    <ScopeFilter />
 
     {#if result}
       <div class="strip">

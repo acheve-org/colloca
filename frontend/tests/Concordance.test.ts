@@ -125,6 +125,12 @@ async function search(q: string) {
 }
 
 describe('Concordance', () => {
+  it('has no document filter band of its own (the scope lives in the page header)', async () => {
+    render(Concordance);
+    await tick();
+    expect(screen.queryByText('Only documents with')).toBeNull();
+  });
+
   it('searches /concordance with q, unit, width, sort and scope params', async () => {
     render(Concordance);
     corpusStore.scope.tags = 'law';

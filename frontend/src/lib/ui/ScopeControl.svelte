@@ -47,6 +47,12 @@
     trigger?.focus();
   }
 
+  /** The chip (and its button) disappears: keep focus from falling to the page body. */
+  function removeChip(key: Parameters<typeof clearScopePart>[0]) {
+    clearScopePart(key);
+    trigger?.focus();
+  }
+
   onMount(() => startScope());
 </script>
 
@@ -103,7 +109,7 @@
   {#each chips as c (c.key)}
     <span class="chip">
       <span>{c.text}</span>
-      <button type="button" class="x" aria-label={t('scope.remove', { name: c.text })} onclick={() => clearScopePart(c.key)}>
+      <button type="button" class="x" aria-label={t('scope.remove', { name: c.text })} onclick={() => removeChip(c.key)}>
         <span aria-hidden="true">×</span>
       </button>
     </span>
@@ -117,9 +123,6 @@
     align-items: center;
     gap: var(--s-1);
     min-width: 0;
-  }
-  .anchor {
-    position: relative;
   }
   .pill {
     display: inline-flex;
@@ -158,7 +161,9 @@
     top: 100%;
     z-index: 10;
     box-sizing: border-box;
-    width: min(340px, calc(100vw - 2rem));
+    /* Positioned against the nearest positioned ancestor (the header's picker row), so it never
+       starts further right than that row and always fits inside it. */
+    width: min(340px, 100%);
     display: flex;
     flex-direction: column;
     gap: var(--s-2);

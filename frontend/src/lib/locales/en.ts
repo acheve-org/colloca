@@ -297,7 +297,6 @@ export const en: Messages = {
   'doc.translation': 'Aligned translation',
   'shortcuts.addTerm': 'Add the selected hit (or selected text) as a term',
   'filter.label': 'Document filter',
-  'filter.only': 'Only documents with',
   'filter.tags': 'Tags',
   'filter.tagsPlaceholder': 'all of: a, b',
   'filter.type': 'Type',
