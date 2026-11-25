@@ -482,12 +482,7 @@
       </form>
     </details>
 
-    {#if corpusStore.aligned}
-      <details class="disc tmx">
-        <summary>{t('tmx.title')}</summary>
-        <div class="cards"><TmxExport /></div>
-      </details>
-    {/if}
+    <TmxExport disclosure />
   {/if}
 </div>
 
@@ -650,12 +645,6 @@
   }
   .muted {
     color: var(--muted);
-  }
-  .cards {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
-    gap: var(--s-3);
-    padding: var(--s-3);
   }
   .strip {
     display: flex;

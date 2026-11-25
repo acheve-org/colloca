@@ -24,6 +24,7 @@ let docs: { status: number; body: unknown };
 let jobList: Job[][];
 let uploadReply: { status: number; body: unknown };
 let previewFileReply: Record<string, unknown>;
+let partners: unknown[];
 let docsGate: Promise<void> | null;
 let discovered: { links: { url: string; text: string; same_host: boolean }[]; max_per_request: number; truncated: boolean };
 let urlsReply: ((body: { urls: string[] }, n: number) => { status: number; body: unknown }) | null;
@@ -33,6 +34,7 @@ const res = (status: number, body: unknown) => ({ ok: status < 400, status, stat
 beforeEach(() => {
   calls = [];
   docsGate = null;
+  partners = [{ id: 2, name: 'C2', lang: 'it', docs: 3 }];
   urlsReply = null;
   discovered = { links: [], max_per_request: 20, truncated: false };
   docs = { status: 200, body: [doc(1), doc(2, { tags: [], text_type: 'manual' })] };
@@ -81,7 +83,7 @@ beforeEach(() => {
                   b: { id: 2, title: 'Doc 2', source: '', added: '2026-01-02', n_tokens: 990 }, similarity: 0.93 }],
       });
     }
-    if (p === '/api/corpora/1/aligned-partners') return res(200, [{ id: 2, name: 'C2', lang: 'it', docs: 3 }]);
+    if (p === '/api/corpora/1/aligned-partners') return res(200, partners);
     if (p === '/api/corpora/1/reannotate') return res(202, { job_id: 12 });
     if (/^\/api\/documents\/\d+$/.test(p)) return method === 'DELETE' ? res(204, null) : res(200, { ok: true });
     if (p === '/api/corpora/1' && method === 'PATCH') return res(200, { ok: true });
@@ -180,6 +182,7 @@ describe('Sources', () => {
     docs.body = [];
     render(Sources);
     expect(await screen.findByText('No documents yet.')).toBeInTheDocument();
+    expect(screen.getByText('Choose how to add documents below.')).toBeInTheDocument();
     const hrefs = screen.getAllByRole('link').map((a) => a.getAttribute('href'));
     for (const m of ['web', 'up', 'paste', 'al']) expect(hrefs).toContain(`#/sources/add?m=${m}`);
     expect(screen.getByRole('button', { name: 'Find near-duplicates' })).toBeDisabled();
@@ -196,6 +199,15 @@ describe('Sources', () => {
   it('shows the TMX export disclosure only for aligned corpora', async () => {
     await ready();
     expect(screen.queryByText('Export aligned texts (TMX)')).toBeNull();
+    expect(document.querySelector('details.tmx')).toBeNull();
+  });
+
+  it('shows no TMX disclosure for an aligned corpus without partners', async () => {
+    corpusStore.aligned = true;
+    partners = [];
+    await ready();
+    await waitFor(() => expect(calls.some((c) => c.path === '/api/corpora/1/aligned-partners')).toBe(true));
+    await new Promise((r) => setTimeout(r, 10));
     expect(document.querySelector('details.tmx')).toBeNull();
   });
 
