@@ -7,10 +7,10 @@ Colour, contrast and screen-reader notes: [accessibility.md](accessibility.md).
 | Area | Content |
 |---|---|
 | Icon rail | Narrow bar on the left with five areas: **Corpus** (Sources), **Explore**, **Terms** and **Job**, with **Settings** at the bottom. *Menu* (at the foot) holds the theme (Auto, Light, Dark), the language (EN, ES, IT) and *Log out* when a password is set. |
-| Page header | Above the work area: the working-corpus picker, the screen title and the tabs of the current area. |
+| Page header | Above the work area: the working-corpus picker, the screen title and the tabs of the current area. On the analysis screens, *Segment lookup* and *Job*, it also holds the document filter: an *All documents* / *N of M documents* pill that opens a panel (tags, text type, dates), with a removable chip for each active part. The filter persists across screens, resets when the corpus changes, and does not re-run a search. |
 | Corpus picker | Shows the working corpus and its project; a dropdown lists corpora grouped by project and ends with *Manage projects…*. Hidden on *Languages* and *Projects*. |
 | Tabs | **Explore**: Concordance, Collocations, N-grams, Frequency list, Dispersion plot, Keyness, Word cloud, Related terms; Equivalents and Segment lookup only for aligned corpora. **Terms**: Termbase, Candidates, Check text. **Settings**: Languages, Projects, Backup and Trash. Tabs that do not fit fold into a *More* menu; the current tab is always shown. |
-| Work area | Toolbar (options, document filter) → result strip (counts, *Filter in results*) → sortable table → detail strip with actions for the selected row. |
+| Work area | Toolbar (options) → result strip (counts, *Filter in results*) → sortable table → detail strip with actions for the selected row. |
 | Sources | **Corpus** > Sources is the document list: a sortable table with a filter, a detail strip (*Edit details*, *Remove*), *+ Add documents* and *Find near-duplicates* (a dialog) above it, and the live job log. Below the table, two collapsed sections: *Corpus settings* (name, project) and, for an aligned corpus with partners, *Export aligned texts (TMX)*. An empty corpus shows four tiles (from the web, upload, paste, aligned texts) that open *Add documents*. *+ Add documents* opens its own page (`#/sources/add`); see [getting-started.md](getting-started.md#workflow). |
 | Status line | Top of the window: messages, active model per language. |
 
