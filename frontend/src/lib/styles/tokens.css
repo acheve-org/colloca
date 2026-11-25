@@ -83,6 +83,7 @@
   --status-candidate: #f3c25c;
   --status-approved: #7fd99a;
   --status-forbidden: #ff9a90;
+  --shadow-pop: 0 4px 16px rgb(0 0 0 / 0.5); /* a light shadow vanishes on a dark page */
 
   color-scheme: dark;
 }
@@ -114,6 +115,7 @@
     --status-candidate: #f3c25c;
     --status-approved: #7fd99a;
     --status-forbidden: #ff9a90;
+    --shadow-pop: 0 4px 16px rgb(0 0 0 / 0.5); /* a light shadow vanishes on a dark page */
 
     color-scheme: dark;
   }

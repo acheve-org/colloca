@@ -20,6 +20,7 @@ Colour, contrast and screen-reader notes: [accessibility.md](accessibility.md).
   - A project without corpora: *New corpus*.
   - A search with no hits (Concordance): the likely reasons, then *Clear the filter and search* when a document filter is active and *Search the exact form* after a lemma search. The word cloud offers *Clear the filter* in the same way. A filter is only cleared when you press the button.
   - An empty Termbase: *Import a glossary* and *Add terms from the Concordance*. Empty Candidates: *Open the Frequency list*.
+- Small screens: below 640 px the Concordance shows one card per hit instead of the table (selecting, *Filter in results*, the detail strip and the arrow keys work the same; with *Source + target* a card shows both segments). Below 900 px *Projects* stacks: a *Change* button opens the list of projects, then the corpora of the chosen project follow below; choosing a project folds the list and puts focus back on *Change*. Wide tables scroll inside their own area, not the page.
 - Choosing an area in the rail opens the screen last used in it.
 - Creating, renaming, moving and deleting corpora and projects is done on *Projects*.
 - Screen and options live in the address (`#/concordance?q=...`): reload and bookmarks restore the search; the rail and tabs return each screen to its last search.

@@ -18,7 +18,11 @@ export async function newProject(page: Page, prefix = 'Project'): Promise<string
   expect(made.ok()).toBeTruthy();
   await page.goto('/#/projects');
   await page.reload();
-  await page.getByRole('button', { name: new RegExp(`^${escapeRegExp(name)}`) }).click();
+  const pick = page.getByRole('button', { name: new RegExp(`^${escapeRegExp(name)}`) });
+  const change = page.getByRole('button', { name: 'Change' }); // below 900px the list is folded behind Change
+  await expect(pick.or(change).first()).toBeVisible();
+  if (!(await pick.isVisible())) await change.click();
+  await pick.click();
   await expect(page.getByRole('heading', { name: `Corpora in ${name}` })).toBeVisible();
   return name;
 }
@@ -79,7 +83,7 @@ export async function openScreen(page: Page, name: string): Promise<void> {
   await expect(strip).toBeVisible();
   const tab = strip.getByRole('link', { name, exact: true });
   const more = strip.getByRole('button', { name: 'More' });
-  await expect(tab.or(more)).toBeVisible(); // the strip measures itself after it renders
+  await expect(tab.or(more).first()).toBeVisible(); // the strip measures itself after it renders
   if (!(await tab.isVisible())) await more.click();
   await tab.click();
   // The route changes after the click: wait for it, or the next step may act on the screen being left.

@@ -381,9 +381,12 @@
     display: flex;
     flex-direction: column;
     gap: var(--s-2);
+    padding: var(--s-2) var(--s-3);
   }
   h2 {
     margin: 0;
+    min-width: 0;
+    overflow-wrap: anywhere; /* a long project name wraps instead of pushing the button out */
   }
   .panes {
     display: grid;
@@ -429,13 +432,25 @@
     display: flex;
     justify-content: space-between;
     gap: var(--s-1);
+    height: auto; /* base.css gives every button a fixed control height; a long name wraps and the row grows */
+    min-height: calc(var(--row-h) - var(--s-1));
     padding: var(--s-1) var(--s-2);
     text-align: left;
     background: transparent;
     border: 0;
   }
   .pname {
+    min-width: 0;
     font-weight: 600;
+    overflow-wrap: anywhere;
+  }
+  .pick .muted {
+    flex: none;
+    white-space: nowrap;
+  }
+  header :global(button) {
+    flex: none;
+    white-space: nowrap; /* "New corpus" keeps its one line next to a long heading */
   }
   .edit,
   .new,

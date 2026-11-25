@@ -29,13 +29,22 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    flex-wrap: wrap; /* on a phone the actions drop below the title instead of squeezing it */
     gap: var(--s-2);
     padding: var(--s-1) var(--s-3);
     border-bottom: 1px solid var(--line);
   }
+  h3 {
+    white-space: nowrap;
+  }
   .actions {
     display: flex;
+    flex-wrap: wrap;
+    align-items: center;
     gap: var(--s-1);
+  }
+  .actions :global(button) {
+    white-space: nowrap; /* a button has a fixed height: its label must not wrap */
   }
   .body {
     padding: var(--s-2) var(--s-3);

@@ -56,6 +56,8 @@ const pairs: [string, string, string][] = [
   ['--status-approved', '--accent-soft', 'status-approved on accent-soft'],
   ['--status-forbidden', '--accent-soft', 'status-forbidden on accent-soft'],
   ['--accent', '--accent-soft', 'accent on accent-soft'],
+  ['--muted', '--accent-soft', 'muted on accent-soft'],
+  ['--danger', '--accent-soft', 'danger on accent-soft'],
   ['--rail-fg', '--rail-bg', 'rail text on rail'],
   ['--rail-muted', '--rail-bg', 'rail muted on rail'],
   ['--rail-fg', '--rail-hover', 'rail text on rail hover'],

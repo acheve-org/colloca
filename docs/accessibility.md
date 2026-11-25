@@ -21,7 +21,7 @@ cd frontend && UPDATE_DOCS=1 npx vitest run contrast
 | Candidate / approved / admitted / superseded / forbidden entry | `--status-*` and badges | the **status word** is always written; admitted has a dashed border, superseded is italic, forbidden is struck through |
 
 - Hit colours: background + text colour, always used together; each pair is measured.
-- Status colours: text on the page background and on the table surface. Selected rows put the badge on a surface pill, so the ratio holds.
+- Status colours: text on the page background and on the table surface. Selected rows and cards are tinted with `--accent-soft` (with a left bar or outline, so colour is not the only cue); the text and status colours are checked on that tint too.
 
 ## Measured contrast ratios
 
@@ -54,6 +54,8 @@ Thresholds: 4.5:1 = AA (normal text), 7:1 = AAA. All pairs are at least AA.
 | status-approved on accent-soft | `--status-approved` on `--accent-soft` | 5.93 (AA) | 6.03 (AA) |
 | status-forbidden on accent-soft | `--status-forbidden` on `--accent-soft` | 5.47 (AA) | 5.04 (AA) |
 | accent on accent-soft | `--accent` on `--accent-soft` | 4.61 (AA) | 5.50 (AA) |
+| muted on accent-soft | `--muted` on `--accent-soft` | 5.11 (AA) | 4.93 (AA) |
+| danger on accent-soft | `--danger` on `--accent-soft` | 5.47 (AA) | 5.04 (AA) |
 | rail text on rail | `--rail-fg` on `--rail-bg` | 11.39 (AAA) | 13.49 (AAA) |
 | rail muted on rail | `--rail-muted` on `--rail-bg` | 5.61 (AA) | 6.65 (AA) |
 | rail text on rail hover | `--rail-fg` on `--rail-hover` | 10.03 (AAA) | 10.03 (AAA) |
