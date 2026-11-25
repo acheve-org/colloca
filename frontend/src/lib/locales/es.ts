@@ -738,6 +738,7 @@ export const es: Messages = {
   'proj.open': 'Abrir',
   'proj.working': 'En uso',
   'proj.move': 'Mover',
+  'proj.change': 'Cambiar',
   'proj.moveTo': 'Mover los corpus a…',
   'proj.deleteHas': '{name} aún tiene {n} corpus. Elige adónde van antes de eliminarlo.',
   'proj.colCorpus': 'Corpus',

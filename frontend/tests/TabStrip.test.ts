@@ -149,6 +149,19 @@ describe('TabStrip', () => {
     expect(screen.getByRole('link', { name: 'Collocations' })).toHaveFocus();
   });
 
+  it('renders More with the same tab class as a regular tab and no offset class', async () => {
+    await overflowing();
+    const more = screen.getByRole('button', { name: 'More' });
+    const regular = screen.getAllByRole('link')[0];
+    expect(more.classList.contains('tab')).toBe(true);
+    expect(regular.classList.contains('tab')).toBe(true);
+    const extra = [...more.classList].filter((c) => c !== 'tab' && c !== 'more' && !c.startsWith('svelte-'));
+    expect(extra).toEqual([]);
+    expect(more.hasAttribute('style')).toBe(false);
+    expect(more.parentElement?.classList.contains('morewrap')).toBe(true);
+    expect(more.parentElement?.hasAttribute('style')).toBe(false);
+  });
+
   it('does not announce the More popover as a menu', async () => {
     await overflowing();
     expect(screen.getByRole('button', { name: 'More' })).not.toHaveAttribute('aria-haspopup');

@@ -5,6 +5,7 @@
   import { corpusStore } from '../lib/corpus.svelte';
   import { fmt, t } from '../lib/i18n';
   import { messages } from '../lib/messages.svelte';
+  import { viewport } from '../lib/viewport.svelte';
   import { projectStore, reloadProjects } from '../lib/projects.svelte';
   import type { Corpus, Project } from '../lib/types';
   import Badge from '../lib/ui/Badge.svelte';
@@ -29,6 +30,8 @@
   let delProject = $state.raw<Project | null>(null);
   let delProjectOpen = $state(false);
   let target = $state('');
+  // Stacked screens show the chosen project as one card; this opens the full list. State lives here, not in the markup branch.
+  let listOpen = $state(false);
 
   onMount(() => {
     reloadProjects().catch((err) => messages.say(errMsg(err), 'err'));
@@ -50,6 +53,12 @@
   // Nothing to choose from yet (and the list has been fetched, not just empty while loading).
   const firstRun = $derived(projectStore.loaded && !projectStore.list.length && !loose.length);
   const heading = $derived(t('proj.corporaOf', { name: selected?.name ?? t('ctx.noProject') }));
+
+  const collapsed = $derived(viewport.stacked && !listOpen);
+  const choose = (id: number | null) => {
+    picked = id;
+    listOpen = false;
+  };
 
   const nameOf = (p: Project) => names[p.id] ?? p.name;
   const corporaLabel = (n: number) => (n === 1 ? t('proj.corpora1') : t('proj.corpora', { n }));
@@ -186,11 +195,15 @@
     <section class="left">
       <ul class="plist">
         {#each projectStore.list as p (p.id)}
+          {#if !collapsed || p.id === selectedId}
           <li class:sel={p.id === selectedId}>
-            <button type="button" class="pick" aria-pressed={p.id === selectedId} onclick={() => (picked = p.id)}>
+            <button type="button" class="pick" aria-pressed={p.id === selectedId} onclick={() => choose(p.id)}>
               <span class="pname">{p.name}</span>
               <span class="muted">{corporaLabel(p.corpora)}</span>
             </button>
+            {#if collapsed}
+              <div class="change"><Button onclick={() => (listOpen = true)}>{t('proj.change')}</Button></div>
+            {/if}
             {#if p.id === selectedId}
               <div class="edit">
                 <input
@@ -219,13 +232,17 @@
               </div>
             {/if}
           </li>
+          {/if}
         {/each}
-        {#if loose.length}
+        {#if loose.length && (!collapsed || selectedId === null)}
           <li class:sel={selectedId === null}>
-            <button type="button" class="pick" aria-pressed={selectedId === null} onclick={() => (picked = null)}>
+            <button type="button" class="pick" aria-pressed={selectedId === null} onclick={() => choose(null)}>
               <span class="pname">{t('ctx.noProject')}</span>
               <span class="muted">{corporaLabel(loose.length)}</span>
             </button>
+            {#if collapsed}
+              <div class="change"><Button onclick={() => (listOpen = true)}>{t('proj.change')}</Button></div>
+            {/if}
           </li>
         {/if}
       </ul>
@@ -368,9 +385,17 @@
   }
   .panes {
     display: grid;
-    grid-template-columns: minmax(14rem, 22rem) 1fr;
+    grid-template-columns: minmax(0, 22rem) minmax(0, 1fr);
     gap: var(--s-3);
     align-items: start;
+  }
+  @media (max-width: 899px) {
+    .panes {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+  .right {
+    overflow-x: auto; /* a wide corpus table scrolls inside its pane, not the page */
   }
   .left,
   .right {
@@ -416,6 +441,9 @@
     display: flex;
     align-items: center;
     gap: var(--s-1);
+  }
+  .change {
+    padding: 0 var(--s-2) var(--s-1);
   }
   .edit {
     padding: 0 var(--s-2) var(--s-1);

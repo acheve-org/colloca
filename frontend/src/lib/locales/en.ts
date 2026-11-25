@@ -739,6 +739,7 @@ export const en: Messages = {
   'proj.open': 'Open',
   'proj.working': 'Working',
   'proj.move': 'Move',
+  'proj.change': 'Change',
   'proj.moveTo': 'Move corpora to…',
   'proj.deleteHas': '{name} still has {n} corpora. Choose where they go before deleting it.',
   'proj.colCorpus': 'Corpus',
