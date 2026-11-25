@@ -9,10 +9,7 @@
 <script lang="ts">
   import { onMount, tick, untrack } from 'svelte';
   import { del, get, patch, post } from '../lib/api';
-  import {
-    act, draft, metaSummary, still, watch, work,
-    type Meta,
-  } from '../lib/addDocuments.svelte';
+  import { act, still, watch, work, type Meta } from '../lib/addDocuments.svelte';
   import { CORPUS_CHANGED, corpusStore } from '../lib/corpus.svelte';
   import { hrefFor } from '../lib/router.svelte';
   import { t, fmt } from '../lib/i18n';
@@ -30,7 +27,7 @@
   import EmptyState from '../lib/ui/EmptyState.svelte';
   import Field from '../lib/ui/Field.svelte';
   import Select from '../lib/ui/Select.svelte';
-  import Toggle from '../lib/ui/Toggle.svelte';
+  import MethodTiles from '../lib/ui/add/MethodTiles.svelte';
   import Toolbar from '../lib/ui/Toolbar.svelte';
 
   const uid = $props.id();
@@ -379,69 +376,6 @@
   {#if !hasCorpus}
     {#if corpusStore.loaded}<EmptyState title={t('corpus.selectFirst')} />{/if}
   {:else}
-    <div class="scroll">
-      <form
-        class="contents"
-        onsubmit={(e) => {
-          e.preventDefault();
-          saveSettings();
-        }}
-      >
-        <Toolbar label={t('src.settings')}>
-          <Field label={t('src.corpusName')}>
-            <input bind:value={setName} required maxlength="120" size="26" />
-          </Field>
-          <Field label={t('src.project')}>
-            <Select label={t('src.project')} bind:value={setProject} options={projectOptions} />
-          </Field>
-          <Button type="submit" disabled={work.busy !== null || !setName.trim()}>{t('src.saveCorpus')}</Button>
-        </Toolbar>
-      </form>
-
-      <details class="meta">
-        <summary>
-          {t('src.meta.summary')}
-          {#if metaSummary()}<span class="on">{metaSummary()}</span>{:else}<span class="muted">{t('src.meta.optional')}</span>{/if}
-        </summary>
-        <div class="row">
-          <Field label={t('src.meta.tags')}>
-            <input bind:value={draft.meta.tags} list="{uid}-tags" placeholder={t('src.meta.tagsPlaceholder')} size="18" />
-          </Field>
-          <Field label={t('src.meta.type')}>
-            <input bind:value={draft.meta.text_type} list="{uid}-types" placeholder={t('src.meta.typePlaceholder')} size="12" />
-          </Field>
-          <Field label={t('src.meta.date')}>
-            <input bind:value={draft.meta.doc_date} placeholder={t('src.meta.datePlaceholder')} size="10" />
-          </Field>
-          <Field label={t('src.meta.author')}>
-            <input bind:value={draft.meta.author} size="14" />
-          </Field>
-        </div>
-        <p class="hint">{t('src.meta.hint')}</p>
-      </details>
-      <datalist id="{uid}-tags">
-        {#each facets.tags as x (x.tag)}<option value={x.tag}>{t('filter.docs', { docs: x.docs })}</option>{/each}
-      </datalist>
-      <datalist id="{uid}-types">
-        {#each facets.text_types as x (x.text_type)}<option value={x.text_type}></option>{/each}
-      </datalist>
-
-      <div class="force">
-        <Toggle bind:checked={draft.force} label={t('src.force')} />
-        <Button disabled={work.busy !== null || !docs.length} onclick={openDuplicates}>{t('dup.find')}</Button>
-      </div>
-
-      {#if jobLog.length}
-        <ul class="jobs" aria-live="polite" aria-label={t('jobs.label')}>
-          {#each jobLog as j (j.id)}{@render jobRow(j)}{/each}
-        </ul>
-      {/if}
-
-      <div class="cards">
-        <TmxExport />
-      </div>
-    </div>
-
     <div class="strip">
       <h3>{t('src.documents')}</h3>
       {#if loadedOnce}<span class="count">{count}</span>{/if}
@@ -455,12 +389,29 @@
           <Button disabled={work.busy !== null} onclick={reannotate}>{t('src.reann.go')}</Button>
         </span>
       {/if}
-      <a class="addlink" href={hrefFor('sources-add')}>{t('add.add')}</a>
+      <span class="actions">
+        <Button disabled={work.busy !== null || !docs.length} onclick={openDuplicates}>{t('dup.find')}</Button>
+        <a class="addlink" href={hrefFor('sources-add')}>{t('add.add')}</a>
+      </span>
     </div>
+
+    {#if jobLog.length}
+      <ul class="jobs" aria-live="polite" aria-label={t('jobs.label')}>
+        {#each jobLog as j (j.id)}{@render jobRow(j)}{/each}
+      </ul>
+    {/if}
+
+    <datalist id="{uid}-tags">
+      {#each facets.tags as x (x.tag)}<option value={x.tag}>{t('filter.docs', { docs: x.docs })}</option>{/each}
+    </datalist>
+    <datalist id="{uid}-types">
+      {#each facets.text_types as x (x.text_type)}<option value={x.text_type}></option>{/each}
+    </datalist>
 
     <div class="table" bind:this={tableEl}>
       {#if loadedOnce && !docs.length && !loading}
         <EmptyState title={t('src.empty')} hint={t('src.emptyHint')} />
+        <MethodTiles />
       {:else}
         <DataTable
           {columns}
@@ -509,6 +460,33 @@
           </dl>
         </DetailStrip>
       </div>
+    {/if}
+
+    <details class="disc">
+      <summary>{t('src.settings')}</summary>
+      <form
+        onsubmit={(e) => {
+          e.preventDefault();
+          saveSettings();
+        }}
+      >
+        <Toolbar label={t('src.settings')}>
+          <Field label={t('src.corpusName')}>
+            <input bind:value={setName} required maxlength="120" size="26" />
+          </Field>
+          <Field label={t('src.project')}>
+            <Select label={t('src.project')} bind:value={setProject} options={projectOptions} />
+          </Field>
+          <Button type="submit" disabled={work.busy !== null || !setName.trim()}>{t('src.saveCorpus')}</Button>
+        </Toolbar>
+      </form>
+    </details>
+
+    {#if corpusStore.aligned}
+      <details class="disc tmx">
+        <summary>{t('tmx.title')}</summary>
+        <div class="cards"><TmxExport /></div>
+      </details>
     {/if}
   {/if}
 </div>
@@ -582,7 +560,7 @@
 </Dialog>
 
 <style>
-  /* One scrolling page: the add forms, then the documents table at a usable height. */
+  /* One scrolling page: the toolbar, the job log, the documents table and the disclosures. */
   .sources {
     display: flex;
     flex-direction: column;
@@ -590,53 +568,21 @@
     min-height: 0;
     overflow: auto;
   }
-  .scroll {
+  .disc {
     flex: none;
-    border-bottom: 1px solid var(--line);
-  }
-  .contents {
-    display: contents;
-  }
-  .meta {
     padding: var(--s-1) var(--s-3);
-    border-bottom: 1px solid var(--line);
+    border-top: 1px solid var(--line);
     font-size: var(--fs-small);
   }
-  .meta summary {
+  .disc summary {
     cursor: pointer;
     font-weight: 600;
-  }
-  .meta summary span {
-    margin-left: var(--s-2);
-    font-weight: normal;
-  }
-  .on {
-    color: var(--accent);
   }
   .row {
     display: flex;
     flex-wrap: wrap;
     align-items: flex-end;
     gap: var(--s-2);
-  }
-  .meta .row {
-    padding-top: var(--s-2);
-  }
-  .grow {
-    flex: 1;
-    min-width: 0;
-  }
-  .hint {
-    margin: var(--s-1) 0 0;
-    color: var(--muted);
-    font-size: var(--fs-small);
-  }
-  .force {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--s-3);
-    padding: var(--s-1) var(--s-3);
   }
   .job {
     flex-wrap: wrap;
@@ -725,7 +671,6 @@
     display: inline-flex;
     align-items: center;
     height: calc(var(--row-h) - var(--s-1));
-    margin-left: auto;
     padding: 0 var(--s-2);
     background: var(--accent);
     color: var(--accent-fg);
@@ -740,6 +685,11 @@
     width: 14rem;
   }
   .stale {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--s-2);
+  }
+  .actions {
     display: inline-flex;
     align-items: center;
     gap: var(--s-2);

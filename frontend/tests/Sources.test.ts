@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/sve
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Sources from '../src/screens/Sources.svelte';
 import { CORPUS_CHANGED, corpusStore } from '../src/lib/corpus.svelte';
-import { jobs, stopAllJobs, trackJobs } from '../src/lib/jobs.svelte';
+import { JOBS_DONE, jobs, stopAllJobs, trackJobs } from '../src/lib/jobs.svelte';
 import { messages } from '../src/lib/messages.svelte';
 import type { Doc, Job } from '../src/lib/types';
 
@@ -81,6 +81,7 @@ beforeEach(() => {
                   b: { id: 2, title: 'Doc 2', source: '', added: '2026-01-02', n_tokens: 990 }, similarity: 0.93 }],
       });
     }
+    if (p === '/api/corpora/1/aligned-partners') return res(200, [{ id: 2, name: 'C2', lang: 'it', docs: 3 }]);
     if (p === '/api/corpora/1/reannotate') return res(202, { job_id: 12 });
     if (/^\/api\/documents\/\d+$/.test(p)) return method === 'DELETE' ? res(204, null) : res(200, { ok: true });
     if (p === '/api/corpora/1' && method === 'PATCH') return res(200, { ok: true });
@@ -99,11 +100,14 @@ afterEach(() => {
   vi.unstubAllGlobals();
   corpusStore.list = [];
   corpusStore.currentId = null;
+  corpusStore.aligned = false;
 });
 
 const bodyRows = () => screen.queryAllByRole('row').filter((r) => r.classList.contains('body'));
 const docCalls = () => calls.filter((c) => c.path === '/api/corpora/1/documents' && c.method === 'GET');
 const jobCalls = () => calls.filter((c) => c.path === '/api/corpora/1/jobs');
+
+const openSettings = () => fireEvent.click(screen.getByText('Corpus settings'));
 
 async function ready() {
   const r = render(Sources);
@@ -145,6 +149,64 @@ describe('Sources', () => {
     await waitFor(() => expect(calls.some((c) => c.path === '/api/corpora/1/parallel')).toBe(true));
     await vi.advanceTimersByTimeAsync(3000);
     expect(calls.filter((c) => c.path === '/api/corpora').length).toBe(1);
+  });
+
+  it('is only the list: no add forms or metadata strip', async () => {
+    await ready();
+    expect(screen.queryByLabelText('Documents to upload')).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Paste text' })).toBeNull();
+    expect(screen.queryByText('Details for the documents I add next')).toBeNull();
+    expect(screen.queryByText('Import even if the language looks wrong')).toBeNull();
+  });
+
+  it('offers + Add documents and Find near-duplicates in the toolbar', async () => {
+    await ready();
+    expect(screen.getByRole('link', { name: '+ Add documents' })).toHaveAttribute('href', '#/sources/add');
+    expect(screen.getByRole('button', { name: 'Find near-duplicates' })).toBeEnabled();
+    expect(screen.queryAllByRole('link', { name: /From the web/ }).length).toBe(0);
+  });
+
+  it('reloads the documents when the jobs of this corpus finish', async () => {
+    await ready();
+    const before = docCalls().length;
+    window.dispatchEvent(new CustomEvent(JOBS_DONE, { detail: { id: 2 } }));
+    await new Promise((r) => setTimeout(r, 10));
+    expect(docCalls().length).toBe(before);
+    window.dispatchEvent(new CustomEvent(JOBS_DONE, { detail: { id: 1 } }));
+    await waitFor(() => expect(docCalls().length).toBe(before + 1));
+  });
+
+  it('shows the four methods as tiles for an empty corpus', async () => {
+    docs.body = [];
+    render(Sources);
+    expect(await screen.findByText('No documents yet.')).toBeInTheDocument();
+    const hrefs = screen.getAllByRole('link').map((a) => a.getAttribute('href'));
+    for (const m of ['web', 'up', 'paste', 'al']) expect(hrefs).toContain(`#/sources/add?m=${m}`);
+    expect(screen.getByRole('button', { name: 'Find near-duplicates' })).toBeDisabled();
+  });
+
+  it('keeps the corpus settings collapsed until opened', async () => {
+    await ready();
+    const d = screen.getByText('Corpus settings').closest('details')!;
+    expect(d).not.toHaveAttribute('open');
+    await openSettings();
+    expect(d).toHaveAttribute('open');
+  });
+
+  it('shows the TMX export disclosure only for aligned corpora', async () => {
+    await ready();
+    expect(screen.queryByText('Export aligned texts (TMX)')).toBeNull();
+    expect(document.querySelector('details.tmx')).toBeNull();
+  });
+
+  it('shows the TMX export in a collapsed disclosure for an aligned corpus', async () => {
+    corpusStore.aligned = true;
+    await ready();
+    await waitFor(() => expect(document.querySelector('details.tmx')).not.toBeNull());
+    const d = document.querySelector('details.tmx')!;
+    expect(d).not.toHaveAttribute('open');
+    expect(within(d as HTMLElement).getByRole('heading', { name: 'Export aligned texts (TMX)', hidden: true })).toBeInTheDocument();
+    expect(within(d as HTMLElement).getByRole('link', { name: 'Download TMX', hidden: true })).toBeInTheDocument();
   });
 
   it('deleting a document asks for confirmation', async () => {
@@ -215,6 +277,7 @@ describe('Sources', () => {
 
   it('saves the corpus name and project', async () => {
     await ready();
+    await openSettings();
     await waitFor(() => expect(screen.getByRole('option', { name: 'Acme' })).toBeInTheDocument());
     await fireEvent.input(screen.getByLabelText('Corpus name'), { target: { value: 'Renamed' } });
     await fireEvent.change(screen.getByLabelText('Project'), { target: { value: '7' } });
@@ -225,6 +288,7 @@ describe('Sources', () => {
 
   it('a corpus without a project shows a disabled placeholder and a rename never sends project_id', async () => {
     await ready();
+    await openSettings();
     await waitFor(() => expect(screen.getByRole('option', { name: 'Acme' })).toBeInTheDocument());
     expect(screen.queryByRole('option', { name: '— none —' })).toBeNull();
     expect(screen.getByRole('option', { name: 'Choose a project' })).toBeDisabled();
