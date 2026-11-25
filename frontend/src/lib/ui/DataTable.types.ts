@@ -30,3 +30,10 @@ export function cellValue<Row>(row: Row, col: Column<Row>): string | number {
 export function foldText(s: string): string {
   return s.normalize('NFD').replace(/\p{M}+/gu, '').toLowerCase();
 }
+
+/** Quick filter: the folded values of all columns, joined, must contain the trimmed filter. An empty filter matches. */
+export function rowMatchesFilter<Row>(row: Row, columns: Column<Row>[], filter: string): boolean {
+  const q = foldText(filter.trim());
+  if (!q) return true;
+  return foldText(columns.map((c) => String(cellValue(row, c))).join('\u0001')).includes(q);
+}

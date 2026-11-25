@@ -43,8 +43,10 @@
     align-items: center;
     gap: var(--s-1);
   }
+  /* A label that does not fit wraps onto a second line: the button's height follows its text. */
   .actions :global(button) {
-    white-space: nowrap; /* a button has a fixed height: its label must not wrap */
+    height: auto;
+    padding: var(--s-1) var(--s-2);
   }
   .body {
     padding: var(--s-2) var(--s-3);

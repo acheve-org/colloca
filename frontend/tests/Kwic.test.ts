@@ -319,6 +319,20 @@ describe('Kwic cards (narrow)', () => {
     expect(cards()[1]).toHaveAttribute('aria-selected', 'true');
   });
 
+  it('a filter that hides the selected hit clears the selection', async () => {
+    narrow();
+    const onselect = vi.fn();
+    const lines = [line(1), line(2, { doc: 'zeta' })];
+    const { rerender } = render(Kwic, { lines, mode: 'kwic', query: 'casa', selected: lines[1], onselect, filter: '' });
+    expect(cards()[1]).toHaveAttribute('aria-selected', 'true');
+    await rerender({ lines, mode: 'kwic', query: 'casa', selected: lines[1], onselect, filter: 'doc1' });
+    await tick();
+    await tick();
+    expect(onselect).toHaveBeenLastCalledWith(null);
+    expect(cards()).toHaveLength(1);
+    expect(screen.queryByRole('option', { selected: true })).toBeNull();
+  });
+
   it('filters the cards with the quick filter', () => {
     narrow();
     render(Kwic, { lines: [line(1), line(2, { doc: 'zeta' })], mode: 'kwic', query: 'casa', selected: null, filter: 'ZETA' });

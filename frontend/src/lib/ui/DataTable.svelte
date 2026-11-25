@@ -11,7 +11,7 @@
 <script lang="ts" generics="Row">
   import { tick, untrack, type Snippet } from 'svelte';
   import { t, locale } from '../i18n';
-  import { cellValue, foldText, type Column, type SortState } from './DataTable.types';
+  import { cellValue, rowMatchesFilter, type Column, type SortState } from './DataTable.types';
 
   interface Props {
     columns: Column<Row>[];
@@ -51,15 +51,9 @@
   let wrap: HTMLElement | undefined = $state();
   let headEl: HTMLElement | undefined = $state();
 
-  // Searchable text per row, rebuilt only when rows/columns change.
-  const haystack = $derived(
-    rows.map((r) => foldText(columns.map((c) => String(cellValue(r, c))).join('\u0001'))),
-  );
-
   const view = $derived.by(() => {
-    const q = foldText(filter.trim());
     let idx = rows.map((_, i) => i);
-    if (q) idx = idx.filter((i) => haystack[i].includes(q));
+    if (filter.trim()) idx = idx.filter((i) => rowMatchesFilter(rows[i], columns, filter));
     if (sort) {
       const col = columns.find((c) => c.key === sort!.key);
       if (col) {

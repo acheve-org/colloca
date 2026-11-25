@@ -18,7 +18,7 @@
   import { viewport } from '../viewport.svelte';
   import { sourceRanges, targetIsGuess, targetRanges, termRanges } from '../highlight';
   import DataTable from './DataTable.svelte';
-  import { cellValue, foldText, type Column } from './DataTable.types';
+  import { rowMatchesFilter, type Column } from './DataTable.types';
   import Highlight from './Highlight.svelte';
 
   interface Props {
@@ -77,15 +77,10 @@
     ];
   });
 
-  // --- Card list (narrow screens). Same filter semantics as DataTable: the folded text of the
-  // columns above, accents and case ignored.
-  const cardLines = $derived.by(() => {
-    const q = foldText(filter.trim());
-    if (!q) return lines;
-    return lines.filter((l) =>
-      foldText(columns.map((c) => String(cellValue(l, c))).join('\u0001')).includes(q),
-    );
-  });
+  // --- Card list (narrow screens). Same filter as DataTable (rowMatchesFilter).
+  const cardLines = $derived(
+    filter.trim() ? lines.filter((l) => rowMatchesFilter(l, columns, filter)) : lines,
+  );
   const selKey = $derived(selected ? lineKey(selected) : null);
   const focusKey = $derived(
     selKey !== null && cardLines.some((l) => lineKey(l) === selKey)
