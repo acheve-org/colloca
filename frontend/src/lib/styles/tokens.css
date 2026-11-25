@@ -1,9 +1,9 @@
 /* Colloca design tokens. Light is the default; dark applies via
    data-theme="dark" or, when no data-theme is set, prefers-color-scheme. */
 :root {
-  --bg: #ffffff;
-  --surface: #f6f7f9;
-  --line: #d5d9e0;
+  --bg: #f0f2f5;
+  --surface: #e5e8ee;
+  --line: #c3c9d4;
   --fg: #1d2330;
   --muted: #596273;
   --accent: #1f5fbf;
@@ -49,54 +49,54 @@
 }
 
 :root[data-theme="dark"] {
-  --bg: #14171c;
-  --surface: #1b1f26;
-  --line: #333a47;
-  --fg: #e4e7ec;
-  --muted: #9aa4b5;
-  --accent: #6ba3f5;
+  --bg: #262d3b;
+  --surface: #2f374a;
+  --line: #434c5e;
+  --fg: #e8ebf0;
+  --muted: #aab4c6;
+  --accent: #7fb2ff;
   --accent-fg: #0b1220;
-  --danger: #ff8a80;
+  --danger: #ff9a90;
 
-  --hit-query-bg: #4a3d0c;
+  --hit-query-bg: #5a4a12;
   --hit-query-fg: #fbe38b;
-  --hit-equiv-bg: #17391f;
-  --hit-equiv-fg: #9fdcae;
-  --hit-term-bg: #17304f;
-  --hit-term-fg: #a9ccff;
-  --hit-forbidden-bg: #4a1f1b;
-  --hit-forbidden-fg: #ffb4ab;
+  --hit-equiv-bg: #1f4a2b;
+  --hit-equiv-fg: #a9e6b8;
+  --hit-term-bg: #1f3d63;
+  --hit-term-fg: #b9d6ff;
+  --hit-forbidden-bg: #5c2a25;
+  --hit-forbidden-fg: #ffc4bc;
 
-  --status-candidate: #f0b94d;
-  --status-approved: #6fd08c;
-  --status-forbidden: #ff8a80;
+  --status-candidate: #f3c25c;
+  --status-approved: #7fd99a;
+  --status-forbidden: #ff9a90;
 
   color-scheme: dark;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
-    --bg: #14171c;
-    --surface: #1b1f26;
-    --line: #333a47;
-    --fg: #e4e7ec;
-    --muted: #9aa4b5;
-    --accent: #6ba3f5;
+    --bg: #262d3b;
+    --surface: #2f374a;
+    --line: #434c5e;
+    --fg: #e8ebf0;
+    --muted: #aab4c6;
+    --accent: #7fb2ff;
     --accent-fg: #0b1220;
-    --danger: #ff8a80;
+    --danger: #ff9a90;
 
-    --hit-query-bg: #4a3d0c;
+    --hit-query-bg: #5a4a12;
     --hit-query-fg: #fbe38b;
-    --hit-equiv-bg: #17391f;
-    --hit-equiv-fg: #9fdcae;
-    --hit-term-bg: #17304f;
-    --hit-term-fg: #a9ccff;
-    --hit-forbidden-bg: #4a1f1b;
-    --hit-forbidden-fg: #ffb4ab;
+    --hit-equiv-bg: #1f4a2b;
+    --hit-equiv-fg: #a9e6b8;
+    --hit-term-bg: #1f3d63;
+    --hit-term-fg: #b9d6ff;
+    --hit-forbidden-bg: #5c2a25;
+    --hit-forbidden-fg: #ffc4bc;
 
-    --status-candidate: #f0b94d;
-    --status-approved: #6fd08c;
-    --status-forbidden: #ff8a80;
+    --status-candidate: #f3c25c;
+    --status-approved: #7fd99a;
+    --status-forbidden: #ff9a90;
 
     color-scheme: dark;
   }

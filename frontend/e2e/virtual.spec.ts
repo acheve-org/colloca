@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { newCorpus } from './helpers';
+import { newCorpus, openScreen } from './helpers';
 
 test('a long concordance renders a window of rows and still scrolls to the end', async ({ page }) => {
   await newCorpus(page, 'Larga');
@@ -10,7 +10,7 @@ test('a long concordance renders a window of rows and still scrolls to the end',
   await page.getByRole('button', { name: 'Add text' }).click();
   await expect(page.getByRole('row', { name: /Pasted text/ })).toBeVisible({ timeout: 90_000 });
 
-  await page.getByRole('navigation').getByRole('link', { name: 'Concordance' }).click();
+  await openScreen(page, 'Concordance');
   await page.getByLabel('Word or phrase').fill('contrato');
   await page.getByLabel('Hits').selectOption('2000');
   await page.getByRole('button', { name: 'Search', exact: true }).click();

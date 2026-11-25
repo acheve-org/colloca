@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
-import { newCorpus } from './helpers';
+import { newCorpus, openScreen } from './helpers';
 
 const TERM = 'parque eólico';
 
@@ -35,11 +35,11 @@ test('keyboard layer: slash, help overlay, rebinding, example keys', async ({ pa
   await expect(help).toBeVisible();
 
   // Rebind "go to concordance" from "/" to "g".
-  await help.getByRole('button', { name: /Go to concordance.*Change/ }).first().click();
+  await help.getByRole('button', { name: /Go to concordance.*Change/ }).filter({ hasText: /^\/$/ }).click();
   await page.keyboard.press('g');
   await page.keyboard.press('Escape');
   await expect(help).toBeHidden();
-  await page.getByRole('navigation').getByRole('link', { name: 'Termbase' }).click();
+  await openScreen(page, 'Termbase');
   await page.keyboard.press('/');
   await expect(page.getByLabel('Word or phrase')).toHaveCount(0);
   await page.keyboard.press('g');

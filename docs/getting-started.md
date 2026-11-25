@@ -30,7 +30,7 @@ docker compose up
    | Upload | Formats in [importing.md](importing.md). Exact duplicates are rejected. |
 
    Index imports flag in the job report: very short texts, cookie/JavaScript/paywall boilerplate, landing-page titles, repeated titles. Flagged documents are still added.
-3. **Explore** with the left rail.
+3. **Explore**: pick Explore in the rail, then a tab.
    - Click any word in a table to open its concordance.
    - Every table: sort by header, *Filter in results*, CSV export.
    - Tables over 400 rows render only visible rows; sorting, filtering and keyboard act on all rows.

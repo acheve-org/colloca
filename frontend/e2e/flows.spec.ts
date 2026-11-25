@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { expect, test } from '@playwright/test';
-import { newCorpus } from './helpers';
+import { newCorpus, openScreen } from './helpers';
 
 test('aligned texts: import a two-column file, then search source + target', async ({ page }) => {
   await newCorpus(page, 'Alineados');
@@ -18,7 +18,7 @@ test('aligned texts: import a two-column file, then search source + target', asy
   ]);
   expect(tmx.suggestedFilename()).toBe('Alineados.tmx');
 
-  await page.getByRole('navigation').getByRole('link', { name: 'Concordance' }).click();
+  await openScreen(page, 'Concordance');
   await page.getByLabel('Word or phrase').fill('parque eólico');
   await page.getByLabel('Source + target').check();
   await page.getByRole('button', { name: 'Search', exact: true }).click();
@@ -35,7 +35,7 @@ test('job analysis: paste a text and read the coverage report', async ({ page })
   await page.getByRole('button', { name: 'Add text' }).click();
   await expect(page.getByRole('row', { name: /Pasted text|Untitled|parque/i }).first()).toBeVisible({ timeout: 60_000 });
 
-  await page.getByRole('navigation').getByRole('link', { name: 'Job' }).click();
+  await openScreen(page, 'Job');
   await page.getByLabel('Or paste the text here').fill('El parque eólico necesita energía. El parque nuevo produce mucho.');
   await page.getByRole('button', { name: 'Analyse', exact: true }).click();
   await expect(page.getByText('words', { exact: true }).first()).toBeVisible({ timeout: 60_000 });
@@ -50,7 +50,7 @@ test('segment lookup: a segment with one word changed finds its stored match and
   await page.getByRole('button', { name: 'Import', exact: true }).click();
   await expect(page.getByRole('row', { name: /aligned/ })).toBeVisible({ timeout: 60_000 });
 
-  await page.getByRole('navigation').getByRole('link', { name: 'Segment lookup' }).click();
+  await openScreen(page, 'Segment lookup');
   await page.getByLabel('Segment to look up').fill('El parque eólico de la sierra es antiguo.');
   await page.getByLabel('At least').selectOption('70');
   await page.getByRole('button', { name: 'Look up' }).click();
@@ -83,7 +83,7 @@ test('related terms: words that keep similar company, learned from the corpus', 
   await page.getByRole('button', { name: 'Add text' }).click();
   await expect(page.getByRole('row', { name: /Pasted text|Untitled|El perro/i }).first()).toBeVisible({ timeout: 60_000 });
 
-  await page.getByRole('navigation').getByRole('link', { name: 'Related terms' }).click();
+  await openScreen(page, 'Related terms');
   await page.getByLabel('Word (lemma)').fill('gato');
   await page.getByRole('button', { name: 'Find', exact: true }).click();
   await expect(page.getByText(/Related terms \(statistical\)/)).toBeVisible();

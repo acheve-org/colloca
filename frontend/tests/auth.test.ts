@@ -69,10 +69,13 @@ describe('rail', () => {
     status = { required: false, authenticated: true };
     const first = render(Rail);
     await waitFor(() => expect(session.loaded).toBe(true));
+    await fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
     expect(screen.queryByRole('button', { name: 'Log out' })).toBeNull();
     first.unmount();
     status = { required: true, authenticated: true };
     render(Rail);
+    await waitFor(() => expect(session.required).toBe(true));
+    await fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
     const button = await screen.findByRole('button', { name: 'Log out' });
     await fireEvent.click(button);
     await waitFor(() => expect(assign).toHaveBeenCalledWith('/login'));

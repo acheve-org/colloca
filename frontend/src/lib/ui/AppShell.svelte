@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
   import Rail from './Rail.svelte';
+  import PageHeader from './PageHeader.svelte';
   import StatusLine from './StatusLine.svelte';
 
   let { children }: { children: Snippet } = $props();
@@ -10,6 +11,7 @@
   <Rail />
   <div class="main">
     <StatusLine />
+    <PageHeader />
     <main id="main">{@render children()}</main>
   </div>
 </div>
@@ -17,7 +19,7 @@
 <style>
   .shell {
     display: grid;
-    grid-template-columns: 200px minmax(0, 1fr);
+    grid-template-columns: 56px minmax(0, 1fr);
     height: 100vh;
   }
   .main {

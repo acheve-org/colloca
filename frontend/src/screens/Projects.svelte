@@ -181,7 +181,6 @@
 </script>
 
 <div class="page">
-  <h1>{t('nav.projects')}</h1>
   <div class="panes">
     <section class="left">
       <ul class="plist">
@@ -359,7 +358,6 @@
     flex-direction: column;
     gap: var(--s-2);
   }
-  h1,
   h2 {
     margin: 0;
   }

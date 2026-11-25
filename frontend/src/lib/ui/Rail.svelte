@@ -1,64 +1,25 @@
-<script lang="ts" module>
-  import type { ScreenId } from '../router.svelte';
-  import { corpusStore } from '../corpus.svelte';
-
-  export interface NavItem {
-    id: ScreenId;
-    label: string;
-    visible?: () => boolean;
-  }
-  export interface NavGroup {
-    group: string;
-    items: NavItem[];
-  }
-
-  export const NAV: NavGroup[] = [
-    {
-      group: 'nav.group.setup',
-      items: [
-        { id: 'languages', label: 'nav.languages' },
-        { id: 'projects', label: 'nav.projects' },
-      ],
-    },
-    { group: 'nav.group.corpus', items: [{ id: 'sources', label: 'nav.sources' }] },
-    {
-      group: 'nav.group.explore',
-      items: [
-        { id: 'concordance', label: 'nav.concordance' },
-        { id: 'collocations', label: 'nav.collocations' },
-        { id: 'ngrams', label: 'nav.ngrams' },
-        { id: 'frequency', label: 'nav.frequency' },
-        { id: 'dispersion', label: 'nav.dispersion' },
-        { id: 'keyness', label: 'nav.keyness' },
-        { id: 'cloud', label: 'nav.cloud' },
-        { id: 'related', label: 'nav.related' },
-        { id: 'equivalents', label: 'nav.equivalents', visible: () => corpusStore.aligned },
-        { id: 'lookup', label: 'nav.lookup', visible: () => corpusStore.aligned },
-      ],
-    },
-    { group: 'nav.group.terms', items: [
-        { id: 'termbase', label: 'nav.termbase' },
-        { id: 'candidates', label: 'nav.candidates' },
-        { id: 'check', label: 'nav.check' },
-      ],
-    },
-    { group: 'nav.group.job', items: [{ id: 'job', label: 'nav.job' }] },
-    { group: 'nav.group.data', items: [{ id: 'trash', label: 'nav.trash' }] },
-  ];
-</script>
-
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { t, LANGS, LANG_NAMES, locale, setLang } from '../i18n';
-  import { go, route, screenHref } from '../router.svelte';
-  import { setMode, theme, type ThemeMode } from '../theme.svelte';
-  import { loadSession, logout, session } from '../session.svelte';
+  import { t } from '../i18n';
+  import { areaHref, go, route, screenHref, type ScreenId } from '../router.svelte';
+  import { AREAS, ALIGNED_ONLY, areaOf, visibleTabs, type AreaId } from '../nav';
+  import { corpusStore } from '../corpus.svelte';
+  import { loadSession } from '../session.svelte';
   import { ensureLanguageName, loadLanguageNames } from '../context.svelte';
   import { messages } from '../messages.svelte';
   import { reloadProjects } from '../projects.svelte';
-  import ContextBlock from './ContextBlock.svelte';
+  import NavIcon from './NavIcon.svelte';
+  import RailMenu from './RailMenu.svelte';
 
-  const modes: ThemeMode[] = ['auto', 'light', 'dark'];
+  const active = $derived(areaOf(route.screen));
+
+  /** The area's last screen, unless the corpus has since hidden it: then its first visible tab. */
+  function railHref(area: AreaId): string {
+    const href = areaHref(area);
+    const last = href.slice(2).split('?')[0] as ScreenId;
+    const tabs = visibleTabs(area, corpusStore.aligned);
+    return tabs.includes(last) ? href : screenHref(tabs[0]);
+  }
 
   onMount(() => {
     void loadSession();
@@ -72,125 +33,98 @@
     void ensureLanguageName();
   });
 
-  // Leave a screen whose rail item is hidden, but only once the corpus load has settled
+  // Leave a screen that is hidden, but only once the corpus load has settled
   // (a deep link to #/equivalents must survive the first load).
   $effect(() => {
     if (!corpusStore.loaded) return;
-    const item = NAV.flatMap((g) => g.items).find((i) => i.id === route.screen);
-    if (item?.visible && !item.visible()) go('concordance');
+    if (ALIGNED_ONLY.includes(route.screen) && !corpusStore.aligned) go('concordance');
   });
 </script>
 
 <aside class="rail">
-  <div class="brand">{t('app.name')}</div>
-  <ContextBlock />
+  <div class="brand" title={t('app.name')}>
+    <span aria-hidden="true">{t('app.name').charAt(0)}</span>
+    <span class="sr">{t('app.name')}</span>
+  </div>
   <nav aria-label={t('nav.label')}>
-    {#each NAV as g (g.group)}
-      {@const items = g.items.filter((i) => !i.visible || i.visible())}
-      {#if items.length}
-        <div class="group">
-          <div class="group-name">{t(g.group)}</div>
-          {#each items as i (i.id)}
-            <a
-              href={screenHref(i.id)}
-              class:active={route.screen === i.id}
-              aria-current={route.screen === i.id ? 'page' : undefined}>{t(i.label)}</a
-            >
-          {/each}
-        </div>
-      {/if}
+    {#each AREAS as a (a.id)}
+      <a
+        href={railHref(a.id)}
+        class:bottom={a.bottom}
+        class:active={active === a.id}
+        title={t(a.label)}
+        aria-current={active === a.id ? 'page' : undefined}
+      >
+        <NavIcon name={a.id} />
+        <span class="label">{t(a.label)}</span>
+      </a>
     {/each}
   </nav>
-  <div class="foot" role="group" aria-label={t('theme.label')}>
-    {#each modes as m (m)}
-      <button type="button" aria-pressed={theme.mode === m} onclick={() => setMode(m)}>{t(`theme.${m}`)}</button>
-    {/each}
-  </div>
-  <div class="foot" role="group" aria-label={t('lang.label')}>
-    {#each LANGS as l (l)}
-      <button
-        type="button"
-        lang={l}
-        title={LANG_NAMES[l]}
-        aria-label={LANG_NAMES[l]}
-        aria-pressed={locale.code === l}
-        onclick={() => setLang(l)}>{l.toUpperCase()}</button
-      >
-    {/each}
-  </div>
-  {#if session.required}
-    <div class="foot">
-      <button type="button" onclick={logout}>{t('auth.logout')}</button>
-    </div>
-  {/if}
+  <RailMenu />
 </aside>
 
 <style>
   .rail {
     display: flex;
     flex-direction: column;
-    width: 200px;
+    width: 56px;
     background: var(--rail-bg);
     color: var(--rail-fg);
-    overflow-y: auto;
+    overflow: visible;
   }
   .brand {
-    padding: var(--s-3) var(--s-3) var(--s-2);
+    padding: var(--s-3) 0 var(--s-2);
+    text-align: center;
     font-weight: 700;
     font-size: 22px;
-    letter-spacing: -0.01em;
   }
   nav {
+    display: flex;
+    flex-direction: column;
     flex: 1;
     padding: var(--s-2) 0;
   }
-  .group-name {
-    padding: var(--s-2) var(--s-3) var(--s-1);
-    color: var(--rail-muted);
-    font-size: 11px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
   a {
-    display: block;
-    padding: 4px var(--s-3) 4px calc(var(--s-3) - 3px);
-    color: inherit;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: var(--s-2) 0;
+    color: var(--rail-muted);
     text-decoration: none;
     border-left: 3px solid transparent;
   }
+  a.bottom {
+    margin-top: auto;
+  }
   a:hover {
+    color: var(--rail-fg);
     background: var(--rail-hover);
   }
   a.active {
-    background: var(--rail-hover);
-    border-left-color: var(--rail-accent);
-    font-weight: 600;
-  }
-  a:focus-visible,
-  .foot button:focus-visible {
-    outline-color: var(--rail-accent);
-  }
-  .foot {
-    display: flex;
-    gap: 2px;
-    padding: var(--s-2) var(--s-3);
-    border-top: 1px solid var(--rail-hover);
-  }
-  .foot + .foot {
-    border-top: 0;
-    padding-top: 0;
-  }
-  .foot button {
-    flex: 1;
-    padding: 0 var(--s-1);
-    color: var(--rail-muted);
-    background: transparent;
-    border-color: var(--rail-hover);
-  }
-  .foot button[aria-pressed='true'] {
     color: var(--rail-fg);
     background: var(--rail-hover);
-    border-color: var(--rail-accent);
+    border-left-color: var(--rail-accent);
+  }
+  a:focus-visible {
+    outline-color: var(--rail-accent);
+  }
+  .sr {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .label {
+    font-size: 10px;
+    line-height: 1.2;
+    max-width: 100%;
+    padding: 0 2px;
+    box-sizing: border-box;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 </style>

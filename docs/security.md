@@ -17,7 +17,7 @@ COLLOCA_PASSWORD='a long passphrase' uv run uvicorn colloca.main:app   # or in d
 | Login | `/login` (en/es/it by browser language, no script) sets a cookie: `HttpOnly`, `SameSite=Strict`, signed with a key derived from the password. |
 | Lifetime | `COLLOCA_SESSION_HOURS` (12). Changing the password ends all sessions; restarting does not. |
 | Scripts | `Authorization: Bearer <password>` |
-| Log out | Left rail. |
+| Log out | Menu in the rail. |
 | Open without session | `/login`, `/logout`, `/api/auth/status`, `/healthz` (health checks). |
 | Rate limit | `COLLOCA_LOGIN_ATTEMPTS` 5 per `COLLOCA_LOGIN_WINDOW` 300 s per address, then HTTP 429 with `Retry-After`. Each failure costs 0.5 s. |
 

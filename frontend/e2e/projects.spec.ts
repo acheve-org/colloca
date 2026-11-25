@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { escapeRegExp, newCorpus, newProject, unique } from './helpers';
+import { escapeRegExp, newCorpus, newProject, unique, openScreen } from './helpers';
 
 const context = (page: import('@playwright/test').Page) => page.getByRole('group', { name: 'Working in' });
 
@@ -39,14 +39,14 @@ test('switching: opening a corpus of another project changes the context', async
   await page.getByRole('button', { name: `Open ${ca}` }).click();
   await expect(page.getByRole('row', { name: new RegExp(escapeRegExp(ca)) }).getByText('Working', { exact: true })).toBeVisible();
 
-  await page.getByRole('navigation').getByRole('link', { name: 'Sources' }).click();
+  await openScreen(page, 'Sources');
   await expect(context(page).getByText(ca)).toBeVisible();
   await expect(context(page).getByText(a, { exact: true })).toBeVisible();
 
-  await page.getByRole('navigation').getByRole('link', { name: 'Projects' }).click();
+  await openScreen(page, 'Projects');
   await page.getByRole('button', { name: new RegExp(`^${escapeRegExp(b)}`) }).click();
   await page.getByRole('button', { name: `Open ${cb}` }).click();
-  await page.getByRole('navigation').getByRole('link', { name: 'Sources' }).click();
+  await openScreen(page, 'Sources');
   await expect(context(page).getByText(cb)).toBeVisible();
   await expect(context(page).getByText(b, { exact: true })).toBeVisible();
   await expect(context(page).getByText(ca)).toHaveCount(0);
@@ -58,7 +58,7 @@ test('delete guard: a project with a corpus asks where the corpora go', async ({
   expect((await page.request.post('/api/projects', { data: { name: other } })).ok()).toBeTruthy();
   const corpus = unique('Orphan');
   await newCorpus(page, corpus, undefined, p);
-  await page.getByRole('navigation').getByRole('link', { name: 'Projects' }).click();
+  await openScreen(page, 'Projects');
   await page.getByRole('button', { name: new RegExp(`^${escapeRegExp(p)}`) }).click();
 
   await page.getByRole('button', { name: `Delete ${p}` }).click();

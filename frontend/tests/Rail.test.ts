@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/svelte';
+import { render, screen } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import Rail from '../src/lib/ui/Rail.svelte';
@@ -12,22 +12,23 @@ afterEach(() => {
 });
 
 describe('Rail', () => {
-  it('is a nav landmark with the spec groups in order', () => {
+  it('is a nav landmark with the five areas in order', () => {
     render(Rail);
-    expect(screen.getByRole('navigation')).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Main navigation' })).toBeInTheDocument();
     const links = screen.getAllByRole('link').map((a) => a.textContent?.trim());
-    expect(links).toEqual([
-      'Change', 'Languages', 'Projects', 'Sources', 'Concordance', 'Collocations', 'N-grams', 'Frequency list',
-      'Dispersion plot', 'Keyness', 'Word cloud', 'Related terms', 'Termbase', 'Candidates', 'Check text', 'Job', 'Backup and Trash',
-    ]);
+    expect(links).toEqual(['Corpus', 'Explore', 'Terms', 'Job', 'Settings']);
+    expect(screen.getByRole('button', { name: 'Menu' })).toBeInTheDocument();
   });
 
-  it('has the working context block and no project filter or New/Delete buttons', () => {
+  it('every rail entry has an accessible name and a visible label', () => {
     render(Rail);
-    expect(screen.getByText('Working in')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'New corpus' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Delete' })).toBeNull();
-    expect(screen.queryByRole('combobox', { name: 'Project' })).toBeNull();
+    for (const name of ['Corpus', 'Explore', 'Terms', 'Job', 'Settings']) {
+      const link = screen.getByRole('link', { name });
+      expect(link.textContent?.trim()).toBe(name);
+      expect(link).toHaveAttribute('title', name);
+      expect(link.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+    }
+    expect(screen.getByRole('button', { name: 'Menu' }).textContent?.trim()).toBe('Menu');
   });
 
   it('does not keep reloading language names for a code the API lacks', async () => {
@@ -48,41 +49,29 @@ describe('Rail', () => {
     vi.unstubAllGlobals();
   });
 
-  it('marks only the active route with aria-current', () => {
+  it('marks only the active area with aria-current', () => {
     route.screen = 'keyness';
     render(Rail);
     const current = screen.getAllByRole('link').filter((a) => a.getAttribute('aria-current') === 'page');
     expect(current).toHaveLength(1);
-    expect(current[0]).toHaveTextContent('Keyness');
+    expect(current[0]).toHaveTextContent('Explore');
   });
 
-  it('hides Equivalents unless the corpus is aligned', async () => {
-    render(Rail);
-    expect(screen.queryByRole('link', { name: 'Equivalents' })).toBeNull();
-    expect(screen.queryByRole('link', { name: 'Segment lookup' })).toBeNull();
-    corpusStore.aligned = true;
-    await tick();
-    expect(screen.getByRole('link', { name: 'Equivalents' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Segment lookup' })).toBeInTheDocument();
-  });
-
-  it('links each screen with the params it was last on', async () => {
+  it('an area links to its last used screen with its last search', () => {
     go('concordance', { q: 'x' });
     go('termbase');
     render(Rail);
-    expect(screen.getByRole('link', { name: 'Concordance' })).toHaveAttribute('href', '#/concordance?q=x');
-    expect(screen.getByRole('link', { name: 'Keyness' })).toHaveAttribute('href', '#/keyness');
-    go('concordance', { q: 'y' });
-    await tick();
-    expect(screen.getByRole('link', { name: 'Concordance' })).toHaveAttribute('href', '#/concordance?q=y');
+    expect(screen.getByRole('link', { name: 'Explore' })).toHaveAttribute('href', '#/concordance?q=x');
+    expect(screen.getByRole('link', { name: 'Terms' })).toHaveAttribute('href', '#/termbase');
+    expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '#/languages');
   });
 
-  it('theme toggle in the footer switches mode', async () => {
+  it('an area whose last screen is hidden links to its first visible tab', () => {
+    go('equivalents');
+    go('termbase');
+    corpusStore.aligned = false;
     render(Rail);
-    const dark = screen.getByRole('button', { name: 'Dark' });
-    await fireEvent.click(dark);
-    expect(document.documentElement.dataset.theme).toBe('dark');
-    expect(dark).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('link', { name: 'Explore' }).getAttribute('href')).toMatch(/^#\/concordance/);
   });
 
   describe('Equivalents redirect', () => {

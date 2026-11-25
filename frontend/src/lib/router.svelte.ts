@@ -1,3 +1,5 @@
+import { AREAS, areaOf, type AreaId } from './nav';
+
 export type ScreenId =
   | 'sources'
   | 'languages'
@@ -55,11 +57,18 @@ const lastParams = $state<Partial<Record<ScreenId, Record<string, string>>>>({
   [initial.screen]: initial.params,
 });
 
+// The screen last shown in each area (in memory); an unvisited area starts at its first tab.
+const lastScreen = $state<Record<AreaId, ScreenId>>(
+  Object.fromEntries(AREAS.map((a) => [a.id, a.tabs[0]])) as Record<AreaId, ScreenId>,
+);
+lastScreen[areaOf(initial.screen)] = initial.screen;
+
 function sync(): void {
   const r = parse(window.location.hash);
   route.screen = r.screen;
   route.params = r.params;
   lastParams[r.screen] = r.params;
+  lastScreen[areaOf(r.screen)] = r.screen;
 }
 
 window.addEventListener('hashchange', sync);
@@ -71,3 +80,6 @@ export function go(screen: ScreenId, params: Record<string, string> = {}): void 
 
 /** The rail link of a screen: with the params it was last shown with, if any. */
 export const screenHref = (screen: ScreenId): string => hashFor(screen, lastParams[screen] ?? {});
+
+/** The rail link of an area: its last screen, with the params that screen was last shown with. */
+export const areaHref = (area: AreaId): string => screenHref(lastScreen[area]);
