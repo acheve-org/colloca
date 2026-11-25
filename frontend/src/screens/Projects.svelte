@@ -8,6 +8,7 @@
   import { viewport } from '../lib/viewport.svelte';
   import { projectStore, reloadProjects } from '../lib/projects.svelte';
   import type { Corpus, Project } from '../lib/types';
+  import ActionMenu from '../lib/ui/ActionMenu.svelte';
   import Badge from '../lib/ui/Badge.svelte';
   import Button from '../lib/ui/Button.svelte';
   import Dialog from '../lib/ui/Dialog.svelte';
@@ -153,16 +154,28 @@
       await changed();
     });
 
-  const moveCorpus = async (c: Corpus, select: HTMLSelectElement) => {
-    const to = select.value;
-    if (!to) return;
-    await run(async () => {
+  const moveTo = (c: Corpus, to: string) =>
+    run(async () => {
       await patch(`/api/corpora/${c.id}`, { project_id: Number(to) });
       await changed();
     });
+  const moveCorpus = async (c: Corpus, select: HTMLSelectElement) => {
+    if (!select.value) return;
+    await moveTo(c, select.value);
     // A failed move leaves the row in place: show the placeholder again, not the rejected choice.
     select.value = '';
   };
+
+  // The phone card's menu: Rename (Save while renaming), a Move item per other project, Delete.
+  const menuItems = (c: Corpus) => [
+    renamingId === c.id
+      ? { label: t('common.save'), onclick: () => void renameCorpus(c) }
+      : { label: t('proj.rename'), onclick: () => startRename(c) },
+    ...projectStore.list
+      .filter((p) => p.id !== c.project_id)
+      .map((p) => ({ label: `${t('proj.move')}: ${p.name}`, onclick: () => void moveTo(c, String(p.id)) })),
+    { label: t('common.delete'), danger: true, onclick: () => askDeleteCorpus(c) },
+  ];
 
   // Rename mode is explicit for corpora: put the cursor in the field it opens.
   const focusOnMount = (node: HTMLInputElement) => {
@@ -267,7 +280,44 @@
         <h2>{heading}</h2>
         <Button variant="primary" disabled={!projectStore.list.length} onclick={() => (newOpen = true)}>{t('corpus.new')}</Button>
       </header>
-      {#if shown.length}
+      {#if shown.length && viewport.narrow}
+        <ul class="cards">
+          {#each shown as c (c.id)}
+            <li class="ccard">
+              <div class="chead">
+                {#if renamingId === c.id}
+                  <input
+                    value={corpusNames[c.id] ?? c.name}
+                    maxlength="120"
+                    use:focusOnMount
+                    aria-label={t('proj.nameOf', { name: c.name })}
+                    oninput={(e) => (corpusNames = { ...corpusNames, [c.id]: e.currentTarget.value })}
+                    onkeydown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        renameCorpus(c);
+                      } else if (e.key === 'Escape') renamingId = null;
+                    }}
+                  />
+                {:else}
+                  <span class="cname">{c.name}</span>
+                {/if}
+                <ActionMenu label={t('proj.more')} disabled={busy} items={menuItems(c)} />
+              </div>
+              <div class="cmeta">
+                <span>{languageName(c.lang)}</span>
+                <span>{t('proj.colDocs')} {fmt(c.docs)}</span>
+                <span>{t('proj.colWords')} {fmt(c.tokens)}</span>
+              </div>
+              {#if c.id === corpusStore.currentId}
+                <Badge kind="intb" label={t('proj.working')} />
+              {:else}
+                <Button variant="primary" ariaLabel={t('proj.open') + ' ' + c.name} disabled={busy} onclick={() => open(c)}>{t('proj.open')}</Button>
+              {/if}
+            </li>
+          {/each}
+        </ul>
+      {:else if shown.length}
         <table>
           <thead>
             <tr>
@@ -484,6 +534,47 @@
     padding: var(--s-1) var(--s-2);
     text-align: left;
     border-bottom: 1px solid var(--line);
+  }
+  .cards {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .ccard {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--s-1);
+    padding: var(--s-2);
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+  }
+  .chead {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--s-1);
+    align-self: stretch;
+  }
+  .chead input {
+    flex: 1;
+    min-width: 0;
+  }
+  .cname {
+    min-width: 0;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+  }
+  .cmeta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s-1) var(--s-2);
+    color: var(--muted);
+    font-size: var(--fs-small);
   }
   .warn {
     color: var(--danger, inherit);

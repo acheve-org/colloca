@@ -385,3 +385,169 @@ describe('Projects screen stacked below 900px', () => {
     expect(screen.getByRole('button', { name: 'Cambia' })).toBeInTheDocument();
   });
 });
+
+describe('Projects screen corpora as cards below 640px', () => {
+  beforeEach(() => __setViewportForTests({ narrow: true }));
+  afterEach(() => __setViewportForTests({ narrow: false }));
+
+  const cards = () => screen.getAllByRole('listitem').filter((li) => li.classList.contains('ccard'));
+  const cardOf = (name: string) => cards().find((c) => within(c).queryByText(name))!;
+  const more = (name: string) => within(cardOf(name)).getByRole('button', { name: 'More actions' });
+  const openMenu = async (name: string) => {
+    await fireEvent.click(more(name));
+    await tick();
+    return screen.getByRole('menu');
+  };
+
+  it('renders a card per corpus and no table', async () => {
+    await show();
+    expect(document.querySelector('table')).toBeNull();
+    expect(cards()).toHaveLength(2);
+    expect(cardOf('A1')).toHaveTextContent(/3/);
+    expect(cardOf('A1')).toHaveTextContent('1,001');
+    expect(cardOf('A2')).toHaveTextContent('1,002');
+  });
+
+  it('Open uses the same handler; the working corpus shows the badge instead', async () => {
+    await show();
+    expect(within(cardOf('A1')).getByText('Working')).toBeInTheDocument();
+    expect(within(cardOf('A1')).queryByRole('button', { name: /^Open/ })).toBeNull();
+    await fireEvent.click(within(cardOf('A2')).getByRole('button', { name: /^Open/ }));
+    await waitFor(() => expect(corpusStore.currentId).toBe(2));
+    expect(within(cardOf('A2')).getByText('Working')).toBeInTheDocument();
+  });
+
+  it('the ⋯ button opens a menu: Rename, a Move item per other project, Delete', async () => {
+    await show();
+    const btn = more('A2');
+    expect(btn).toHaveAttribute('aria-haspopup', 'menu');
+    expect(btn).toHaveAttribute('aria-expanded', 'false');
+    const menu = await openMenu('A2');
+    expect(btn).toHaveAttribute('aria-expanded', 'true');
+    const items = within(menu).getAllByRole('menuitem').map((i) => i.textContent?.trim());
+    expect(items).toEqual(['Rename', 'Move: Bolt', 'Move: Empty', 'Delete']);
+  });
+
+  it('Rename swaps the card to the input; Enter saves, Escape cancels', async () => {
+    await show();
+    const menu = await openMenu('A2');
+    await fireEvent.click(within(menu).getByRole('menuitem', { name: 'Rename' }));
+    await tick();
+    const input = screen.getByLabelText('Name of project A2');
+    expect(input).toHaveFocus();
+    await fireEvent.keyDown(input, { key: 'Escape' });
+    await tick();
+    expect(screen.queryByLabelText('Name of project A2')).toBeNull();
+    expect(calls.some((c) => c.method === 'PATCH')).toBe(false);
+
+    const menu2 = await openMenu('A2');
+    await fireEvent.click(within(menu2).getByRole('menuitem', { name: 'Rename' }));
+    await tick();
+    const input2 = screen.getByLabelText('Name of project A2');
+    await fireEvent.input(input2, { target: { value: 'A2 new' } });
+    await fireEvent.keyDown(input2, { key: 'Enter' });
+    await waitFor(() => expect(calls.find((c) => c.method === 'PATCH' && c.path === '/api/corpora/2')?.body).toEqual({ name: 'A2 new' }));
+  });
+
+  it('while renaming the menu offers Save', async () => {
+    await show();
+    let menu = await openMenu('A2');
+    await fireEvent.click(within(menu).getByRole('menuitem', { name: 'Rename' }));
+    await tick();
+    await fireEvent.input(screen.getByLabelText('Name of project A2'), { target: { value: 'Zed' } });
+    // the name is an input now: reach the card through it
+    await fireEvent.click(within(screen.getByLabelText('Name of project A2').closest('li')!).getByRole('button', { name: 'More actions' }));
+    await tick();
+    menu = screen.getByRole('menu');
+    expect(within(menu).queryByRole('menuitem', { name: 'Rename' })).toBeNull();
+    await fireEvent.click(within(menu).getByRole('menuitem', { name: 'Save' }));
+    await waitFor(() => expect(calls.find((c) => c.method === 'PATCH' && c.path === '/api/corpora/2')?.body).toEqual({ name: 'Zed' }));
+  });
+
+  it('Move patches the corpus with the chosen project', async () => {
+    await show();
+    const menu = await openMenu('A2');
+    await fireEvent.click(within(menu).getByRole('menuitem', { name: 'Move: Bolt' }));
+    await waitFor(() => expect(calls.find((c) => c.method === 'PATCH' && c.path === '/api/corpora/2')?.body).toEqual({ project_id: 8 }));
+    await waitFor(() => expect(screen.queryByText('A2')).toBeNull());
+  });
+
+  it('Delete opens the confirmation; nothing is deleted before confirming', async () => {
+    await show();
+    const menu = await openMenu('A2');
+    await fireEvent.click(within(menu).getByRole('menuitem', { name: 'Delete' }));
+    await tick();
+    expect(calls.some((c) => c.method === 'DELETE')).toBe(false);
+    const dlg = screen.getByRole('dialog', { name: 'Delete corpus' });
+    await fireEvent.click(within(dlg).getByRole('button', { name: 'Delete' }));
+    await waitFor(() => expect(calls.some((c) => c.method === 'DELETE' && c.path === '/api/corpora/2')).toBe(true));
+  });
+
+  it('keyboard: Enter opens on the first item, arrows move, Escape closes and refocuses ⋯', async () => {
+    await show();
+    const btn = more('A2');
+    btn.focus();
+    await fireEvent.click(btn); // Enter and Space on a button arrive as click
+    await tick();
+    const items = within(screen.getByRole('menu')).getAllByRole('menuitem');
+    expect(items[0]).toHaveFocus();
+    await fireEvent.keyDown(items[0], { key: 'ArrowDown' });
+    expect(items[1]).toHaveFocus();
+    await fireEvent.keyDown(items[1], { key: 'ArrowUp' });
+    expect(items[0]).toHaveFocus();
+    await fireEvent.keyDown(items[0], { key: 'ArrowUp' });
+    expect(items[items.length - 1]).toHaveFocus();
+    await fireEvent.keyDown(items[items.length - 1], { key: 'ArrowDown' });
+    expect(items[0]).toHaveFocus();
+    await fireEvent.keyDown(items[0], { key: 'Escape' });
+    await tick();
+    expect(screen.queryByRole('menu')).toBeNull();
+    expect(btn).toHaveFocus();
+    expect(btn).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('a 200-character unbroken name wraps', async () => {
+    const long = 'x'.repeat(200);
+    corpora = [...corpora, corpus(6, long, 7)];
+    corpusStore.list = [...corpora];
+    await show();
+    expect(within(cardOf(long)).getByText(long)).toHaveClass('cname');
+    const src = import.meta.glob('../src/screens/Projects.svelte', { query: '?raw', import: 'default', eager: true });
+    expect(Object.values(src)[0] as string).toMatch(/\.cname[^}]*overflow-wrap:\s*anywhere/s);
+  });
+
+  it('with no corpora the empty-state card is unchanged', async () => {
+    projects = [{ id: 9, name: 'Empty', corpora: 0, trashed: 0, terms: 0 }];
+    corpora = [];
+    corpusStore.list = [];
+    corpusStore.currentId = null;
+    render(Projects);
+    await waitFor(() => expect(screen.getByText('Create a corpus')).toBeInTheDocument());
+    expect(screen.queryAllByRole('listitem').filter((li) => li.classList.contains('ccard'))).toHaveLength(0);
+  });
+
+  it('crossing 640px keeps a rename in progress', async () => {
+    await show();
+    const menu = await openMenu('A2');
+    await fireEvent.click(within(menu).getByRole('menuitem', { name: 'Rename' }));
+    await tick();
+    await fireEvent.input(screen.getByLabelText('Name of project A2'), { target: { value: 'Draft' } });
+    __setViewportForTests({ narrow: false });
+    await tick();
+    expect(document.querySelector('table')).not.toBeNull();
+    expect(screen.getByLabelText('Name of project A2')).toHaveValue('Draft');
+    __setViewportForTests({ narrow: true });
+    await tick();
+    expect(document.querySelector('table')).toBeNull();
+    expect(screen.getByLabelText('Name of project A2')).toHaveValue('Draft');
+  });
+
+  it('the menu label is translated', async () => {
+    setLang('es');
+    await show();
+    expect(within(cardOf('A2')).getByRole('button', { name: 'Más acciones' })).toBeInTheDocument();
+    setLang('it');
+    await tick();
+    expect(within(cardOf('A2')).getByRole('button', { name: 'Altre azioni' })).toBeInTheDocument();
+  });
+});
