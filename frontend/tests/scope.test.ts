@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CORPUS_CHANGED, corpusStore } from '../src/lib/corpus.svelte';
+import { setLang, t } from '../src/lib/i18n';
 import {
   clearScope,
   clearScopePart,
@@ -45,6 +46,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  setLang('en');
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
@@ -62,13 +64,21 @@ describe('chips and active', () => {
     corpusStore.scope.type = 'news';
     corpusStore.scope.from = '2022';
     expect(scopeChips()).toEqual([
-      { key: 'tags', text: 'Tags: wind' },
-      { key: 'type', text: 'Type: news' },
+      { key: 'tags', text: `${t('filter.tags')}: wind` },
+      { key: 'type', text: `${t('filter.type')}: news` },
       { key: 'dates', text: '2022–…' },
     ]);
     corpusStore.scope.from = '';
     corpusStore.scope.to = '2024';
     expect(scopeChips().at(-1)).toEqual({ key: 'dates', text: '…–2024' });
+  });
+
+  it('localizes the chip prefixes and follows a language change', () => {
+    corpusStore.scope.tags = 'wind';
+    corpusStore.scope.type = 'news';
+    expect(scopeChips()[0].text).toBe('Tags: wind');
+    setLang('es');
+    expect(scopeChips().map((c) => c.text)).toEqual(['Etiquetas: wind', 'Tipo: news']);
   });
 
   it('is active as soon as a field is set, with no summary yet', () => {
@@ -163,6 +173,21 @@ describe('loadScope', () => {
     await loadScope();
     expect(scopeView.facets).toEqual(facets);
     expect(scopeView.info).toEqual(info);
+  });
+
+  it('drops facets that arrive for another corpus', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    replies['/api/corpora/1/facets'] = async () => {
+      await gate;
+      return ok({ tags: [{ tag: 'old', docs: 1 }], text_types: [], date_min: '', date_max: '' });
+    };
+    replies['/api/corpora/1/scope'] = () => ok(info);
+    const p = loadScope();
+    corpusStore.currentId = 2;
+    release();
+    await p;
+    expect(scopeView.facets.tags).toEqual([]);
   });
 
   it('ignores a failing facets request but still refreshes the summary', async () => {

@@ -31,8 +31,8 @@ export function scopeChips(): { key: ScopePart; text: string }[] {
   const type = s.type.trim();
   const from = s.from.trim();
   const to = s.to.trim();
-  if (tags) chips.push({ key: 'tags', text: `Tags: ${tags}` });
-  if (type) chips.push({ key: 'type', text: `Type: ${type}` });
+  if (tags) chips.push({ key: 'tags', text: `${t('filter.tags')}: ${tags}` });
+  if (type) chips.push({ key: 'type', text: `${t('filter.type')}: ${type}` });
   if (from || to) chips.push({ key: 'dates', text: `${from || '…'}–${to || '…'}` });
   return chips;
 }
