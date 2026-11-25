@@ -1,9 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { get } from '../lib/api';
-  import { CORPUS_CHANGED, corpusStore, scopeParams } from '../lib/corpus.svelte';
-  import { t, fmt } from '../lib/i18n';
-  import type { Facets, ScopeInfo } from '../lib/types';
+  import { corpusStore } from '../lib/corpus.svelte';
+  import { t } from '../lib/i18n';
+  import { clearScope, refreshScope, refreshScopeSoon, scopeSummary, scopeView, startScope } from '../lib/scope.svelte';
   import Button from '../lib/ui/Button.svelte';
   import Field from '../lib/ui/Field.svelte';
   import Select from '../lib/ui/Select.svelte';
@@ -11,86 +10,16 @@
   const uid = $props.id();
   const scope = $derived(corpusStore.scope);
 
-  let facets = $state.raw<Facets>({ tags: [], text_types: [], date_min: '', date_max: '' });
-  let info = $state.raw<ScopeInfo | null>(null);
-  let infoError = $state('');
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  let seq = 0;
-
   const typeOptions = $derived([
     { value: '', label: t('filter.anyType') },
-    ...facets.text_types.map((x) => ({ value: x.text_type, label: `${x.text_type} (${x.docs})` })),
+    ...scopeView.facets.text_types.map((x) => ({ value: x.text_type, label: `${x.text_type} (${x.docs})` })),
     // keep a value set before the facets arrived (or no longer present) selectable
-    ...(scope.type && !facets.text_types.some((x) => x.text_type === scope.type)
+    ...(scope.type && !scopeView.facets.text_types.some((x) => x.text_type === scope.type)
       ? [{ value: scope.type, label: scope.type }]
       : []),
   ]);
 
-  const summary = $derived.by(() => {
-    if (infoError) return infoError;
-    if (!info) return '';
-    if (!info.filtered) return t('scope.all');
-    return t('filter.summary', {
-      docs: info.docs,
-      total: info.total_docs,
-      words: fmt(info.words),
-      totalWords: fmt(info.total_words),
-    });
-  });
-
-  async function refreshScope(): Promise<void> {
-    const id = corpusStore.currentId;
-    if (id === null) return;
-    const n = ++seq;
-    try {
-      const r = await get<ScopeInfo>(`/api/corpora/${id}/scope`, scopeParams());
-      if (n !== seq) return;
-      info = r;
-      infoError = '';
-    } catch (err) {
-      if (n !== seq) return;
-      info = null;
-      infoError = err instanceof Error ? err.message : String(err);
-    }
-  }
-
-  async function refreshFacets(): Promise<void> {
-    const id = corpusStore.currentId;
-    if (id === null) return;
-    try {
-      const f = await get<Facets>(`/api/corpora/${id}/facets`);
-      if (corpusStore.currentId !== id) return;
-      facets = f;
-    } catch {
-      // the summary line reports errors; facets only feed suggestions
-    }
-    await refreshScope();
-  }
-
-  function debounced(): void {
-    clearTimeout(timer);
-    timer = setTimeout(refreshScope, 350);
-  }
-
-  function clear(): void {
-    corpusStore.clearScope();
-    refreshScope();
-  }
-
-  onMount(() => {
-    const onChange = () => {
-      facets = { tags: [], text_types: [], date_min: '', date_max: '' };
-      info = null;
-      infoError = '';
-      refreshFacets();
-    };
-    window.addEventListener(CORPUS_CHANGED, onChange);
-    refreshFacets();
-    return () => {
-      window.removeEventListener(CORPUS_CHANGED, onChange);
-      clearTimeout(timer);
-    };
-  });
+  onMount(() => startScope());
 </script>
 
 <div class="scope" role="group" aria-label={t('filter.label')}>
@@ -101,23 +30,23 @@
       list="{uid}-tags"
       placeholder={t('filter.tagsPlaceholder')}
       size="14"
-      oninput={debounced}
+      oninput={refreshScopeSoon}
     />
   </Field>
   <datalist id="{uid}-tags">
-    {#each facets.tags as x (x.tag)}<option value={x.tag}>{t('filter.docs', { docs: x.docs })}</option>{/each}
+    {#each scopeView.facets.tags as x (x.tag)}<option value={x.tag}>{t('filter.docs', { docs: x.docs })}</option>{/each}
   </datalist>
   <Field label={t('filter.type')}>
     <Select label={t('filter.type')} bind:value={scope.type} options={typeOptions} onchange={refreshScope} />
   </Field>
   <Field label={t('filter.from')}>
-    <input bind:value={scope.from} placeholder={facets.date_min || t('filter.fromPlaceholder')} size="8" oninput={debounced} />
+    <input bind:value={scope.from} placeholder={scopeView.facets.date_min || t('filter.fromPlaceholder')} size="8" oninput={refreshScopeSoon} />
   </Field>
   <Field label={t('filter.to')}>
-    <input bind:value={scope.to} placeholder={facets.date_max || t('filter.toPlaceholder')} size="8" oninput={debounced} />
+    <input bind:value={scope.to} placeholder={scopeView.facets.date_max || t('filter.toPlaceholder')} size="8" oninput={refreshScopeSoon} />
   </Field>
-  <Button onclick={clear}>{t('scope.clear')}</Button>
-  <span class="summary" class:on={info?.filtered} class:err={!!infoError} aria-live="polite">{summary}</span>
+  <Button onclick={clearScope}>{t('scope.clear')}</Button>
+  <span class="summary" class:on={scopeView.info?.filtered} class:err={!!scopeView.error} aria-live="polite">{scopeSummary()}</span>
 </div>
 
 <style>
