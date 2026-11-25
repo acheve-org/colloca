@@ -3,7 +3,7 @@ import { tick } from 'svelte';
 import { fireEvent, render, screen } from '@testing-library/svelte';
 import Host from './DataTableHost.svelte';
 import DataTable from '../src/lib/ui/DataTable.svelte';
-import type { Column } from '../src/lib/ui/DataTable.types';
+import { rowMatchesFilter, type Column } from '../src/lib/ui/DataTable.types';
 
 type R = { id: number; word: string; n: number };
 const columns: Column<R>[] = [
@@ -318,5 +318,66 @@ describe('DataTable virtual scrolling', () => {
     await fireEvent.click(bodyRows()[3]);
     expect(onselect).toHaveBeenLastCalledWith(rows[3]);
     expect(bodyRows()[3]).toHaveAttribute('aria-selected', 'true');
+  });
+});
+
+describe('rowMatchesFilter', () => {
+  const cols: Column<R>[] = [
+    { key: 'word', label: 'Word', value: (r) => r.word },
+    { key: 'n', label: 'Count', num: true, value: (r) => r.n },
+  ];
+  const row: R = { id: 1, word: 'Élan vital', n: 42 };
+
+  it('an empty or blank filter matches every row', () => {
+    expect(rowMatchesFilter(row, cols, '')).toBe(true);
+    expect(rowMatchesFilter(row, cols, '   ')).toBe(true);
+  });
+
+  it('trims the filter before matching', () => {
+    expect(rowMatchesFilter(row, cols, '  vital  ')).toBe(true);
+  });
+
+  it('folds case and accents on both sides', () => {
+    expect(rowMatchesFilter(row, cols, 'elan')).toBe(true);
+    expect(rowMatchesFilter(row, cols, 'ÉLAN')).toBe(true);
+    expect(rowMatchesFilter(row, cols, 'vítal')).toBe(true);
+  });
+
+  it('searches the value of every column', () => {
+    expect(rowMatchesFilter(row, cols, '42')).toBe(true);
+    expect(rowMatchesFilter(row, [cols[0]], '42')).toBe(false);
+  });
+
+  it('is false when no column matches', () => {
+    expect(rowMatchesFilter(row, cols, 'zeta')).toBe(false);
+  });
+
+  it('falls back to the row property when a column has no value function', () => {
+    const plain: Column<R>[] = [{ key: 'word', label: 'Word' }];
+    expect(rowMatchesFilter(row, plain, 'vital')).toBe(true);
+  });
+});
+
+describe('DataTable filter cache', () => {
+  it('does not re-evaluate column values when only the filter text changes', async () => {
+    const word = vi.fn((r: R) => r.word);
+    const cols: Column<R>[] = [
+      { key: 'word', label: 'Word', value: word },
+      { key: 'n', label: 'Count', num: true, value: (r) => r.n },
+    ];
+    const rows = mk(Array.from({ length: 300 }, (_, i) => `w${i}`));
+    const probe = { selected: null, set() {}, setFilter() {}, setRows() {} } as {
+      selected: R | null; set: (r: R | null) => void; setFilter: (f: string) => void; setRows: (r: R[]) => void;
+    };
+    render(Host, { rows, columns: cols, probe });
+    probe.setFilter('w1');
+    await tick();
+    expect(word).toHaveBeenCalled();
+    word.mockClear();
+    probe.setFilter('zzz');
+    await tick();
+    await tick();
+    expect(word).not.toHaveBeenCalled();
+    expect(document.querySelectorAll('.td')).toHaveLength(0);
   });
 });

@@ -63,6 +63,7 @@ const pairs: [string, string, string][] = [
   ['--rail-fg', '--rail-hover', 'rail text on rail hover'],
   ['--rail-muted', '--rail-hover', 'rail muted on rail hover'],
   ['--rail-accent', '--rail-bg', 'rail accent on rail'],
+  ['--rail-bg', '--rail-accent', 'brand letter on the accent tile'],
   ...hits.map((h): [string, string, string] => [`--hit-${h}-fg`, `--hit-${h}-bg`, `hit-${h}`]),
 ];
 

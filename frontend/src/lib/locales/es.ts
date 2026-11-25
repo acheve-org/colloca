@@ -212,6 +212,8 @@ export const es: Messages = {
   'badge.forbidden': 'Prohibido',
   'badge.intb': 'En la base terminológica',
   'cc.toolbar': 'Búsqueda de concordancias',
+  'cc.options': 'Opciones',
+  'cc.optionsSummary': '{unit} · {width} palabras · orden: {sort}',
   'cc.query': 'Palabra o expresión',
   'cc.queryPlaceholder': 'palabra o expresión, * al principio o al final de una palabra',
   'cc.unit': 'Buscar por',
@@ -752,6 +754,7 @@ export const es: Messages = {
   'proj.trashLink': 'Abrir Copia de seguridad y papelera',
   'proj.moveOf': 'Mover {name}',
   'proj.colActions': 'Acciones',
+  'proj.more': 'Más acciones',
   'job.intro':
     'Analiza un texto antes de traducirlo con este corpus y la base terminológica de su proyecto: cuánto de su vocabulario cubre el corpus, dónde no hay datos, qué términos caracterizan el texto, qué entradas de la base terminológica aparecen (y qué traducciones evitar) y qué frases repite. El texto se analiza y se olvida; no se añade nada al corpus. El filtro de documentos del encabezado acota el corpus usado como evidencia.',
   'job.toolbar': 'Texto que analizar',

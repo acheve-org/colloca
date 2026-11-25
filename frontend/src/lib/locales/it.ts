@@ -212,6 +212,8 @@ export const it: Messages = {
   'badge.forbidden': 'Vietato',
   'badge.intb': 'Nella base terminologica',
   'cc.toolbar': 'Ricerca di concordanze',
+  'cc.options': 'Opzioni',
+  'cc.optionsSummary': '{unit} · {width} parole · ordine: {sort}',
   'cc.query': 'Parola o espressione',
   'cc.queryPlaceholder': 'parola o espressione, * all’inizio o alla fine di una parola',
   'cc.unit': 'Cerca per',
@@ -752,6 +754,7 @@ export const it: Messages = {
   'proj.trashLink': 'Apri Backup e cestino',
   'proj.moveOf': 'Sposta {name}',
   'proj.colActions': 'Azioni',
+  'proj.more': 'Altre azioni',
   'job.intro':
     'Analizza un testo prima di tradurlo rispetto a questo corpus e alla base terminologica del suo progetto: quanta parte del suo vocabolario è coperta dal corpus, dove mancano dati, quali termini caratterizzano il testo, quali voci della base terminologica compaiono (e quali traduzioni evitare) e quali frasi ripete. Il testo viene analizzato e dimenticato; non si aggiunge nulla al corpus. Il filtro dei documenti nell’intestazione restringe il corpus usato come evidenza.',
   'job.toolbar': 'Testo da analizzare',

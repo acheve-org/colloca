@@ -44,3 +44,10 @@ describe('Dialog', () => {
     expect(getComputedStyle(dlg).overflowY).toBe('hidden');
   });
 });
+
+describe('Dialog long text', () => {
+  it('the body wraps an unbroken word', () => {
+    const src = import.meta.glob('../src/lib/ui/Dialog.svelte', { query: '?raw', import: 'default', eager: true });
+    expect(Object.values(src)[0] as string).toMatch(/\.body[^}]*overflow-wrap:\s*anywhere/s);
+  });
+});

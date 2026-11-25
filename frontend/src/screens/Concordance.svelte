@@ -28,6 +28,7 @@
   import { get } from '../lib/api';
   import { CORPUS_CHANGED, corpusStore, scopeParams } from '../lib/corpus.svelte';
   import { csvUrl } from '../lib/csv';
+  import { viewport } from '../lib/viewport.svelte';
   import { sourceRanges, targetIsGuess, targetRanges, termRanges } from '../lib/highlight';
   import { t } from '../lib/i18n';
   import { messages } from '../lib/messages.svelte';
@@ -64,6 +65,8 @@
   let accent = $state(initial.acc === '1');
   let limit = $state(LIMITS.includes(initial.n ?? '') ? (initial.n as string) : DEFAULT_LIMIT);
   let sampling = $state(Number.parseInt(initial.sample ?? '', 10) > 0);
+  // Phones: the options fold behind a disclosure. Lives here so it survives crossing 640px.
+  let optionsOpen = $state(false);
   let seed = $state(Number.parseInt(initial.sample ?? '', 10) > 0 ? Number.parseInt(initial.sample!, 10) : newSeed());
 
   // The query in words (or the mistake with its position) while typing in advanced mode, and after a search.
@@ -159,6 +162,16 @@
 
   const unitOptions = UNITS.map((u) => ({ value: u, label: t(`cc.unit.${u}`) }));
   const sortOptions = SORTS.map((s) => ({ value: s, label: t(`cc.sort.${s}`) }));
+  /** Labels of the toggles that are on: the folded Options row keeps them visible. */
+  const activeToggles = $derived([
+    caseSensitive && t('cc.case'),
+    accent && t('cc.accent'),
+    advanced && t('cc.advanced'),
+    anyOrder && !advanced && t('cc.anyOrder'),
+    sampling && t('cc.sample'),
+    bilingual && corpusStore.aligned && t('cc.bilingual'),
+  ].filter((x): x is string => !!x));
+
   const limitOptions = LIMITS.map((n) => ({ value: n, label: n }));
 
   const errMsg = (err: unknown) => (err instanceof Error ? err.message : String(err));
@@ -352,64 +365,114 @@
   <Highlight text={l.left} ranges={termRanges(l.left_terms)} />{l.left ? ' ' : ''}<span class="hit-query"><Highlight text={l.node} ranges={termRanges(l.node_terms)} /></span>{l.right ? ' ' : ''}<Highlight text={l.right} ranges={termRanges(l.right_terms)} />
 {/snippet}
 
+{#snippet queryField()}
+  <Field label={t('cc.query')}>
+    <input
+      id="cc-query"
+      class="query"
+      bind:value={q}
+      placeholder={t('cc.queryPlaceholder')}
+      autocomplete="off"
+      spellcheck="false"
+    />
+  </Field>
+{/snippet}
+{#snippet unitField()}
+  <Field label={t('cc.unit')}>
+    <Select label={t('cc.unit')} bind:value={unit} options={unitOptions} />
+  </Field>
+{/snippet}
+{#snippet widthField()}
+  <Field label={t('cc.width')}>
+    <input class="width" type="number" min="2" max="40" bind:value={width} />
+  </Field>
+{/snippet}
+{#snippet sortField()}
+  <Field label={t('cc.sort')}>
+    <Select label={t('cc.sort')} bind:value={sort} options={sortOptions} />
+  </Field>
+{/snippet}
+{#snippet limitField()}
+  <Field label={t('cc.limit')}>
+    <Select label={t('cc.limit')} bind:value={limit} options={limitOptions} />
+  </Field>
+{/snippet}
+{#snippet toggles()}
+  <span class="switch" title={t('cc.caseHint')}>
+    <Toggle bind:checked={caseSensitive} label={t('cc.case')} />
+  </span>
+  <span class="switch" title={t('cc.accentHint')}>
+    <Toggle bind:checked={accent} label={t('cc.accent')} />
+  </span>
+  <span class="switch" title={t('cc.advancedHint')}>
+    <Toggle bind:checked={advanced} label={t('cc.advanced')} />
+  </span>
+  {#if !advanced}
+    <span class="switch" title={t('cc.anyOrderHint')}>
+      <Toggle bind:checked={anyOrder} label={t('cc.anyOrder')} />
+    </span>
+  {/if}
+  <span class="switch" title={t('cc.sampleHint')}>
+    <Toggle bind:checked={sampling} label={t('cc.sample')} />
+  </span>
+  {#if sampling}
+    <Button title={t('cc.newSampleHint')} onclick={newSample}>{t('cc.newSample')}</Button>
+  {/if}
+  {#if corpusStore.aligned}
+    <span class="switch" title={t('cc.bilingualHint')}>
+      <Toggle bind:checked={bilingual} label={t('cc.bilingual')} />
+    </span>
+  {/if}
+{/snippet}
+
 <div class="cc">
   {#if !hasCorpus}
     {#if corpusStore.loaded}<NoCorpus />{/if}
   {:else}
     <form class="cc-form" {onsubmit}>
       <Toolbar label={t('cc.toolbar')}>
-        <Field label={t('cc.query')}>
-          <input
-            id="cc-query"
-            class="query"
-            bind:value={q}
-            placeholder={t('cc.queryPlaceholder')}
-            autocomplete="off"
-            spellcheck="false"
-          />
-        </Field>
-        <Field label={t('cc.unit')}>
-          <Select label={t('cc.unit')} bind:value={unit} options={unitOptions} />
-        </Field>
-        <Field label={t('cc.width')}>
-          <input class="width" type="number" min="2" max="40" bind:value={width} />
-        </Field>
-        <Field label={t('cc.sort')}>
-          <Select label={t('cc.sort')} bind:value={sort} options={sortOptions} />
-        </Field>
-        <Field label={t('cc.limit')}>
-          <Select label={t('cc.limit')} bind:value={limit} options={limitOptions} />
-        </Field>
-        <span class="switch" title={t('cc.caseHint')}>
-          <Toggle bind:checked={caseSensitive} label={t('cc.case')} />
-        </span>
-        <span class="switch" title={t('cc.accentHint')}>
-          <Toggle bind:checked={accent} label={t('cc.accent')} />
-        </span>
-        <span class="switch" title={t('cc.advancedHint')}>
-          <Toggle bind:checked={advanced} label={t('cc.advanced')} />
-        </span>
-        {#if !advanced}
-          <span class="switch" title={t('cc.anyOrderHint')}>
-            <Toggle bind:checked={anyOrder} label={t('cc.anyOrder')} />
-          </span>
+        {#if viewport.narrow}
+          <div class="row-query">
+            {@render queryField()}
+            <Button type="submit" variant="primary" pending={!result && !loading && !failed}>{t('cc.search')}</Button>
+          </div>
+          <div class="row-options">
+            <Button
+              id="cc-options-btn"
+              expanded={optionsOpen}
+              controls={optionsOpen ? 'cc-options' : undefined}
+              onclick={() => (optionsOpen = !optionsOpen)}
+            >
+              <span class="opt-label">{t('cc.options')}</span>
+              <span class="opt-summary">{t('cc.optionsSummary', { unit: t(`cc.unit.${unit}`), width: width ?? 8, sort: t(`cc.sort.${sort}`) })}</span>
+              {#each activeToggles as label (label)}<span class="chip">{label}</span>{/each}
+              <span class="chev" aria-hidden="true">{optionsOpen ? '▴' : '▾'}</span>
+            </Button>
+            <Button title={t('cc.addTermHint')} onclick={addTermFromQuery}>{t('cc.addTerm')}</Button>
+            {#if csvHref}<a class="csv" href={csvHref} download>{t('cc.csv')}</a>{/if}
+          </div>
+          {#if optionsOpen}
+            <div class="options-panel" id="cc-options">
+              {@render unitField()}
+              {@render widthField()}
+              {@render sortField()}
+              {@render limitField()}
+              <div class="toggles">{@render toggles()}</div>
+            </div>
+          {/if}
+        {:else}
+          {@render queryField()}
+          {@render unitField()}
+          {@render widthField()}
+          {@render sortField()}
+          {@render limitField()}
+          {@render toggles()}
+          <div class="actions">
+            <Button type="submit" variant="primary" pending={!result && !loading && !failed}>{t('cc.search')}</Button>
+            <Button title={t('cc.addTermHint')} onclick={addTermFromQuery}>{t('cc.addTerm')}</Button>
+            {#if csvHref}<a class="csv" href={csvHref} download>{t('cc.csv')}</a>{/if}
+          </div>
         {/if}
-        <span class="switch" title={t('cc.sampleHint')}>
-          <Toggle bind:checked={sampling} label={t('cc.sample')} />
-        </span>
-        {#if sampling}
-          <Button title={t('cc.newSampleHint')} onclick={newSample}>{t('cc.newSample')}</Button>
-        {/if}
-        {#if corpusStore.aligned}
-          <span class="switch" title={t('cc.bilingualHint')}>
-            <Toggle bind:checked={bilingual} label={t('cc.bilingual')} />
-          </span>
-        {/if}
-        <div class="actions">
-          <Button type="submit" variant="primary" pending={!result && !loading && !failed}>{t('cc.search')}</Button>
-          <Button title={t('cc.addTermHint')} onclick={addTermFromQuery}>{t('cc.addTerm')}</Button>
-          {#if csvHref}<a class="csv" href={csvHref} download>{t('cc.csv')}</a>{/if}
-        </div>
       </Toolbar>
     </form>
     {#if advanced && explanation}
@@ -561,6 +624,75 @@
   }
   .cc-form {
     display: contents;
+  }
+  .row-query {
+    display: flex;
+    align-items: flex-end;
+    gap: var(--s-2);
+    width: 100%;
+  }
+  .row-query :global(.field) {
+    flex: 1;
+    min-width: 0;
+  }
+  .row-query .query {
+    width: 100%;
+    min-width: 0;
+  }
+  .row-options {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--s-2);
+    width: 100%;
+  }
+  .row-options > :global(.btn:first-child) {
+    flex: 1 1 60%; /* below 60% of the row the buttons wrap under it instead of squeezing it */
+    min-width: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--s-1);
+    height: auto;
+    text-align: left;
+  }
+  .opt-label {
+    font-weight: 600;
+  }
+  .opt-summary {
+    color: var(--muted);
+    font-size: var(--fs-small);
+  }
+  .chip {
+    padding: 0 var(--s-2);
+    border-radius: var(--radius);
+    background: var(--accent-soft);
+    color: var(--fg);
+    font-size: var(--fs-small);
+  }
+  .chev {
+    margin-left: auto;
+  }
+  .options-panel {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--s-2);
+    width: 100%;
+  }
+  .options-panel :global(.field),
+  .options-panel :global(select),
+  .options-panel .width {
+    width: 100%;
+    min-width: 0;
+  }
+  .toggles {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s-2) var(--s-4);
+  }
+  .toggles .switch {
+    margin-top: 0;
   }
   .query {
     width: 18rem;

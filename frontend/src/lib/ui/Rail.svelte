@@ -76,7 +76,18 @@
     padding: var(--s-3) 0 var(--s-2);
     text-align: center;
     font-weight: 700;
-    font-size: 22px; /* literal: brand glyph in a fixed 56px rail */
+    font-size: 18px; /* literal: brand glyph in a fixed 56px rail */
+  }
+  /* The brand letter sits on an accent tile, so the rail carries the identity colour. */
+  .brand > span[aria-hidden='true'] {
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    margin: 0 auto;
+    border-radius: var(--radius-lg);
+    background: var(--rail-accent);
+    color: var(--rail-bg);
   }
   nav {
     display: flex;

@@ -95,6 +95,7 @@
     flex: 1 1 auto;
     min-height: 0;
     overflow-y: auto;
+    overflow-wrap: anywhere; /* a long unbroken name wraps instead of leaving the dialog */
     gap: var(--s-3);
     padding: var(--s-3);
   }

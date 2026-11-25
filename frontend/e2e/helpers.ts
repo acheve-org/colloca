@@ -40,7 +40,9 @@ export async function newCorpus(page: Page, name: string, lang?: string, project
   await dialog.getByLabel('Project').selectOption({ label: proj });
   await dialog.getByRole('button', { name: 'Create' }).click();
   await expect(dialog).toBeHidden();
-  await expect(page.getByRole('row', { name: new RegExp(escapeRegExp(name)) }).getByText('Working', { exact: true })).toBeVisible();
+  // A table row from 640px up, a card (list item) below it.
+  const entry = page.getByRole('row', { name: new RegExp(escapeRegExp(name)) }).or(page.getByRole('listitem').filter({ hasText: name }));
+  await expect(entry.getByText('Working', { exact: true })).toBeVisible();
   await openScreen(page, 'Sources');
   return proj;
 }

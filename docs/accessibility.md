@@ -61,6 +61,7 @@ Thresholds: 4.5:1 = AA (normal text), 7:1 = AAA. All pairs are at least AA.
 | rail text on rail hover | `--rail-fg` on `--rail-hover` | 10.03 (AAA) | 10.03 (AAA) |
 | rail muted on rail hover | `--rail-muted` on `--rail-hover` | 4.95 (AA) | 4.95 (AA) |
 | rail accent on rail | `--rail-accent` on `--rail-bg` | 7.66 (AAA) | 9.08 (AAA) |
+| brand letter on the accent tile | `--rail-bg` on `--rail-accent` | 7.66 (AAA) | 9.08 (AAA) |
 | hit-query | `--hit-query-fg` on `--hit-query-bg` | 7.80 (AAA) | 6.79 (AA) |
 | hit-equiv | `--hit-equiv-fg` on `--hit-equiv-bg` | 7.16 (AAA) | 7.09 (AAA) |
 | hit-term | `--hit-term-fg` on `--hit-term-bg` | 8.70 (AAA) | 7.41 (AAA) |

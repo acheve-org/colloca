@@ -212,6 +212,8 @@ export const en: Messages = {
   'badge.forbidden': 'Forbidden',
   'badge.intb': 'In termbase',
   'cc.toolbar': 'Concordance search',
+  'cc.options': 'Options',
+  'cc.optionsSummary': '{unit} · {width} words · sort: {sort}',
   'cc.query': 'Word or phrase',
   'cc.queryPlaceholder': 'word or phrase, * at the start or end of a word',
   'cc.unit': 'Search by',
@@ -753,6 +755,7 @@ export const en: Messages = {
   'proj.trashLink': 'Open Backup and Trash',
   'proj.moveOf': 'Move {name}',
   'proj.colActions': 'Actions',
+  'proj.more': 'More actions',
   'job.intro':
     'Analyse a text before you translate it against this corpus and its project’s termbase: how much of its vocabulary the corpus covers, where it has no evidence, which terms are characteristic of the text, which termbase entries occur (and which translations to avoid), and which phrases it repeats. The text is analysed and forgotten; nothing is added to the corpus. The document filter in the header narrows the corpus used as evidence.',
   'job.toolbar': 'Text to analyse',
