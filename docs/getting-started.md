@@ -31,7 +31,7 @@ docker compose up
    | *Paste text* | Title and text; *Add text*. |
    | *Aligned texts* | *Translation memory* (TMX, XLIFF, two columns; *Import*) or *Align two documents* (*Propose alignment*). See [aligned-texts.md](aligned-texts.md). |
 
-   The *About these documents* card (Tags, Text type, Date, Author, *Import even if the language looks wrong*) applies to everything added in that step. The bar at the foot of the page shows what will be added and where, with *Cancel* and the action of the current method. After a successful add the app returns to the document list, where the job log shows progress; the *About* values are kept for the next add.
+   The *About these documents* card (Tags, Text type, Date, Author, *Import even if the language looks wrong*) applies to everything added in that step, including a translation-memory import. *Align two documents* is the exception: it has its own buttons and does not use these details or the bar below. For the other methods, the bar at the foot of the page shows what will be added and where, with *Cancel* and the action of the current method. *Cancel* returns to the document list and discards the form. After a successful add the app also returns to the list, where the job log shows progress, and the *About* values are kept for the next add; they are cleared on *Cancel* and when the corpus changes.
 
    Index imports flag in the job report: very short texts, cookie/JavaScript/paywall boilerplate, landing-page titles, repeated titles. Flagged documents are still added.
 3. **Explore**: pick Explore in the rail, then a tab.
@@ -59,7 +59,7 @@ Screen details: [analysis.md](analysis.md).
   | Date | `2024`, `2024-05`, `2024-05-17` |
   | Author | free |
 
-  Set before adding (*About these documents* on the *Add documents* page; applies to URL, upload and pasted text) or later with *Edit details* on *Sources*.
+  Set before adding (*About these documents* on the *Add documents* page; applies to URL, upload, pasted text and translation-memory imports, not to *Align two documents*) or later with *Edit details* on *Sources*.
 - **Document filter** (*Only documents with…*): above every analysis screen and the Job screen.
   - Criteria: all given tags, a text type, a date range.
   - Everything is recomputed on the subset: sizes behind *per million*, *Docs %*, collocation statistics, keyness. The reference corpus stays whole.

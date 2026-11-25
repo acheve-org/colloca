@@ -9,7 +9,7 @@ Accepted by *Upload files* on the *Add documents* page (*Sources* > *+ Add docum
 | `.docx`, `.odt`, `.rtf` | Body text and tables. ODT footnotes and comments are dropped. |
 | `.pdf` | Text layer in reading order, with a quality score. No text layer: OCR. |
 | `.xlsx`, `.csv`, `.tsv` | Text columns, one cell per line (all XLSX sheets). Columns of words are auto-detected; *Spreadsheet columns* overrides (`2,4` or `Texto`). Header row skipped. |
-| `.xlf`, `.xliff` (1.2, 2.x) | Plain text of the side in the corpus language (target if it matches, else source). Inline codes removed. Pairs: use *Import aligned texts*. |
+| `.xlf`, `.xliff` (1.2, 2.x) | Plain text of the side in the corpus language (target if it matches, else source). Inline codes removed. Pairs: use *Translation memory* on the *Add documents* page ([aligned-texts.md](aligned-texts.md)). |
 | `.srt`, `.vtt` | One line per cue. Numbers, timings, tags, notes, styles dropped. |
 | `.txt`, `.md`, `.html` | Text. |
 
