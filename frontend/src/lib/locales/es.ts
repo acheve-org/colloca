@@ -1048,4 +1048,6 @@ export const es: Messages = {
   'add.up.drop': 'Suelta los archivos aquí o',
   'add.up.choose': 'Elegir archivos',
   'add.paste.placeholder': 'Pega aquí el texto',
+  'empty.try': 'Prueba:',
+  'empty.chooseCorpus': 'Elegir un corpus',
 };

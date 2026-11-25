@@ -1048,4 +1048,6 @@ export const it: Messages = {
   'add.up.drop': 'Trascina qui i file oppure',
   'add.up.choose': 'Scegli i file',
   'add.paste.placeholder': 'Incolla qui il testo',
+  'empty.try': 'Prova:',
+  'empty.chooseCorpus': 'Scegli un corpus',
 };
