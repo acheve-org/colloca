@@ -570,7 +570,7 @@
   }
   .parsed {
     margin: 0.25rem 0;
-    font-size: 0.9em;
+    font-size: var(--fs-small);
     color: var(--muted);
   }
   .parsed.bad {

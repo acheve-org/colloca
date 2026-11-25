@@ -6,16 +6,12 @@
   }
 
   let warnedDuplicates = false;
-
-  function fold(s: string): string {
-    return s.normalize('NFD').replace(/\p{M}+/gu, '').toLowerCase();
-  }
 </script>
 
 <script lang="ts" generics="Row">
   import { tick, untrack, type Snippet } from 'svelte';
   import { t, locale } from '../i18n';
-  import { cellValue, type Column, type SortState } from './DataTable.types';
+  import { cellValue, foldText, type Column, type SortState } from './DataTable.types';
 
   interface Props {
     columns: Column<Row>[];
@@ -57,11 +53,11 @@
 
   // Searchable text per row, rebuilt only when rows/columns change.
   const haystack = $derived(
-    rows.map((r) => fold(columns.map((c) => String(cellValue(r, c))).join('\u0001'))),
+    rows.map((r) => foldText(columns.map((c) => String(cellValue(r, c))).join('\u0001'))),
   );
 
   const view = $derived.by(() => {
-    const q = fold(filter.trim());
+    const q = foldText(filter.trim());
     let idx = rows.map((_, i) => i);
     if (q) idx = idx.filter((i) => haystack[i].includes(q));
     if (sort) {
@@ -358,7 +354,7 @@
     overflow: auto;
     height: 100%;
     border: 1px solid var(--line);
-    background: var(--bg);
+    background: var(--panel);
     color: var(--fg);
   }
   .grid {
@@ -398,7 +394,7 @@
     color: var(--fg);
   }
   .arrow {
-    font-size: 0.7em;
+    font-size: 0.7em; /* literal: sort glyph scales with its header */
     margin-left: 0.25em;
   }
   .num {
@@ -414,13 +410,15 @@
   .body:hover {
     background: var(--surface);
   }
+  /* soft selection: tinted row, normal text (accent text is not safe on --accent-soft), accent bar on the left edge */
   .body.selected {
-    background: var(--accent);
-    color: var(--accent-fg);
+    background: var(--accent-soft);
+    color: var(--fg);
+    box-shadow: inset 3px 0 0 var(--accent);
   }
-  /* status badges keep their own colours: a surface pill stays legible on the accent row */
+  /* status badges keep their own colours: a panel pill stays legible on the tinted row */
   .body.selected :global(.badge) {
-    background: var(--surface);
+    background: var(--panel);
   }
   .status {
     padding: 1rem;

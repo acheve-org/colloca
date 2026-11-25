@@ -57,19 +57,19 @@
     min-width: 0;
   }
   .area {
-    font-size: 11px;
+    font-size: var(--fs-small);
     text-transform: uppercase;
     letter-spacing: 0.04em;
     color: var(--muted);
   }
   .back {
-    font-size: 13px;
+    font-size: var(--fs-small);
     color: var(--muted);
     width: fit-content;
   }
   h1 {
     margin: 0;
-    font-size: 20px;
+    font-size: var(--fs-h1);
     overflow-wrap: anywhere;
   }
 </style>

@@ -6,6 +6,8 @@ import { corpusStore } from '../src/lib/corpus.svelte';
 import { loadLanguageNames } from '../src/lib/context.svelte';
 import { messages } from '../src/lib/messages.svelte';
 import { projectStore } from '../src/lib/projects.svelte';
+import { __setViewportForTests } from '../src/lib/viewport.svelte';
+import { setLang } from '../src/lib/i18n';
 
 const corpus = (id: number, name: string, project_id: number | null) => ({
   id, name, lang: 'es', project_id, is_reference: 0, docs: 3, tokens: 1000 + id,
@@ -58,6 +60,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  __setViewportForTests({ stacked: false });
+  setLang('en');
   vi.unstubAllGlobals();
   corpusStore.list = [];
   corpusStore.currentId = null;
@@ -286,5 +290,98 @@ describe('Projects screen', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Delete Acme' }));
     await tick();
     expect(screen.getByRole('dialog', { name: 'Delete this project?' })).not.toHaveTextContent('termbase entries');
+  });
+});
+
+describe('Projects screen stacked below 900px', () => {
+  beforeEach(() => __setViewportForTests({ stacked: true }));
+
+  it('shows only the selected project with a Change button', async () => {
+    await show();
+    expect(screen.getByRole('button', { name: 'Change' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Acme/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Bolt/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Empty/ })).toBeNull();
+    expect(rows()).toHaveLength(2);
+  });
+
+  it('Change reveals the list; choosing a project selects it and collapses the list', async () => {
+    await show();
+    await fireEvent.click(screen.getByRole('button', { name: 'Change' }));
+    expect(screen.getByRole('button', { name: /^Bolt/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Empty/ })).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole('button', { name: /^Bolt/ }));
+    await tick();
+    expect(screen.queryByRole('button', { name: /^Acme/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Empty/ })).toBeNull();
+    expect(screen.getByRole('button', { name: /^Bolt/ })).toBeInTheDocument();
+    expect(screen.getByText('B1')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Change' })).toBeInTheDocument();
+  });
+
+  it('Change is a toggle: aria-expanded, stays mounted, closes the list without picking', async () => {
+    await show();
+    const change = screen.getByRole('button', { name: 'Change' });
+    expect(change).toHaveAttribute('aria-expanded', 'false');
+    expect(change).toHaveAttribute('aria-controls', 'proj-list');
+    await fireEvent.click(change);
+    expect(screen.getByRole('button', { name: 'Change' })).toBe(change);
+    expect(change).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('button', { name: /^Bolt/ })).toBeInTheDocument();
+    await fireEvent.click(change);
+    expect(change).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('button', { name: /^Bolt/ })).toBeNull();
+    expect(screen.getByRole('button', { name: /^Acme/ })).toBeInTheDocument();
+  });
+
+  it('returns focus to Change after choosing a project', async () => {
+    await show();
+    await fireEvent.click(screen.getByRole('button', { name: 'Change' }));
+    await fireEvent.click(screen.getByRole('button', { name: /^Bolt/ }));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Change' })));
+  });
+
+  it('keeps the chosen project and its corpora when stacked is toggled', async () => {
+    await show();
+    await fireEvent.click(screen.getByRole('button', { name: 'Change' }));
+    await fireEvent.click(screen.getByRole('button', { name: /^Bolt/ }));
+    __setViewportForTests({ stacked: false });
+    await tick();
+    expect(screen.getByText('B1')).toBeInTheDocument();
+    expect(screen.queryByText('A1')).toBeNull();
+    expect(screen.getByRole('button', { name: /^Acme/ })).toBeInTheDocument();
+    __setViewportForTests({ stacked: true });
+    await tick();
+    expect(screen.getByText('B1')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Acme/ })).toBeNull();
+    expect(screen.getByRole('button', { name: /^Bolt/ })).toBeInTheDocument();
+  });
+
+  it('New corpus and New project still work', async () => {
+    await show();
+    await fireEvent.click(screen.getByRole('button', { name: 'New corpus' }));
+    await tick();
+    const dlg = screen.getByRole('dialog', { name: 'New corpus' });
+    expect(within(dlg).getByLabelText('Project')).toHaveValue('7');
+    await fireEvent.click(within(dlg).getByRole('button', { name: 'Cancel' }));
+    await fireEvent.input(screen.getByLabelText('New project'), { target: { value: 'Zed' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Add' }));
+    await waitFor(() => expect(calls.some((c) => c.method === 'POST' && c.path === '/api/projects')).toBe(true));
+  });
+
+  it('wide layout has no Change button', async () => {
+    __setViewportForTests({ stacked: false });
+    await show();
+    expect(screen.queryByRole('button', { name: 'Change' })).toBeNull();
+    expect(screen.getByRole('button', { name: /^Bolt/ })).toBeInTheDocument();
+  });
+
+  it('Change is translated', async () => {
+    setLang('es');
+    await show();
+    expect(screen.getByRole('button', { name: 'Cambiar' })).toBeInTheDocument();
+    setLang('it');
+    await tick();
+    expect(screen.getByRole('button', { name: 'Cambia' })).toBeInTheDocument();
   });
 });

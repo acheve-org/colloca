@@ -167,9 +167,9 @@
   }
   .matches li {
     border: 1px solid var(--line);
-    border-radius: var(--radius);
+    border-radius: var(--radius-lg);
     padding: var(--s-2) var(--s-3);
-    background: var(--surface);
+    background: var(--panel);
   }
   .head {
     display: flex;

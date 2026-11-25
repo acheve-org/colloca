@@ -76,7 +76,7 @@
     padding: var(--s-3) 0 var(--s-2);
     text-align: center;
     font-weight: 700;
-    font-size: 22px;
+    font-size: 22px; /* literal: brand glyph in a fixed 56px rail */
   }
   nav {
     display: flex;
@@ -118,7 +118,7 @@
     white-space: nowrap;
   }
   .label {
-    font-size: 10px;
+    font-size: 10px; /* literal: label must fit the fixed 56px rail */
     line-height: 1.2;
     max-width: 100%;
     padding: 0 2px;

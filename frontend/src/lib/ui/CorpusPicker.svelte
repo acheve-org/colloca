@@ -126,9 +126,10 @@
     display: flex;
     flex-direction: column;
     padding: var(--s-1) 0;
-    background: var(--bg);
+    background: var(--panel);
     border: 1px solid var(--line);
-    border-radius: var(--radius);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-pop);
   }
   .heading {
     padding: var(--s-1) var(--s-3);

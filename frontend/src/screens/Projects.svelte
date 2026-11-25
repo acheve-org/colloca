@@ -1,10 +1,11 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { del, patch, post } from '../lib/api';
   import { languageName } from '../lib/context.svelte';
   import { corpusStore } from '../lib/corpus.svelte';
   import { fmt, t } from '../lib/i18n';
   import { messages } from '../lib/messages.svelte';
+  import { viewport } from '../lib/viewport.svelte';
   import { projectStore, reloadProjects } from '../lib/projects.svelte';
   import type { Corpus, Project } from '../lib/types';
   import Badge from '../lib/ui/Badge.svelte';
@@ -29,6 +30,8 @@
   let delProject = $state.raw<Project | null>(null);
   let delProjectOpen = $state(false);
   let target = $state('');
+  // Stacked screens show the chosen project as one card; this opens the full list. State lives here, not in the markup branch.
+  let listOpen = $state(false);
 
   onMount(() => {
     reloadProjects().catch((err) => messages.say(errMsg(err), 'err'));
@@ -50,6 +53,15 @@
   // Nothing to choose from yet (and the list has been fetched, not just empty while loading).
   const firstRun = $derived(projectStore.loaded && !projectStore.list.length && !loose.length);
   const heading = $derived(t('proj.corporaOf', { name: selected?.name ?? t('ctx.noProject') }));
+
+  const collapsed = $derived(viewport.stacked && !listOpen);
+  const hasChoices = $derived(projectStore.list.length > 0 || loose.length > 0);
+  const choose = (id: number | null) => {
+    picked = id;
+    listOpen = false;
+    // The clicked project button unmounts: put focus back on the control that opened the list.
+    tick().then(() => document.getElementById('proj-change')?.focus());
+  };
 
   const nameOf = (p: Project) => names[p.id] ?? p.name;
   const corporaLabel = (n: number) => (n === 1 ? t('proj.corpora1') : t('proj.corpora', { n }));
@@ -184,10 +196,16 @@
 <div class="page">
   <div class="panes">
     <section class="left">
-      <ul class="plist">
+      {#if viewport.stacked && hasChoices}
+        <div class="change">
+          <Button id="proj-change" expanded={listOpen} controls="proj-list" onclick={() => (listOpen = !listOpen)}>{t('proj.change')}</Button>
+        </div>
+      {/if}
+      <ul class="plist" id="proj-list">
         {#each projectStore.list as p (p.id)}
+          {#if !collapsed || p.id === selectedId}
           <li class:sel={p.id === selectedId}>
-            <button type="button" class="pick" aria-pressed={p.id === selectedId} onclick={() => (picked = p.id)}>
+            <button type="button" class="pick" aria-pressed={p.id === selectedId} onclick={() => choose(p.id)}>
               <span class="pname">{p.name}</span>
               <span class="muted">{corporaLabel(p.corpora)}</span>
             </button>
@@ -219,10 +237,11 @@
               </div>
             {/if}
           </li>
+          {/if}
         {/each}
-        {#if loose.length}
+        {#if loose.length && (!collapsed || selectedId === null)}
           <li class:sel={selectedId === null}>
-            <button type="button" class="pick" aria-pressed={selectedId === null} onclick={() => (picked = null)}>
+            <button type="button" class="pick" aria-pressed={selectedId === null} onclick={() => choose(null)}>
               <span class="pname">{t('ctx.noProject')}</span>
               <span class="muted">{corporaLabel(loose.length)}</span>
             </button>
@@ -362,15 +381,26 @@
     display: flex;
     flex-direction: column;
     gap: var(--s-2);
+    padding: var(--s-2) var(--s-3);
   }
   h2 {
     margin: 0;
+    min-width: 0;
+    overflow-wrap: anywhere; /* a long project name wraps instead of pushing the button out */
   }
   .panes {
     display: grid;
-    grid-template-columns: minmax(14rem, 22rem) 1fr;
+    grid-template-columns: minmax(14rem, 22rem) minmax(0, 1fr);
     gap: var(--s-3);
     align-items: start;
+  }
+  @media (max-width: 899px) {
+    .panes {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .right {
+      overflow-x: auto; /* a wide corpus table scrolls inside its pane, not the page */
+    }
   }
   .left,
   .right {
@@ -391,22 +421,36 @@
     flex-direction: column;
     gap: var(--s-1);
     border: 1px solid var(--line);
-    border-radius: var(--radius);
+    border-radius: var(--radius-lg);
   }
   .plist li.sel {
+    background: var(--accent-soft);
+    color: var(--fg);
     border-color: var(--accent);
   }
   .pick {
     display: flex;
     justify-content: space-between;
     gap: var(--s-1);
+    height: auto; /* base.css gives every button a fixed control height; a long name wraps and the row grows */
+    min-height: calc(var(--row-h) - var(--s-1));
     padding: var(--s-1) var(--s-2);
     text-align: left;
     background: transparent;
     border: 0;
   }
   .pname {
+    min-width: 0;
     font-weight: 600;
+    overflow-wrap: anywhere;
+  }
+  .pick .muted {
+    flex: none;
+    white-space: nowrap;
+  }
+  header :global(button) {
+    flex: none;
+    white-space: nowrap; /* "New corpus" keeps its one line next to a long heading */
   }
   .edit,
   .new,

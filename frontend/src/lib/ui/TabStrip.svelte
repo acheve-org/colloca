@@ -141,6 +141,7 @@
     border: 0;
     border-bottom: 2px solid transparent;
     border-radius: 0;
+    height: auto; /* base.css gives every button a fixed control height; a tab sizes from its padding */
     font: inherit;
     cursor: pointer;
   }
@@ -158,8 +159,14 @@
     font-weight: 600;
     border-bottom-color: var(--accent);
   }
+  /* Same box as a sibling tab: a flex item with no line box of its own, so the button gets no baseline gap. */
   .morewrap {
     position: relative;
+    display: flex;
+    align-items: flex-end;
+  }
+  .morewrap > .tab {
+    display: block;
   }
   .pop {
     position: absolute;
@@ -170,9 +177,10 @@
     display: flex;
     flex-direction: column;
     padding: var(--s-1) 0;
-    background: var(--bg);
+    background: var(--panel);
     border: 1px solid var(--line);
-    border-radius: var(--radius);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-pop);
   }
   .pop a {
     padding: var(--s-1) var(--s-3);

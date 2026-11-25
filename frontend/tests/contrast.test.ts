@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import tableSrc from '../src/lib/ui/DataTable.svelte?raw';
 import css from '../src/lib/styles/tokens.css?raw';
+import baseCss from '../src/lib/styles/base.css?raw';
 
 function lum(hex: string): number {
   const n = parseInt(hex.slice(1), 16);
@@ -46,6 +47,17 @@ const pairs: [string, string, string][] = [
   ['--status-forbidden', '--surface', 'status-forbidden on surface'],
   ['--danger', '--surface', 'danger on surface'],
   ['--accent', '--surface', 'accent on surface'],
+  ['--fg', '--panel', 'fg on panel'],
+  ['--muted', '--panel', 'muted on panel'],
+  ['--accent', '--panel', 'accent on panel'],
+  ['--danger', '--panel', 'danger on panel'],
+  ['--fg', '--accent-soft', 'fg on accent-soft'],
+  ['--status-candidate', '--accent-soft', 'status-candidate on accent-soft'],
+  ['--status-approved', '--accent-soft', 'status-approved on accent-soft'],
+  ['--status-forbidden', '--accent-soft', 'status-forbidden on accent-soft'],
+  ['--accent', '--accent-soft', 'accent on accent-soft'],
+  ['--muted', '--accent-soft', 'muted on accent-soft'],
+  ['--danger', '--accent-soft', 'danger on accent-soft'],
   ['--rail-fg', '--rail-bg', 'rail text on rail'],
   ['--rail-muted', '--rail-bg', 'rail muted on rail'],
   ['--rail-fg', '--rail-hover', 'rail text on rail hover'],
@@ -69,6 +81,48 @@ describe('prefers-color-scheme block mirrors the dark theme', () => {
   it('has identical values', () => {
     const explicit = vars(css.match(/:root\[data-theme="dark"\]\s*\{([^}]*)\}/)![1]);
     expect(mediaDark).toEqual(explicit);
+  });
+});
+
+const lightBlock = css.match(/:root\s*\{([^}]*)\}/)![1];
+const darkBlock = css.match(/:root\[data-theme="dark"\]\s*\{([^}]*)\}/)![1];
+
+describe('panel, accent-soft and radius tokens', () => {
+  it('the light block defines --panel, --accent-soft and --radius-lg', () => {
+    expect(lightBlock).toMatch(/--panel:\s*#[0-9a-fA-F]{6};/);
+    expect(lightBlock).toMatch(/--accent-soft:\s*#[0-9a-fA-F]{6};/);
+    expect(lightBlock).toMatch(/--radius-lg:\s*8px;/);
+  });
+  it('the dark block defines --panel and --accent-soft', () => {
+    expect(darkBlock).toMatch(/--panel:\s*#[0-9a-fA-F]{6};/);
+    expect(darkBlock).toMatch(/--accent-soft:\s*#[0-9a-fA-F]{6};/);
+  });
+});
+
+describe('type scale and density', () => {
+  it('the light block sets --fs-base 14px, --fs-small 12.5px and --row-h 32px', () => {
+    expect(lightBlock).toMatch(/--fs-base:\s*14px;/);
+    expect(lightBlock).toMatch(/--fs-small:\s*12\.5px;/);
+    expect(lightBlock).toMatch(/--row-h:\s*32px;/);
+  });
+  it('the light block sets --radius 6px and the page and gap tokens', () => {
+    expect(lightBlock).toMatch(/--radius:\s*6px;/);
+    expect(lightBlock).toMatch(/--page-pad:\s*20px;/);
+    expect(lightBlock).toMatch(/--gap:\s*14px;/);
+  });
+});
+
+describe('base.css heading scale and controls', () => {
+  it('h1 is 20px, h2 is 16px, and headings are weight 650', () => {
+    expect(baseCss).toMatch(/h1\s*\{\s*font-size:\s*var\(--fs-h1\);\s*\}/);
+    expect(baseCss).toMatch(/h2\s*\{\s*font-size:\s*var\(--fs-h2\);\s*\}/);
+    expect(lightBlock).toMatch(/--fs-h1:\s*20px;/);
+    expect(lightBlock).toMatch(/--fs-h2:\s*16px;/);
+    expect(baseCss).toMatch(/h1,\s*h2,\s*h3\s*\{[^}]*font-weight:\s*650;/);
+  });
+  it('inputs and buttons take the --panel background', () => {
+    expect(baseCss).toMatch(/button,\s*input,\s*select,\s*textarea\s*\{[^}]*background:\s*var\(--panel\)/);
+    expect(baseCss).toMatch(/^button\s*\{[^}]*background:\s*var\(--panel\)/m);
   });
 });
 
@@ -97,11 +151,11 @@ describe.each([
 });
 
 describe('status badges on a selected DataTable row', () => {
-  it('sit on a surface pill (status colours reach 4.5:1 on --surface in both themes)', () => {
-    expect(tableSrc).toMatch(/\.body\.selected :global\(\.badge\)\s*\{[^}]*background:\s*var\(--surface\)/);
+  it('sit on a panel pill (status colours reach 4.5:1 on --panel in both themes)', () => {
+    expect(tableSrc).toMatch(/\.body\.selected :global\(\.badge\)\s*\{[^}]*background:\s*var\(--panel\)/);
     for (const t of [light, dark]) {
       for (const k of ['--status-candidate', '--status-approved', '--status-forbidden']) {
-        expect(contrast(t[k], t['--surface'])).toBeGreaterThanOrEqual(4.5);
+        expect(contrast(t[k], t['--panel'])).toBeGreaterThanOrEqual(4.5);
       }
     }
   });

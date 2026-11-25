@@ -72,7 +72,7 @@
     background: var(--rail-hover);
   }
   .label {
-    font-size: 11px;
+    font-size: 11px; /* literal: label must fit the fixed 56px rail */
     line-height: 1.2;
   }
   button:focus-visible {
@@ -91,8 +91,8 @@
     color: var(--rail-fg);
     background: var(--rail-bg);
     border: 1px solid var(--rail-hover);
-    border-radius: 6px;
-    box-shadow: 0 4px 16px rgb(0 0 0 / 0.2);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-pop);
   }
   .set {
     display: flex;

@@ -58,9 +58,9 @@
   }
   .framed {
     padding: var(--s-3);
-    background: var(--surface);
+    background: var(--panel);
     border: 1px solid var(--line);
-    border-radius: var(--radius);
+    border-radius: var(--radius-lg);
   }
   h2 {
     margin: 0;

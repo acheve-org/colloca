@@ -36,9 +36,9 @@
     padding: var(--s-6);
     text-align: center;
     color: var(--muted);
-    background: var(--surface);
+    background: var(--panel);
     border: 1px dashed var(--line);
-    border-radius: var(--radius);
+    border-radius: var(--radius-lg);
   }
   p {
     margin: 0;
@@ -57,7 +57,7 @@
   .title {
     margin-bottom: var(--s-1);
     color: var(--fg);
-    font-size: 15px;
+    font-size: var(--fs-base);
     font-weight: 600;
   }
   .hint {

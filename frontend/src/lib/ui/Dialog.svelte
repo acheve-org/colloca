@@ -56,9 +56,9 @@
     max-width: min(560px, 92vw);
     padding: 0;
     color: var(--fg);
-    background: var(--bg);
+    background: var(--panel);
     border: 1px solid var(--line);
-    border-radius: var(--radius);
+    border-radius: var(--radius-lg);
     /* Only the body scrolls: header and footer (the actions) stay visible. */
     max-height: 85vh;
     overflow: hidden;
@@ -72,7 +72,7 @@
     flex-direction: column;
   }
   dialog::backdrop {
-    background: rgb(0 0 0 / 0.45);
+    background: var(--scrim);
   }
   header {
     display: flex;
