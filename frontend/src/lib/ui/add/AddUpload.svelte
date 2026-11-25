@@ -95,8 +95,8 @@
     padding: var(--s-4) var(--s-3);
     text-align: center;
     border: 1px dashed var(--line);
-    border-radius: var(--radius);
-    background: var(--bg);
+    border-radius: var(--radius-lg);
+    background: var(--panel);
   }
   .drop.over {
     border-color: var(--accent);

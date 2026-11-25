@@ -21,8 +21,8 @@ h1, h2, h3 {
   margin: 0;
   font-weight: 650;
 }
-h1 { font-size: 20px; }
-h2 { font-size: 16px; }
+h1 { font-size: var(--fs-h1); }
+h2 { font-size: var(--fs-h2); }
 h3 { font-size: var(--fs-base); }
 
 a {

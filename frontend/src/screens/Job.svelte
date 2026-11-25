@@ -511,8 +511,8 @@
     gap: var(--s-2);
     padding: var(--s-1) var(--s-2);
     border: 1px solid var(--line);
-    border-radius: var(--radius);
-    background: var(--surface);
+    border-radius: var(--radius-lg);
+    background: var(--panel);
   }
   .saved li.open {
     border-color: var(--accent);
@@ -536,9 +536,9 @@
   }
   .text {
     border: 1px solid var(--line);
-    border-radius: var(--radius);
+    border-radius: var(--radius-lg);
     padding: var(--s-2) var(--s-3);
-    background: var(--bg);
+    background: var(--panel);
     max-height: 22rem;
     overflow: auto;
   }
@@ -598,12 +598,12 @@
     flex-direction: column;
     min-width: 6.5rem;
     padding: var(--s-1) var(--s-3);
-    background: var(--surface);
+    background: var(--panel);
     border: 1px solid var(--line);
-    border-radius: var(--radius);
+    border-radius: var(--radius-lg);
   }
   .stat b {
-    font-size: 1.35rem;
+    font-size: var(--fs-h1);
     font-variant-numeric: tabular-nums;
   }
   .stat span {

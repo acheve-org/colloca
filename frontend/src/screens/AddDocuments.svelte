@@ -133,9 +133,9 @@
   .about-fold {
     margin-top: var(--s-3);
     padding: var(--s-2) var(--s-3);
-    background: var(--surface);
+    background: var(--panel);
     border: 1px solid var(--line);
-    border-radius: var(--radius);
+    border-radius: var(--radius-lg);
     font-size: var(--fs-small);
   }
   .about-fold summary {

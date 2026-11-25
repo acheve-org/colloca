@@ -43,11 +43,15 @@
   --row-h: 32px;
   --page-pad: 20px;
   --gap: 14px;
+  --scrim: rgb(0 0 0 / 0.45);
+  --shadow-pop: 0 4px 16px rgb(0 0 0 / 0.18);
 
   --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --fs-base: 14px;
   --fs-small: 12.5px;
+  --fs-h1: 20px;
+  --fs-h2: 16px;
   --lh: 1.4;
 
   color-scheme: light;

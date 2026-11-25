@@ -391,9 +391,11 @@
     flex-direction: column;
     gap: var(--s-1);
     border: 1px solid var(--line);
-    border-radius: var(--radius);
+    border-radius: var(--radius-lg);
   }
   .plist li.sel {
+    background: var(--accent-soft);
+    color: var(--fg);
     border-color: var(--accent);
   }
   .pick {

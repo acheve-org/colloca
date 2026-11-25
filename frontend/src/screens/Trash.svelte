@@ -415,7 +415,7 @@
   .report {
     padding: var(--s-2) var(--s-3);
     border: 1px solid var(--line);
-    border-radius: var(--radius);
+    border-radius: var(--radius-lg);
     font-size: var(--fs-small);
   }
   .report ul {

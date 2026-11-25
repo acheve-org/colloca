@@ -32,8 +32,8 @@
     gap: var(--s-1);
     padding: var(--s-2) var(--s-3);
     border: 1px solid var(--line);
-    border-radius: var(--radius);
-    background: var(--bg);
+    border-radius: var(--radius-lg);
+    background: var(--panel);
     color: var(--fg);
     text-decoration: none;
   }

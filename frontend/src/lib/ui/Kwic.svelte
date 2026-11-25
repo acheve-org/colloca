@@ -132,7 +132,7 @@
     text-align: center;
   }
   .kwic :global(.selected .hit-query) {
-    outline: 1px solid var(--accent-fg);
+    outline: 1px solid var(--fg);
   }
   .seg {
     display: block;

@@ -150,7 +150,8 @@
     border-radius: 999px;
   }
   .pill.on {
-    color: var(--accent);
+    color: var(--fg); /* accent text is not safe on --accent-soft */
+    background: var(--accent-soft);
     border-color: var(--accent);
   }
   .pill.muted {
@@ -168,7 +169,8 @@
     padding: 0 var(--s-1) 0 var(--s-2);
     border: 1px solid var(--accent);
     border-radius: 999px;
-    color: var(--accent);
+    background: var(--accent-soft);
+    color: var(--fg);
     font-size: var(--fs-small);
   }
   .x {
@@ -193,10 +195,10 @@
     gap: var(--s-2);
     margin-top: var(--s-1);
     padding: var(--s-3);
-    background: var(--bg);
+    background: var(--panel);
     border: 1px solid var(--line);
-    border-radius: var(--radius);
-    box-shadow: 0 4px 16px rgb(0 0 0 / 0.15);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-pop);
   }
   .title {
     font-weight: 600;

@@ -112,8 +112,10 @@ describe('type scale and density', () => {
 
 describe('base.css heading scale and controls', () => {
   it('h1 is 20px, h2 is 16px, and headings are weight 650', () => {
-    expect(baseCss).toMatch(/h1\s*\{\s*font-size:\s*20px;\s*\}/);
-    expect(baseCss).toMatch(/h2\s*\{\s*font-size:\s*16px;\s*\}/);
+    expect(baseCss).toMatch(/h1\s*\{\s*font-size:\s*var\(--fs-h1\);\s*\}/);
+    expect(baseCss).toMatch(/h2\s*\{\s*font-size:\s*var\(--fs-h2\);\s*\}/);
+    expect(lightBlock).toMatch(/--fs-h1:\s*20px;/);
+    expect(lightBlock).toMatch(/--fs-h2:\s*16px;/);
     expect(baseCss).toMatch(/h1,\s*h2,\s*h3\s*\{[^}]*font-weight:\s*650;/);
   });
   it('inputs and buttons take the --panel background', () => {
@@ -147,11 +149,11 @@ describe.each([
 });
 
 describe('status badges on a selected DataTable row', () => {
-  it('sit on a surface pill (status colours reach 4.5:1 on --surface in both themes)', () => {
-    expect(tableSrc).toMatch(/\.body\.selected :global\(\.badge\)\s*\{[^}]*background:\s*var\(--surface\)/);
+  it('sit on a panel pill (status colours reach 4.5:1 on --panel in both themes)', () => {
+    expect(tableSrc).toMatch(/\.body\.selected :global\(\.badge\)\s*\{[^}]*background:\s*var\(--panel\)/);
     for (const t of [light, dark]) {
       for (const k of ['--status-candidate', '--status-approved', '--status-forbidden']) {
-        expect(contrast(t[k], t['--surface'])).toBeGreaterThanOrEqual(4.5);
+        expect(contrast(t[k], t['--panel'])).toBeGreaterThanOrEqual(4.5);
       }
     }
   });

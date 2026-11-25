@@ -19,7 +19,7 @@
     height: calc(var(--row-h) - var(--s-1));
     padding: 0 var(--s-2);
     color: var(--fg);
-    background: var(--bg);
+    background: var(--panel);
     border: 1px solid var(--line);
     border-radius: var(--radius);
     text-decoration: none;

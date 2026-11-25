@@ -50,8 +50,8 @@
     gap: var(--s-2);
     padding: var(--s-2) var(--s-3);
     border: 1px solid var(--line);
-    border-radius: var(--radius);
-    background: var(--bg);
+    border-radius: var(--radius-lg);
+    background: var(--panel);
   }
   .preview :global(.field) {
     display: flex;

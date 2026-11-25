@@ -77,11 +77,13 @@
     display: flex;
     gap: var(--s-3);
     padding: var(--s-3);
-    background: var(--surface);
+    background: var(--panel);
     border: 1px solid var(--line);
-    border-radius: var(--radius);
+    border-radius: var(--radius-lg);
   }
   .step[data-state='current'] {
+    background: var(--accent-soft);
+    color: var(--fg);
     border-color: var(--accent);
   }
   .step[data-state='later'] {

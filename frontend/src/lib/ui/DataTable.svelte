@@ -358,7 +358,7 @@
     overflow: auto;
     height: 100%;
     border: 1px solid var(--line);
-    background: var(--bg);
+    background: var(--panel);
     color: var(--fg);
   }
   .grid {
@@ -398,7 +398,7 @@
     color: var(--fg);
   }
   .arrow {
-    font-size: 0.7em;
+    font-size: 0.7em; /* literal: sort glyph scales with its header */
     margin-left: 0.25em;
   }
   .num {
@@ -414,13 +414,15 @@
   .body:hover {
     background: var(--surface);
   }
+  /* soft selection: tinted row, normal text (accent text is not safe on --accent-soft), accent bar on the left edge */
   .body.selected {
-    background: var(--accent);
-    color: var(--accent-fg);
+    background: var(--accent-soft);
+    color: var(--fg);
+    box-shadow: inset 3px 0 0 var(--accent);
   }
-  /* status badges keep their own colours: a surface pill stays legible on the accent row */
+  /* status badges keep their own colours: a panel pill stays legible on the tinted row */
   .body.selected :global(.badge) {
-    background: var(--surface);
+    background: var(--panel);
   }
   .status {
     padding: 1rem;
