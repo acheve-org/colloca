@@ -37,6 +37,12 @@ export const ALIGNED_ONLY: readonly ScreenId[] = ['equivalents', 'lookup'];
 /** Screens that work without a corpus (the picker is hidden there). */
 export const NO_CORPUS_SCREENS: readonly ScreenId[] = ['languages', 'projects'];
 
+/** Screens whose results the document filter (the scope) applies to: the control is shown in the header there. */
+export const SCOPE_SCREENS: readonly ScreenId[] = [
+  'concordance', 'collocations', 'ngrams', 'frequency', 'dispersion', 'keyness', 'cloud', 'related',
+  'equivalents', 'lookup', 'job',
+];
+
 export function areaOf(screen: ScreenId): AreaId {
   return (AREAS.find((a) => a.tabs.includes(screen) || a.extra?.includes(screen)) ?? AREAS[0]).id;
 }

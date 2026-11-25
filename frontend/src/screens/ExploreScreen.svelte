@@ -5,7 +5,6 @@
   import Button from '../lib/ui/Button.svelte';
   import EmptyState from '../lib/ui/EmptyState.svelte';
   import Toolbar from '../lib/ui/Toolbar.svelte';
-  import ScopeFilter from './ScopeFilter.svelte';
 
   /**
    * The frame every explore screen shares: no-corpus state, the toolbar form (submit runs),
@@ -43,7 +42,6 @@
         </div>
       </Toolbar>
     </form>
-    <ScopeFilter />
     {@render children()}
   {/if}
 </div>

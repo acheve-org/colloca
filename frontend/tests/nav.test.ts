@@ -1,8 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { SCREENS } from '../src/lib/router.svelte';
-import { AREAS, areaOf, fitTabs, visibleTabs } from '../src/lib/nav';
+import { AREAS, SCOPE_SCREENS, areaOf, fitTabs, visibleTabs } from '../src/lib/nav';
 
 describe('nav model', () => {
+  it('SCOPE_SCREENS lists the screens the document filter applies to', () => {
+    expect([...SCOPE_SCREENS]).toEqual([
+      'concordance', 'collocations', 'ngrams', 'frequency', 'dispersion', 'keyness', 'cloud', 'related',
+      'equivalents', 'lookup', 'job',
+    ]);
+    for (const s of SCOPE_SCREENS) expect(SCREENS).toContain(s);
+  });
+
   it('every screen belongs to exactly one area', () => {
     const all = AREAS.flatMap((a) => [...a.tabs, ...(a.extra ?? [])]);
     expect(new Set(all).size).toBe(all.length);

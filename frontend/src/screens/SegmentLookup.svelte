@@ -11,7 +11,6 @@
   import Field from '../lib/ui/Field.svelte';
   import Select from '../lib/ui/Select.svelte';
   import Toolbar from '../lib/ui/Toolbar.svelte';
-  import ScopeFilter from './ScopeFilter.svelte';
 
   const LEVELS = ['50', '60', '70', '75', '85', '95'];
   let text = $state('');
@@ -82,7 +81,6 @@
       <Field label={t('lk.min')}><Select label={t('lk.min')} bind:value={minPercent} options={levelOptions} /></Field>
       <Button variant="primary" disabled={busy} onclick={run}>{t('lk.go')}</Button>
     </Toolbar>
-    <ScopeFilter />
     <div class="body">
       <p class="intro">{t('lk.intro')}</p>
       <textarea rows="3" bind:value={text} {onkeydown} aria-label={t('lk.text')} placeholder={t('lk.placeholder')}></textarea>

@@ -1,19 +1,27 @@
 <script lang="ts">
   import { t } from '../i18n';
   import { route, hrefFor } from '../router.svelte';
-  import { AREAS, BACK_LINKS, NO_CORPUS_SCREENS, areaOf } from '../nav';
+  import { AREAS, BACK_LINKS, NO_CORPUS_SCREENS, SCOPE_SCREENS, areaOf } from '../nav';
+  import { corpusStore } from '../corpus.svelte';
   import CorpusPicker from './CorpusPicker.svelte';
+  import ScopeControl from './ScopeControl.svelte';
   import TabStrip from './TabStrip.svelte';
 
   const areaId = $derived(areaOf(route.screen));
   const area = $derived(AREAS.find((a) => a.id === areaId) ?? AREAS[0]);
   const back = $derived(BACK_LINKS[route.screen]);
   const showPicker = $derived(!NO_CORPUS_SCREENS.includes(route.screen));
+  const showScope = $derived(SCOPE_SCREENS.includes(route.screen) && corpusStore.currentId !== null);
 </script>
 
 <header class="head">
   <div class="top">
-    {#if showPicker}<CorpusPicker />{/if}
+    {#if showPicker}
+      <div class="pickrow">
+        <CorpusPicker />
+        {#if showScope}<ScopeControl />{/if}
+      </div>
+    {/if}
     <div class="titles">
       <span class="area">{t(area.label)}</span>
       {#if back}<a class="back" href={hrefFor(back)}>← {t('src.backToDocuments')}</a>{/if}
@@ -34,6 +42,14 @@
     flex-direction: column;
     gap: var(--s-2);
     padding: var(--s-3) var(--s-3) var(--s-2);
+  }
+  .pickrow {
+    position: relative; /* anchors the scope panel */
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--s-2);
+    min-width: 0;
   }
   .titles {
     display: flex;
