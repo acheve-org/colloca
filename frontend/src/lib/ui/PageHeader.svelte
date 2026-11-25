@@ -1,12 +1,13 @@
 <script lang="ts">
   import { t } from '../i18n';
-  import { route } from '../router.svelte';
-  import { AREAS, NO_CORPUS_SCREENS, areaOf } from '../nav';
+  import { route, hrefFor } from '../router.svelte';
+  import { AREAS, BACK_LINKS, NO_CORPUS_SCREENS, areaOf } from '../nav';
   import CorpusPicker from './CorpusPicker.svelte';
   import TabStrip from './TabStrip.svelte';
 
   const areaId = $derived(areaOf(route.screen));
   const area = $derived(AREAS.find((a) => a.id === areaId) ?? AREAS[0]);
+  const back = $derived(BACK_LINKS[route.screen]);
   const showPicker = $derived(!NO_CORPUS_SCREENS.includes(route.screen));
 </script>
 
@@ -15,6 +16,7 @@
     {#if showPicker}<CorpusPicker />{/if}
     <div class="titles">
       <span class="area">{t(area.label)}</span>
+      {#if back}<a class="back" href={hrefFor(back)}>← {t('src.backToDocuments')}</a>{/if}
       <h1>{t('nav.' + route.screen)}</h1>
     </div>
   </div>
@@ -43,6 +45,11 @@
     text-transform: uppercase;
     letter-spacing: 0.04em;
     color: var(--muted);
+  }
+  .back {
+    font-size: 13px;
+    color: var(--muted);
+    width: fit-content;
   }
   h1 {
     margin: 0;

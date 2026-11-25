@@ -13,6 +13,8 @@
     docs: number;
   }
 
+  // disclosure: wrap the card in a collapsed <details> that exists only while there are partners.
+  let { disclosure = false }: { disclosure?: boolean } = $props();
   const uid = $props.id();
   let partners = $state.raw<Partner[]>([]);
   let choice = $state('');
@@ -43,7 +45,7 @@
   );
 </script>
 
-{#if partners.length}
+{#snippet card()}
   <section class="card" aria-labelledby="{uid}-tmx">
     <h3 id="{uid}-tmx">{t('tmx.title')}</h3>
     {#if partners.length > 1}
@@ -57,9 +59,33 @@
       <a class="btn-link" {href} download>{t('tmx.go')}</a>
     </div>
   </section>
+{/snippet}
+
+{#if partners.length}
+  {#if disclosure}
+    <details class="disc tmx">
+      <summary>{t('tmx.title')}</summary>
+      <div class="inner">{@render card()}</div>
+    </details>
+  {:else}
+    {@render card()}
+  {/if}
 {/if}
 
 <style>
+  .disc {
+    flex: none;
+    padding: var(--s-1) var(--s-3);
+    border-top: 1px solid var(--line);
+    font-size: var(--fs-small);
+  }
+  .disc summary {
+    cursor: pointer;
+    font-weight: 600;
+  }
+  .inner {
+    padding: var(--s-2) 0;
+  }
   .card {
     display: flex;
     flex-direction: column;

@@ -1,13 +1,12 @@
 import { expect, test } from '@playwright/test';
-import { escapeRegExp, newCorpus, openScreen } from './helpers';
+import { escapeRegExp, newCorpus, openScreen, pasteText } from './helpers';
 
 test('job report: save it, reopen it after a reload, delete it', async ({ page }) => {
   const project = await newCorpus(page, 'Informes');
-  await page.getByLabel('Pasted text', { exact: true }).fill(
-    'El parque eólico produce energía limpia. El parque eólico de la sierra es nuevo.',
-  );
-  await page.getByRole('button', { name: 'Add text' }).click();
-  await expect(page.getByRole('row', { name: /Pasted text|parque/i }).first()).toBeVisible({ timeout: 60_000 });
+  await pasteText(page, 'El parque eólico produce energía limpia. El parque eólico de la sierra es nuevo.', {
+    row: /Pasted text|parque/i,
+    timeout: 60_000,
+  });
 
   await openScreen(page, 'Job');
   await page.getByLabel('Or paste the text here').fill('El parque eólico necesita energía. El parque nuevo produce mucho.');

@@ -4,7 +4,7 @@ Previous translations show how a client wants things said. Import them as aligne
 
 ## Import
 
-*Sources* → *Import aligned texts*.
+*Sources* > *+ Add documents* > *Aligned texts* > *Translation memory (TMX / two columns)*; the button is *Import*.
 
 | Input | Notes |
 |---|---|
@@ -23,7 +23,7 @@ Previous translations show how a client wants things said. Import them as aligne
 
 ## Align two documents
 
-*Sources* → *Align two documents*. For when no TMX exists.
+*Sources* > *+ Add documents* > *Aligned texts* > *Align two documents* (*Propose alignment*). For when no TMX exists.
 
 - Input: original + translation (DOCX, PDF with text layer, TXT, HTML).
 - Method:
@@ -84,7 +84,7 @@ A tab in Explore, shown only when the corpus has aligned texts.
 
 ## Export as TMX
 
-*Sources > Export aligned texts (TMX)*: `GET /api/corpora/{id}/export-tmx`.
+*Sources* > *Export aligned texts (TMX)* (collapsed section below the document list; shown for an aligned corpus with partners): `GET /api/corpora/{id}/export-tmx`.
 
 - TMX 1.4b. This corpus's language is the source.
 - Each unit carries document title, source, text type, date, author, tags as `prop`s. Project name in the header.

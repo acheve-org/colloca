@@ -1,14 +1,12 @@
 import { expect, test } from '@playwright/test';
-import { newCorpus, openScreen } from './helpers';
+import { newCorpus, openScreen, pasteText } from './helpers';
 
 test('a long concordance renders a window of rows and still scrolls to the end', async ({ page }) => {
   await newCorpus(page, 'Larga');
 
   const sentence = 'El contrato número N se firma hoy en la oficina del cliente con todos los socios presentes.';
   const text = Array.from({ length: 1200 }, (_, i) => sentence.replace('N', String(i))).join(' ');
-  await page.getByLabel('Pasted text', { exact: true }).fill(text);
-  await page.getByRole('button', { name: 'Add text' }).click();
-  await expect(page.getByRole('row', { name: /Pasted text/ })).toBeVisible({ timeout: 90_000 });
+  await pasteText(page, text, { row: /Pasted text/, timeout: 90_000 });
 
   await openScreen(page, 'Concordance');
   await page.getByLabel('Word or phrase').fill('contrato');

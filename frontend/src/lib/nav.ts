@@ -7,12 +7,14 @@ export interface Area {
   /** i18n key of the area name */
   label: string;
   tabs: ScreenId[];
+  /** Screens of the area that are not tabs (reached from a link, with a way back). */
+  extra?: ScreenId[];
   /** Placed at the foot of the rail. */
   bottom?: boolean;
 }
 
 export const AREAS: readonly Area[] = [
-  { id: 'corpus', label: 'nav.group.corpus', tabs: ['sources'] },
+  { id: 'corpus', label: 'nav.group.corpus', tabs: ['sources'], extra: ['sources-add'] },
   {
     id: 'explore',
     label: 'nav.group.explore',
@@ -26,6 +28,9 @@ export const AREAS: readonly Area[] = [
   { id: 'settings', label: 'nav.group.settings', tabs: ['languages', 'projects', 'trash'], bottom: true },
 ];
 
+/** Extra screens with a link back to the screen they come from. */
+export const BACK_LINKS: Partial<Record<ScreenId, ScreenId>> = { 'sources-add': 'sources' };
+
 /** Screens shown only when the current corpus is aligned. */
 export const ALIGNED_ONLY: readonly ScreenId[] = ['equivalents', 'lookup'];
 
@@ -33,7 +38,7 @@ export const ALIGNED_ONLY: readonly ScreenId[] = ['equivalents', 'lookup'];
 export const NO_CORPUS_SCREENS: readonly ScreenId[] = ['languages', 'projects'];
 
 export function areaOf(screen: ScreenId): AreaId {
-  return (AREAS.find((a) => a.tabs.includes(screen)) ?? AREAS[0]).id;
+  return (AREAS.find((a) => a.tabs.includes(screen) || a.extra?.includes(screen)) ?? AREAS[0]).id;
 }
 
 export function visibleTabs(area: AreaId, aligned: boolean): ScreenId[] {

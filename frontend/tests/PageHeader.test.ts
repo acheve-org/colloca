@@ -76,4 +76,20 @@ describe('PageHeader', () => {
     await tick();
     expect(screen.getByRole('heading', { level: 1 }).textContent).not.toBe('Concordance');
   });
+
+  it('shows a back link and no tabs on the Add documents page', async () => {
+    go('sources-add');
+    render(PageHeader);
+    await tick();
+    expect(screen.getByRole('heading', { level: 1, name: 'Add documents' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Documents/ })).toHaveAttribute('href', '#/sources');
+    expect(screen.queryByRole('group', { name: 'Section screens' })).not.toBeInTheDocument();
+  });
+
+  it('has no back link on Sources', async () => {
+    go('sources');
+    render(PageHeader);
+    await tick();
+    expect(screen.queryByRole('link', { name: /Documents/ })).not.toBeInTheDocument();
+  });
 });
