@@ -22,7 +22,7 @@ test('the Languages screen adds a language from the catalog and removes it again
   // the new language is offered when creating a corpus
   await openScreen(page, 'Projects');
   await newProject(page);
-  await page.getByRole('button', { name: 'New corpus' }).click();
+  await page.getByRole('button', { name: 'New corpus' }).first().click(); // a project without corpora also shows the guided card's button
   await expect(page.getByRole('dialog').getByRole('option', { name: 'French' })).toHaveCount(1);
   await page.keyboard.press('Escape');
 

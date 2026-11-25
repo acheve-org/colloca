@@ -8,7 +8,7 @@
   import { openTerm } from '../lib/term.svelte';
   import type { RelatedResult, RelatedRow } from '../lib/types';
   import type { Column } from '../lib/ui/DataTable.types';
-  import EmptyState from '../lib/ui/EmptyState.svelte';
+  import ReadyHint from '../lib/ui/ReadyHint.svelte';
   import Field from '../lib/ui/Field.svelte';
   import Select from '../lib/ui/Select.svelte';
   import Toggle from '../lib/ui/Toggle.svelte';
@@ -60,7 +60,7 @@
   );
 </script>
 
-<ExploreScreen label={t('rel.toolbar')} runLabel={t('rel.run')} onrun={run}>
+<ExploreScreen label={t('rel.toolbar')} runLabel={t('rel.run')} onrun={run} pending={!result && runner.idle}>
   {#snippet fields()}
     <Field label={t('rel.word')}>
       <input bind:value={q} placeholder={t('rel.wordPlaceholder')} size="20" autocomplete="off" spellcheck="false" />
@@ -95,8 +95,8 @@
         {/if}
       </section>
     {/each}
-  {:else}
-    <EmptyState title={t('rel.start')} hint={t('rel.startHint')} />
+  {:else if !runner.loading}
+    <ReadyHint title={t('rel.start')} hint={t('rel.startHint')} />
   {/if}
 </ExploreScreen>
 

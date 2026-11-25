@@ -3,7 +3,7 @@
   import { corpusStore } from '../lib/corpus.svelte';
   import { t } from '../lib/i18n';
   import Button from '../lib/ui/Button.svelte';
-  import EmptyState from '../lib/ui/EmptyState.svelte';
+  import NoCorpus from '../lib/ui/NoCorpus.svelte';
   import Toolbar from '../lib/ui/Toolbar.svelte';
 
   /**
@@ -18,9 +18,11 @@
     fields: Snippet;
     /** Extra toolbar buttons after the run button. */
     extra?: Snippet;
+    /** No result yet and nothing running or failed: the run button gets a quiet ring. */
+    pending?: boolean;
     children: Snippet;
   }
-  let { label, runLabel, onrun, csvHref = '', fields, extra, children }: Props = $props();
+  let { label, runLabel, onrun, csvHref = '', fields, extra, pending = false, children }: Props = $props();
 
   function onsubmit(e: SubmitEvent): void {
     e.preventDefault();
@@ -30,13 +32,13 @@
 
 <div class="ex">
   {#if corpusStore.currentId === null}
-    {#if corpusStore.loaded}<EmptyState title={t('corpus.selectFirst')} />{/if}
+    {#if corpusStore.loaded}<NoCorpus />{/if}
   {:else}
     <form class="form" {onsubmit}>
       <Toolbar {label}>
         {@render fields()}
         <div class="actions">
-          <Button type="submit" variant="primary">{runLabel}</Button>
+          <Button type="submit" variant="primary" {pending}>{runLabel}</Button>
           {@render extra?.()}
           {#if csvHref}<a class="csv" href={csvHref} download>{t('cc.csv')}</a>{/if}
         </div>

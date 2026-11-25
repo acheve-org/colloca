@@ -10,7 +10,8 @@
   import Badge from '../lib/ui/Badge.svelte';
   import Button from '../lib/ui/Button.svelte';
   import Dialog from '../lib/ui/Dialog.svelte';
-  import EmptyState from '../lib/ui/EmptyState.svelte';
+  import EmptyCard from '../lib/ui/EmptyCard.svelte';
+  import ReadyHint from '../lib/ui/ReadyHint.svelte';
   import NewCorpusDialog from './NewCorpusDialog.svelte';
 
   const errMsg = (err: unknown) => (err instanceof Error ? err.message : String(err));
@@ -229,7 +230,7 @@
         {/if}
       </ul>
       {#if firstRun}
-        <EmptyState title={t('setup.project.title')} hint={t('setup.project.hint')} />
+        <ReadyHint title={t('setup.project.title')} hint={t('setup.project.hint')} />
       {/if}
       <form class="new" onsubmit={addProject}>
         <input
@@ -312,7 +313,11 @@
           </tbody>
         </table>
       {:else if selected}
-        <EmptyState title={t('proj.noCorpusTitle')} hint={t('proj.noCorpusHint')} />
+        <EmptyCard icon="folder" title={t('proj.noCorpusTitle')} hint={t('proj.noCorpusHint')}>
+          {#snippet actions()}
+            <Button variant="primary" onclick={() => (newOpen = true)}>{t('corpus.new')}</Button>
+          {/snippet}
+        </EmptyCard>
       {:else}
         <p class="muted">{t('corpus.none')}</p>
       {/if}

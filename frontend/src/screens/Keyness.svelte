@@ -10,7 +10,7 @@
   import { openTerm } from '../lib/term.svelte';
   import type { Corpus, KeynessRow } from '../lib/types';
   import type { Column } from '../lib/ui/DataTable.types';
-  import EmptyState from '../lib/ui/EmptyState.svelte';
+  import ReadyHint from '../lib/ui/ReadyHint.svelte';
   import Field from '../lib/ui/Field.svelte';
   import Select from '../lib/ui/Select.svelte';
   import ExploreScreen from './ExploreScreen.svelte';
@@ -132,7 +132,7 @@
   });
 </script>
 
-<ExploreScreen label={t('ex.ky.toolbar')} runLabel={t('ex.run.compare')} onrun={run} {csvHref}>
+<ExploreScreen label={t('ex.ky.toolbar')} runLabel={t('ex.run.compare')} onrun={run} pending={!result && runner.idle} {csvHref}>
   {#snippet fields()}
     <Field label={t('ex.ky.ref')}><Select label={t('ex.ky.ref')} bind:value={ref} options={refOptions} /></Field>
     <Field label={t('ex.minFreq')}><input type="number" min="1" bind:value={minFreq} /></Field>
@@ -151,7 +151,7 @@
       review={{ origin: 'keyness', measure: 'log-likelihood', score: 'll' }}
       onterm={(r) => openTerm({ source: r.item, pos: r.pos, origin: 'keyness' })}
     />
-  {:else}
-    <EmptyState title={t('ex.ky.start')} hint={t('ex.ky.help')} />
+  {:else if !runner.loading}
+    <ReadyHint title={t('ex.ky.start')} hint={t('ex.ky.help')} />
   {/if}
 </ExploreScreen>

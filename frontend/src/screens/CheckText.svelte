@@ -7,7 +7,7 @@
   import { messages } from '../lib/messages.svelte';
   import type { CheckTextResult, Languages } from '../lib/types';
   import Button from '../lib/ui/Button.svelte';
-  import EmptyState from '../lib/ui/EmptyState.svelte';
+  import NoCorpus from '../lib/ui/NoCorpus.svelte';
   import Field from '../lib/ui/Field.svelte';
   import Highlight from '../lib/ui/Highlight.svelte';
   import Select from '../lib/ui/Select.svelte';
@@ -54,7 +54,7 @@
 
 <div class="chk">
   {#if !corpus}
-    {#if corpusStore.loaded}<EmptyState title={t('corpus.selectFirst')} />{/if}
+    {#if corpusStore.loaded}<NoCorpus />{/if}
   {:else}
     <Toolbar label={t('chk.toolbar')}>
       <Field label={t('chk.what')}>

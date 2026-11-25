@@ -7,7 +7,7 @@
   import Badge from '../lib/ui/Badge.svelte';
   import Button from '../lib/ui/Button.svelte';
   import DocViewer from '../lib/ui/DocViewer.svelte';
-  import EmptyState from '../lib/ui/EmptyState.svelte';
+  import NoCorpus from '../lib/ui/NoCorpus.svelte';
   import Field from '../lib/ui/Field.svelte';
   import Select from '../lib/ui/Select.svelte';
   import Toolbar from '../lib/ui/Toolbar.svelte';
@@ -75,7 +75,7 @@
 
 <div class="lk">
   {#if !corpus}
-    {#if corpusStore.loaded}<EmptyState title={t('corpus.selectFirst')} />{/if}
+    {#if corpusStore.loaded}<NoCorpus />{/if}
   {:else}
     <Toolbar label={t('lk.toolbar')}>
       <Field label={t('lk.min')}><Select label={t('lk.min')} bind:value={minPercent} options={levelOptions} /></Field>

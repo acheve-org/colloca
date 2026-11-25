@@ -38,22 +38,23 @@ describe('SetupGate', () => {
   it('no languages: asks for the first language, linking to Languages', async () => {
     await setLanguages({});
     render(GateHost);
-    expect(screen.getByText('Add your first language')).toBeInTheDocument();
-    expect(link('Add a language')).toHaveAttribute('href', '#/languages');
+    expect(screen.getByRole('list')).toBeInTheDocument();
+    expect(screen.getByText('Add a language')).toBeInTheDocument();
+    expect(link('Add language')).toHaveAttribute('href', '#/languages');
     expect(screen.queryByText('child')).toBeNull();
   });
 
   it('languages but no project: asks for the first project, linking to Projects', () => {
     render(GateHost);
-    expect(screen.getByText('Start your first project')).toBeInTheDocument();
-    expect(link('Go to Projects')).toHaveAttribute('href', '#/projects');
+    expect(screen.getByText('Start a project')).toBeInTheDocument();
+    expect(link('New project')).toHaveAttribute('href', '#/projects');
   });
 
   it('a project but no working corpus: asks for a corpus', () => {
     projectStore.list = [{ id: 7, name: 'Acme', corpora: 0, trashed: 0, terms: 0 }];
     render(GateHost);
     expect(screen.getByText('Create a corpus')).toBeInTheDocument();
-    expect(link('Go to Projects')).toHaveAttribute('href', '#/projects');
+    expect(link('New corpus')).toHaveAttribute('href', '#/projects');
   });
 
   it('only base corpora do not count as a working corpus', () => {
@@ -79,7 +80,7 @@ describe('SetupGate', () => {
     expect(container.textContent).toBe('');
     projectStore.loaded = true;
     await tick();
-    expect(screen.getByText('Start your first project')).toBeInTheDocument();
+    expect(screen.getByText('Start a project')).toBeInTheDocument();
   });
 
   it('after the first settle a corpus switch (loaded false for a moment) keeps the screen mounted', async () => {
@@ -106,8 +107,9 @@ describe('SetupGate', () => {
   ])('a failed %s load shows the screen, not a first-run claim', async (_n, fail) => {
     await fail();
     expect(setupStep()).toBeNull();
-    render(GateHost);
+    const { container } = render(GateHost);
     expect(screen.getByText('child')).toBeInTheDocument();
+    expect(container.querySelector('ol')).toBeNull();
   });
 
   it.each(['languages', 'projects', 'trash'] as const)('never gates %s', (id) => {

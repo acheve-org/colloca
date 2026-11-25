@@ -37,6 +37,7 @@ interface RunnerOptions {
 export function useRunner(o: RunnerOptions) {
   let seq = 0;
   let loading = $state(false);
+  let failed = $state(false);
 
   /**
    * `load` fetches for the current corpus, `apply` stores a response that is still the
@@ -50,6 +51,7 @@ export function useRunner(o: RunnerOptions) {
     }
     const n = ++seq;
     loading = true;
+    failed = false;
     messages.say(t('corpus.working'));
     try {
       const r = await load(id);
@@ -58,6 +60,7 @@ export function useRunner(o: RunnerOptions) {
       messages.clear();
     } catch (err) {
       if (n !== seq) return;
+      failed = true;
       messages.say(err instanceof Error ? err.message : String(err), 'err');
     } finally {
       if (n === seq) loading = false;
@@ -67,6 +70,7 @@ export function useRunner(o: RunnerOptions) {
   function onCorpusChanged(): void {
     seq++;
     loading = false;
+    failed = false;
     messages.clearWorking();
     o.reset();
   }
@@ -91,6 +95,10 @@ export function useRunner(o: RunnerOptions) {
   return {
     get loading() {
       return loading;
+    },
+    /** No run yet to look at: nothing loading and the last run did not fail. */
+    get idle() {
+      return !loading && !failed;
     },
     exec,
   };

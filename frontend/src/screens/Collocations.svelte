@@ -9,7 +9,7 @@
   import { openTerm } from '../lib/term.svelte';
   import type { CollocationResult, CollocationRow } from '../lib/types';
   import type { Column } from '../lib/ui/DataTable.types';
-  import EmptyState from '../lib/ui/EmptyState.svelte';
+  import ReadyHint from '../lib/ui/ReadyHint.svelte';
   import Field from '../lib/ui/Field.svelte';
   import Toggle from '../lib/ui/Toggle.svelte';
   import ExploreScreen from './ExploreScreen.svelte';
@@ -89,7 +89,7 @@
   }
 </script>
 
-<ExploreScreen label={t('ex.colloc.toolbar')} runLabel={t('ex.run.find')} onrun={run} {csvHref}>
+<ExploreScreen label={t('ex.colloc.toolbar')} runLabel={t('ex.run.find')} onrun={run} pending={!result && runner.idle} {csvHref}>
   {#snippet fields()}
     <Field label={t('ex.colloc.node')}>
       <input bind:value={q} placeholder={t('ex.colloc.nodePlaceholder')} size="20" autocomplete="off" spellcheck="false" />
@@ -112,7 +112,7 @@
       review={{ origin: 'collocation', measure: 'log-likelihood', score: 'll' }}
       onterm={(r) => openTerm({ source: r.item, pos: r.pos, origin: 'collocation' })}
     />
-  {:else}
-    <EmptyState title={t('ex.colloc.start')} hint={t('ex.colloc.startHint')} />
+  {:else if !runner.loading}
+    <ReadyHint title={t('ex.colloc.start')} hint={t('ex.colloc.startHint')} />
   {/if}
 </ExploreScreen>

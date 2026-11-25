@@ -307,7 +307,7 @@ describe('Concordance', () => {
     expect(screen.getByText('2 hits · 2 documents')).toBeInTheDocument();
   });
 
-  it('with no corpus selected shows EmptyState and makes no request', async () => {
+  it('with no corpus selected shows the no-corpus card and makes no request', async () => {
     corpusStore.currentId = null;
     corpusStore.list = [];
     go('concordance', { q: 'casa' });

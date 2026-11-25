@@ -32,6 +32,7 @@
   import { t } from '../lib/i18n';
   import { messages } from '../lib/messages.svelte';
   import { go, route } from '../lib/router.svelte';
+  import { clearScope, scopeActive, scopeChips, scopeView } from '../lib/scope.svelte';
   import { formatKeys, registerShortcut, withKeys } from '../lib/shortcuts.svelte';
   import { openTerm, termStore } from '../lib/term.svelte';
   import type { BilingualResult, ConcLine, ConcordanceResult, DocContext, QueryExplanation } from '../lib/types';
@@ -39,7 +40,9 @@
   import Button from '../lib/ui/Button.svelte';
   import DetailStrip from '../lib/ui/DetailStrip.svelte';
   import DocViewer from '../lib/ui/DocViewer.svelte';
-  import EmptyState from '../lib/ui/EmptyState.svelte';
+  import EmptyCard from '../lib/ui/EmptyCard.svelte';
+  import NoCorpus from '../lib/ui/NoCorpus.svelte';
+  import ReadyHint from '../lib/ui/ReadyHint.svelte';
   import Field from '../lib/ui/Field.svelte';
   import Highlight from '../lib/ui/Highlight.svelte';
   import Kbd from '../lib/ui/Kbd.svelte';
@@ -104,6 +107,7 @@
   let filterA = $state('');
   let filterB = $state('');
   let loading = $state(false);
+  let failed = $state(false);
   let seq = 0;
   // Fallback words for the target highlight when the server sent no marks (it normally does).
   const likelyEquiv: string[] = [];
@@ -189,6 +193,7 @@
       ...scopeParams(),
     };
     const n = ++seq;
+    failed = false;
     loading = true; // previous rows stay visible (and selected) while loading
     messages.say(t('corpus.working'));
     try {
@@ -216,10 +221,42 @@
       messages.clear();
     } catch (err) {
       if (n !== seq) return;
+      failed = true;
       messages.say(errMsg(err), 'err');
     } finally {
       if (n === seq) loading = false;
     }
+  }
+
+  const lemmaMiss = $derived(result?.params.unit === 'lemma');
+  const noHitReasons = $derived.by(() => {
+    const reasons: string[] = [];
+    if (lemmaMiss) reasons.push(t('empty.reason.lemma'));
+    if (scopeActive()) {
+      const info = scopeView.info;
+      reasons.push(
+        info?.filtered
+          ? t('empty.reason.filter', {
+              chips: scopeChips().map((c) => c.text).join(', '),
+              docs: info.docs,
+              total: info.total_docs,
+            })
+          : t('empty.reason.filterPlain'),
+      );
+    }
+    return reasons;
+  });
+
+  function searchExactForm(): void {
+    if (result) q = result.query;
+    unit = 'form';
+    void search();
+  }
+
+  function clearFilterAndSearch(): void {
+    if (result) q = result.query;
+    clearScope();
+    void search();
   }
 
   function onsubmit(e: SubmitEvent): void {
@@ -241,6 +278,7 @@
     filterA = '';
     filterB = '';
     loading = false;
+    failed = false;
     messages.clearWorking();
   }
 
@@ -316,7 +354,7 @@
 
 <div class="cc">
   {#if !hasCorpus}
-    {#if corpusStore.loaded}<EmptyState title={t('corpus.selectFirst')} />{/if}
+    {#if corpusStore.loaded}<NoCorpus />{/if}
   {:else}
     <form class="cc-form" {onsubmit}>
       <Toolbar label={t('cc.toolbar')}>
@@ -368,7 +406,7 @@
           </span>
         {/if}
         <div class="actions">
-          <Button type="submit" variant="primary">{t('cc.search')}</Button>
+          <Button type="submit" variant="primary" pending={!result && !loading && !failed}>{t('cc.search')}</Button>
           <Button title={t('cc.addTermHint')} onclick={addTermFromQuery}>{t('cc.addTerm')}</Button>
           {#if csvHref}<a class="csv" href={csvHref} download>{t('cc.csv')}</a>{/if}
         </div>
@@ -422,8 +460,16 @@
     {/if}
 
     <div class="table" bind:this={tableEl}>
+      {#snippet noHitActions()}
+        {#if scopeActive()}
+          <Button variant="primary" onclick={clearFilterAndSearch}>{t('empty.search.clear')}</Button>
+        {/if}
+        {#if lemmaMiss}
+          <Button variant={scopeActive() ? 'default' : 'primary'} onclick={searchExactForm}>{t('empty.search.exact')}</Button>
+        {/if}
+      {/snippet}
       {#if result && !lines.length && !loading}
-        <EmptyState title={t('cc.noHits', { q: result.query })} hint={t('cc.noHitsHint')} />
+        <EmptyCard icon="none" live title={t('cc.noHits', { q: result.query })} hint={t('cc.noHitsHint')} reasons={noHitReasons} actions={scopeActive() || lemmaMiss ? noHitActions : undefined} />
       {:else if result || loading}
         <Kwic
           lines={shown}
@@ -437,7 +483,7 @@
           emptyText={t('cc.noFilterMatch')}
         />
       {:else}
-        <EmptyState title={t('cc.start')} hint={t('cc.startHint', { key: formatKeys('Mod+K') })} />
+        <ReadyHint title={t('cc.start')} hint={t('cc.startHint', { key: formatKeys('Mod+K') })} />
       {/if}
     </div>
 

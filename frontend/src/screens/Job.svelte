@@ -19,7 +19,8 @@
   import DataTable from '../lib/ui/DataTable.svelte';
   import Dialog from '../lib/ui/Dialog.svelte';
   import { cellValue, type Column } from '../lib/ui/DataTable.types';
-  import EmptyState from '../lib/ui/EmptyState.svelte';
+  import NoCorpus from '../lib/ui/NoCorpus.svelte';
+  import ReadyHint from '../lib/ui/ReadyHint.svelte';
   import Field from '../lib/ui/Field.svelte';
   import Highlight from '../lib/ui/Highlight.svelte';
   import Toggle from '../lib/ui/Toggle.svelte';
@@ -327,7 +328,7 @@
 
 <div class="job">
   {#if corpusStore.currentId === null}
-    {#if corpusStore.loaded}<EmptyState title={t('corpus.selectFirst')} />{/if}
+    {#if corpusStore.loaded}<NoCorpus />{/if}
   {:else}
     <Toolbar label={t('job.toolbar')}>
       <Field label={t('job.file')}>
@@ -349,7 +350,7 @@
         <div class="force" title={t('job.leverageHint')}><Toggle bind:checked={leverage} label={t('job.leverage')} /></div>
       {/if}
       <div class="actions">
-        <Button variant="primary" disabled={busy} onclick={analyse}>{t('job.go')}</Button>
+        <Button variant="primary" disabled={busy} pending={!report && !busy && !error} onclick={analyse}>{t('job.go')}</Button>
         <span class="progress" aria-live="polite">
           {#if busy}
             {#if job && job.status !== 'queued'}
@@ -481,7 +482,7 @@
           />
         </div>
       {:else if !busy && !error}
-        <EmptyState title={t('job.start')} hint={t('job.startHint')} />
+        <ReadyHint title={t('job.start')} hint={t('job.startHint')} />
       {/if}
     </div>
   {/if}
