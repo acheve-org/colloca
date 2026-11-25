@@ -9,7 +9,7 @@
   import { openTerm } from '../lib/term.svelte';
   import type { EquivalentRow, EquivalentsResult } from '../lib/types';
   import type { Column } from '../lib/ui/DataTable.types';
-  import EmptyState from '../lib/ui/EmptyState.svelte';
+  import ReadyHint from '../lib/ui/ReadyHint.svelte';
   import Field from '../lib/ui/Field.svelte';
   import Select from '../lib/ui/Select.svelte';
   import ExploreScreen from './ExploreScreen.svelte';
@@ -74,7 +74,7 @@
   }
 </script>
 
-<ExploreScreen label={t('ex.eq.toolbar')} runLabel={t('ex.run.find')} onrun={run} {csvHref}>
+<ExploreScreen label={t('ex.eq.toolbar')} runLabel={t('ex.run.find')} onrun={run} pending={!result && runner.idle} {csvHref}>
   {#snippet fields()}
     <Field label={t('ex.eq.source')}>
       <input bind:value={q} placeholder={t('ex.eq.sourcePlaceholder')} size="24" autocomplete="off" spellcheck="false" />
@@ -94,7 +94,7 @@
       note={t('ex.eq.help')}
       onterm={(r) => openTerm({ source: result!.query, target: r.item, origin: 'equivalent' })}
     />
-  {:else}
-    <EmptyState title={t('ex.eq.start')} hint={t('ex.eq.help')} />
+  {:else if !runner.loading}
+    <ReadyHint title={t('ex.eq.start')} hint={t('ex.eq.help')} />
   {/if}
 </ExploreScreen>

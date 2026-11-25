@@ -10,7 +10,7 @@
   import type { Column } from '../lib/ui/DataTable.types';
   import DataTable from '../lib/ui/DataTable.svelte';
   import DocViewer from '../lib/ui/DocViewer.svelte';
-  import EmptyState from '../lib/ui/EmptyState.svelte';
+  import ReadyHint from '../lib/ui/ReadyHint.svelte';
   import Field from '../lib/ui/Field.svelte';
   import Select from '../lib/ui/Select.svelte';
   import Toggle from '../lib/ui/Toggle.svelte';
@@ -147,7 +147,7 @@
   {/if}
 {/snippet}
 
-<ExploreScreen label={t('dp.toolbar')} runLabel={t('dp.run')} onrun={run} {csvHref}>
+<ExploreScreen label={t('dp.toolbar')} runLabel={t('dp.run')} onrun={run} pending={!result && runner.idle} {csvHref}>
   {#snippet fields()}
     <Field label={t('dp.query')}>
       <input bind:value={q} placeholder={t('dp.queryPlaceholder')} size="22" autocomplete="off" spellcheck="false" />
@@ -173,8 +173,8 @@
         emptyText={docs.length ? t('ex.noFilterMatch') : t('common.noResults')}
       />
     </div>
-  {:else}
-    <EmptyState title={t('dp.start')} hint={t('dp.startHint')} />
+  {:else if !runner.loading}
+    <ReadyHint title={t('dp.start')} hint={t('dp.startHint')} />
   {/if}
 </ExploreScreen>
 

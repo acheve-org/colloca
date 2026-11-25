@@ -11,6 +11,7 @@
   import type { FrequencyRow, KeynessRow } from '../lib/types';
   import Button from '../lib/ui/Button.svelte';
   import EmptyState from '../lib/ui/EmptyState.svelte';
+  import ReadyHint from '../lib/ui/ReadyHint.svelte';
   import Field from '../lib/ui/Field.svelte';
   import Select from '../lib/ui/Select.svelte';
   import ExploreScreen from './ExploreScreen.svelte';
@@ -112,7 +113,7 @@
   });
 </script>
 
-<ExploreScreen label={t('ex.cloud.toolbar')} runLabel={t('ex.run.draw')} onrun={run}>
+<ExploreScreen label={t('ex.cloud.toolbar')} runLabel={t('ex.run.draw')} onrun={run} pending={!items && runner.idle}>
   {#snippet fields()}
     <Field label={t('ex.cloud.source')}>
       <Select label={t('ex.cloud.source')} bind:value={source} options={sourceOptions} />
@@ -130,8 +131,8 @@
     <div class="cloud" role="img" aria-label={t('ex.cloud.alt')}>
       <canvas bind:this={canvas} width={W} height={H}></canvas>
     </div>
-  {:else}
-    <EmptyState title={t('ex.cloud.start')} hint={t('ex.cloud.startHint')} />
+  {:else if !runner.loading}
+    <ReadyHint title={t('ex.cloud.start')} hint={t('ex.cloud.startHint')} />
   {/if}
 </ExploreScreen>
 

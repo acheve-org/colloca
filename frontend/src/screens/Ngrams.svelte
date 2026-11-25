@@ -8,7 +8,7 @@
   import { openTerm } from '../lib/term.svelte';
   import type { NgramRow } from '../lib/types';
   import type { Column } from '../lib/ui/DataTable.types';
-  import EmptyState from '../lib/ui/EmptyState.svelte';
+  import ReadyHint from '../lib/ui/ReadyHint.svelte';
   import Field from '../lib/ui/Field.svelte';
   import Select from '../lib/ui/Select.svelte';
   import Toggle from '../lib/ui/Toggle.svelte';
@@ -67,7 +67,7 @@
   }
 </script>
 
-<ExploreScreen label={t('ex.ng.toolbar')} runLabel={t('ex.run.show')} onrun={run} {csvHref}>
+<ExploreScreen label={t('ex.ng.toolbar')} runLabel={t('ex.run.show')} onrun={run} pending={!result && runner.idle} {csvHref}>
   {#snippet fields()}
     <Field label={t('ex.ng.n')}><Select label={t('ex.ng.n')} bind:value={n} options={nOptions} /></Field>
     <Field label={t('ex.unit')}><Select label={t('ex.unit')} bind:value={unit} options={unitOptions} /></Field>
@@ -86,7 +86,7 @@
       review={{ origin: 'ngram', measure: 'frequency', score: 'freq' }}
       onterm={(r) => openTerm({ source: r.item, origin: 'ngram' })}
     />
-  {:else}
-    <EmptyState title={t('ex.ng.start')} hint={t('ex.ng.startHint')} />
+  {:else if !runner.loading}
+    <ReadyHint title={t('ex.ng.start')} hint={t('ex.ng.startHint')} />
   {/if}
 </ExploreScreen>

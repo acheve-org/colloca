@@ -181,7 +181,8 @@ describe('Sources', () => {
   it('shows the four methods as tiles for an empty corpus', async () => {
     docs.body = [];
     render(Sources);
-    expect(await screen.findByText('No documents yet.')).toBeInTheDocument();
+    const empty = await screen.findByText('No documents yet.');
+    expect(empty.closest('.ready')).not.toBeNull(); // a quiet hint, not a card
     expect(screen.getByText('Choose how to add documents below.')).toBeInTheDocument();
     const hrefs = screen.getAllByRole('link').map((a) => a.getAttribute('href'));
     for (const m of ['web', 'up', 'paste', 'al']) expect(hrefs).toContain(`#/sources/add?m=${m}`);

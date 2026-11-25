@@ -40,6 +40,7 @@
   import DetailStrip from '../lib/ui/DetailStrip.svelte';
   import DocViewer from '../lib/ui/DocViewer.svelte';
   import EmptyState from '../lib/ui/EmptyState.svelte';
+  import ReadyHint from '../lib/ui/ReadyHint.svelte';
   import Field from '../lib/ui/Field.svelte';
   import Highlight from '../lib/ui/Highlight.svelte';
   import Kbd from '../lib/ui/Kbd.svelte';
@@ -104,6 +105,7 @@
   let filterA = $state('');
   let filterB = $state('');
   let loading = $state(false);
+  let failed = $state(false);
   let seq = 0;
   // Fallback words for the target highlight when the server sent no marks (it normally does).
   const likelyEquiv: string[] = [];
@@ -189,6 +191,7 @@
       ...scopeParams(),
     };
     const n = ++seq;
+    failed = false;
     loading = true; // previous rows stay visible (and selected) while loading
     messages.say(t('corpus.working'));
     try {
@@ -216,6 +219,7 @@
       messages.clear();
     } catch (err) {
       if (n !== seq) return;
+      failed = true;
       messages.say(errMsg(err), 'err');
     } finally {
       if (n === seq) loading = false;
@@ -241,6 +245,7 @@
     filterA = '';
     filterB = '';
     loading = false;
+    failed = false;
     messages.clearWorking();
   }
 
@@ -368,7 +373,7 @@
           </span>
         {/if}
         <div class="actions">
-          <Button type="submit" variant="primary">{t('cc.search')}</Button>
+          <Button type="submit" variant="primary" pending={!result && !loading && !failed}>{t('cc.search')}</Button>
           <Button title={t('cc.addTermHint')} onclick={addTermFromQuery}>{t('cc.addTerm')}</Button>
           {#if csvHref}<a class="csv" href={csvHref} download>{t('cc.csv')}</a>{/if}
         </div>
@@ -437,7 +442,7 @@
           emptyText={t('cc.noFilterMatch')}
         />
       {:else}
-        <EmptyState title={t('cc.start')} hint={t('cc.startHint', { key: formatKeys('Mod+K') })} />
+        <ReadyHint title={t('cc.start')} hint={t('cc.startHint', { key: formatKeys('Mod+K') })} />
       {/if}
     </div>
 

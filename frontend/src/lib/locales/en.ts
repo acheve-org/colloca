@@ -1054,4 +1054,7 @@ export const en: Messages = {
   'add.paste.placeholder': 'Paste the text here',
   'empty.try': 'Try:',
   'empty.chooseCorpus': 'Choose a corpus',
+  'empty.freq.forms': 'word forms',
+  'empty.freq.nouns': 'only nouns',
+  'empty.freq.stop': 'with stopwords',
 };

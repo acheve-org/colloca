@@ -18,9 +18,11 @@
     fields: Snippet;
     /** Extra toolbar buttons after the run button. */
     extra?: Snippet;
+    /** No result yet and nothing running or failed: the run button gets a quiet ring. */
+    pending?: boolean;
     children: Snippet;
   }
-  let { label, runLabel, onrun, csvHref = '', fields, extra, children }: Props = $props();
+  let { label, runLabel, onrun, csvHref = '', fields, extra, pending = false, children }: Props = $props();
 
   function onsubmit(e: SubmitEvent): void {
     e.preventDefault();
@@ -36,7 +38,7 @@
       <Toolbar {label}>
         {@render fields()}
         <div class="actions">
-          <Button type="submit" variant="primary">{runLabel}</Button>
+          <Button type="submit" variant="primary" {pending}>{runLabel}</Button>
           {@render extra?.()}
           {#if csvHref}<a class="csv" href={csvHref} download>{t('cc.csv')}</a>{/if}
         </div>

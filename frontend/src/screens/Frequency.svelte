@@ -8,7 +8,7 @@
   import { openTerm } from '../lib/term.svelte';
   import type { FrequencyRow } from '../lib/types';
   import type { Column } from '../lib/ui/DataTable.types';
-  import EmptyState from '../lib/ui/EmptyState.svelte';
+  import ReadyHint from '../lib/ui/ReadyHint.svelte';
   import Field from '../lib/ui/Field.svelte';
   import Select from '../lib/ui/Select.svelte';
   import Toggle from '../lib/ui/Toggle.svelte';
@@ -54,6 +54,12 @@
       : []),
   ]);
 
+  /** A "Try" chip: set one option, then run exactly as the button would. */
+  function tryRun(set: () => void): void {
+    set();
+    run();
+  }
+
   function run(): void {
     const min = toInt(minFreq, 2);
     minFreq = min;
@@ -72,7 +78,7 @@
   }
 </script>
 
-<ExploreScreen label={t('ex.freq.toolbar')} runLabel={t('ex.run.show')} onrun={run} {csvHref}>
+<ExploreScreen label={t('ex.freq.toolbar')} runLabel={t('ex.run.show')} onrun={run} pending={!result && runner.idle} {csvHref}>
   {#snippet fields()}
     <Field label={t('ex.unit')}><Select label={t('ex.unit')} bind:value={unit} options={unitOptions} /></Field>
     <Field label={t('ex.pos')}><input bind:value={pos} placeholder="NOUN,VERB" size="12" /></Field>
@@ -91,7 +97,15 @@
       review={{ origin: 'frequency', measure: 'frequency', score: 'freq' }}
       onterm={(r) => openTerm({ source: r.item, pos: r.pos, origin: 'frequency' })}
     />
-  {:else}
-    <EmptyState title={t('ex.freq.start')} hint={t('ex.freq.startHint')} />
+  {:else if !runner.loading}
+    <ReadyHint
+      title={t('ex.freq.start')}
+      hint={t('ex.freq.startHint')}
+      tries={[
+        { label: t('empty.freq.forms'), onclick: () => tryRun(() => (unit = 'form')) },
+        { label: t('empty.freq.nouns'), onclick: () => tryRun(() => (pos = 'NOUN')) },
+        { label: t('empty.freq.stop'), onclick: () => tryRun(() => (stop = false)) },
+      ]}
+    />
   {/if}
 </ExploreScreen>

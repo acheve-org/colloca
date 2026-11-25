@@ -1053,4 +1053,7 @@ export const es: Messages = {
   'add.paste.placeholder': 'Pega aquí el texto',
   'empty.try': 'Prueba:',
   'empty.chooseCorpus': 'Elegir un corpus',
+  'empty.freq.forms': 'formas',
+  'empty.freq.nouns': 'solo sustantivos',
+  'empty.freq.stop': 'con palabras vacías',
 };

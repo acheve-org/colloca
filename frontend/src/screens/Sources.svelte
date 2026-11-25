@@ -25,6 +25,7 @@
   import DetailStrip from '../lib/ui/DetailStrip.svelte';
   import Dialog from '../lib/ui/Dialog.svelte';
   import EmptyState from '../lib/ui/EmptyState.svelte';
+  import ReadyHint from '../lib/ui/ReadyHint.svelte';
   import Field from '../lib/ui/Field.svelte';
   import Select from '../lib/ui/Select.svelte';
   import MethodTiles from '../lib/ui/add/MethodTiles.svelte';
@@ -410,7 +411,7 @@
 
     <div class="table" bind:this={tableEl}>
       {#if loadedOnce && !docs.length && !loading}
-        <EmptyState title={t('src.empty')} hint={t('src.emptyHint')} />
+        <ReadyHint title={t('src.empty')} hint={t('src.emptyHint')} />
         <MethodTiles />
       {:else}
         <DataTable

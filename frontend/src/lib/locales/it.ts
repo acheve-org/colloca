@@ -1053,4 +1053,7 @@ export const it: Messages = {
   'add.paste.placeholder': 'Incolla qui il testo',
   'empty.try': 'Prova:',
   'empty.chooseCorpus': 'Scegli un corpus',
+  'empty.freq.forms': 'forme',
+  'empty.freq.nouns': 'solo nomi',
+  'empty.freq.stop': 'con stopword',
 };
