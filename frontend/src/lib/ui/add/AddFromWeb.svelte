@@ -16,7 +16,7 @@
 </script>
 
 <div class="web">
-  <div class="chips">
+  <div class="chips" role="group" aria-label={t('add.web.group')}>
     {#each SUBS as id (id)}
       <button type="button" class="chip" aria-pressed={sub === id} onclick={() => go('sources-add', { m: 'web', sub: id })}>
         {t(`add.web.${id}`)}

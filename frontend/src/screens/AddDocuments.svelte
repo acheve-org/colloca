@@ -30,7 +30,8 @@
 
   // One column below this width; the details then sit in a closed block above the form.
   const NARROW = '(max-width: 799px)';
-  let narrow = $state(false);
+  const mql = typeof window !== 'undefined' ? window.matchMedia?.(NARROW) : undefined;
+  let narrow = $state(mql?.matches ?? false);
   onMount(() => {
     const mq = window.matchMedia?.(NARROW);
     if (!mq) return;
@@ -40,7 +41,8 @@
     return () => mq.removeEventListener('change', on);
   });
 
-  const select = (id: string) => go('sources-add', { m: id });
+  // Clicking the current method's tab keeps its sub-choice.
+  const select = (id: string) => go('sources-add', id === m && route.params.sub ? { m: id, sub: route.params.sub } : { m: id });
   function cancel() {
     resetDraft();
     go('sources');
@@ -55,7 +57,8 @@
     if (run && (await run())) {
       // The details of the documents and the language override stay for the next batch.
       resetDraft({ keepMeta: true });
-      go('sources');
+      // Not if the user has left the page while it ran.
+      if (route.screen === 'sources-add') go('sources');
     }
   }
 </script>

@@ -64,6 +64,7 @@
       aria-label={t('src.pair.file')}
       onchange={(e) => (draft.pairFile = e.currentTarget.files?.[0] ?? null)}
     />
+    {#if draft.pairFile}<span class="chosen">{draft.pairFile.name}</span>{/if}
     <Field label={t('src.pair.partner')}>
       <Select label={t('src.pair.partner')} bind:value={draft.partner} options={partnerOptions} onchange={() => (draft.partnerPicked = true)} />
     </Field>
@@ -113,6 +114,11 @@
     height: auto;
     padding: var(--s-1);
     max-width: 100%;
+  }
+  .chosen {
+    font-size: var(--fs-small);
+    color: var(--muted);
+    overflow-wrap: anywhere;
   }
   .hint {
     margin: var(--s-1) 0 0;

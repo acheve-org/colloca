@@ -214,7 +214,7 @@ describe('actionFor', () => {
       truncated: false,
     } as never;
     draft.picked.add('https://a.example/1');
-    expect(actionFor('web', 'index')).toMatchObject({ label: 'Import 1 pages', enabled: true, summary: `1 of 2 selected · into Wind · ${NO_META}` });
+    expect(actionFor('web', 'index')).toMatchObject({ label: 'Import 1 page', enabled: true, summary: `1 of 2 selected · into Wind · ${NO_META}` });
     draft.picked.clear();
     expect(actionFor('web', 'index').enabled).toBe(false);
   });
@@ -237,5 +237,87 @@ describe('actionFor', () => {
     expect(actionFor('al', 'tm').enabled).toBe(false);
     draft.pairName = 'Translations';
     expect(actionFor('al', 'tm').enabled).toBe(true);
+  });
+});
+
+describe('final review fixes', () => {
+  const reply = (body: unknown, ok = true) => ({ ok, status: ok ? 200 : 500, statusText: 'x', json: async () => body });
+
+  it('a submit that finishes after the user left the page does not navigate back', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === 'POST') {
+        await gate;
+        return reply({});
+      }
+      return reply(String(url).endsWith('/facets') ? { tags: [], text_types: [], date_min: '', date_max: '' } : []);
+    }));
+    open({ m: 'paste' });
+    draft.pasteText = 'hola';
+    await tick();
+    await fireEvent.click(screen.getByRole('button', { name: 'Add text' }));
+    go('concordance');
+    release();
+    await vi.waitFor(() => expect(work.busy).toBeNull());
+    await tick();
+    expect(route.screen).toBe('concordance');
+  });
+
+  it('clicking the tab of the current method keeps its sub-choice', async () => {
+    open({ m: 'web', sub: 'index' });
+    await fireEvent.click(tab('From the web'));
+    expect(route.params.sub).toBe('index');
+    await fireEvent.click(tab('Paste text'));
+    expect(route.params.sub).toBeUndefined();
+  });
+
+  it('shows the chosen pair file after coming back to the tab', async () => {
+    draft.pairFile = new File(['x'], 'memory.tmx');
+    open({ m: 'al', sub: 'tm' });
+    expect(screen.getByText('memory.tmx')).toBeInTheDocument();
+  });
+
+  it('uses singular labels for one item', () => {
+    draft.urlList = 'https://a.example/';
+    expect(actionFor('web', 'list').summary).toContain('1 address ·');
+    draft.files = [new File(['x'], 'a.txt')];
+    expect(actionFor('up', 'one').summary).toContain('1 file ·');
+    draft.catalog = { url: 'https://n.example/', title: 'N', links: [{ url: 'https://n.example/1', text: 'One', same_host: true }], truncated: false, max_per_request: 20 };
+    draft.picked.add('https://n.example/1');
+    expect(actionFor('web', 'index').label).toBe('Import 1 page');
+  });
+
+  it('the web chips are a named group', () => {
+    open();
+    expect(screen.getByRole('group', { name: 'How to add from the web' })).toBeInTheDocument();
+  });
+
+  it('suggests the tags and types already in the corpus', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) =>
+      reply(String(url).endsWith('/facets') ? { tags: [{ tag: 'wind', docs: 3 }], text_types: [{ text_type: 'news', docs: 2 }], date_min: '', date_max: '' } : [])));
+    open();
+    const tags = screen.getByLabelText('Tags');
+    const types = screen.getByLabelText('Type');
+    await vi.waitFor(() => expect(document.getElementById(tags.getAttribute('list')!)?.querySelectorAll('option')).toHaveLength(1));
+    expect(document.getElementById(tags.getAttribute('list')!)?.querySelector('option')?.getAttribute('value')).toBe('wind');
+    expect(document.getElementById(types.getAttribute('list')!)?.querySelector('option')?.getAttribute('value')).toBe('news');
+  });
+
+  it('a failing facets request does not break the page', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => reply({}, false)));
+    open();
+    await tick();
+    expect(screen.getByLabelText('Tags')).toBeInTheDocument();
+  });
+
+  it('the narrow layout starts with the details collapsed above the form', () => {
+    vi.stubGlobal('matchMedia', (q: string) => ({ matches: true, media: q, addEventListener() {}, removeEventListener() {} }));
+    const { container } = open();
+    const fold = container.querySelector('details.about-fold');
+    expect(fold).not.toBeNull();
+    expect(fold).not.toHaveAttribute('open');
+    expect(fold?.querySelector('summary')?.textContent).toContain(NO_META);
+    expect(container.querySelector('aside.side')).toBeNull();
   });
 });

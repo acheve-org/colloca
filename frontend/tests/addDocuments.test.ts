@@ -3,6 +3,8 @@ import {
   act,
   addPaste,
   findLinks,
+  addUrlList,
+  importSelected,
   draft,
   metaSummary,
   resetDraft,
@@ -234,5 +236,84 @@ describe('submit actions', () => {
     expect(draft.catalog).toBeNull();
     expect(draft.picked.size).toBe(0);
     corpusStore.currentId = 1;
+  });
+});
+
+describe('a bulk import where nothing was accepted stays on the page', () => {
+  type Reply = { status: number; body: unknown };
+  let reply: (c: Call) => Reply;
+  const link = (n: number) => ({ url: `https://n.example/${n}`, text: `L${n}`, same_host: true });
+  beforeEach(() => {
+    const inner = globalThis.fetch as unknown as (u: string, i?: RequestInit) => Promise<unknown>;
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      const u = new URL(url, 'http://x');
+      if (u.pathname.endsWith('/urls') || u.pathname.endsWith('/upload')) {
+        const raw = init?.body;
+        const r = reply({ method: 'POST', path: u.pathname, params: u.searchParams, body: typeof raw === 'string' ? JSON.parse(raw) : raw });
+        return { ok: r.status < 400, status: r.status, statusText: 'x', json: async () => r.body };
+      }
+      return inner(url, init);
+    }));
+  });
+  const fill = () => {
+    draft.catalog = { url: 'https://n.example/', title: 'N', links: [link(1), link(2)], truncated: false, max_per_request: 1 };
+    draft.picked.add('https://n.example/1');
+    draft.picked.add('https://n.example/2');
+  };
+
+  it('importSelected: every request failing returns false and keeps the catalog and selection', async () => {
+    reply = () => ({ status: 500, body: { detail: 'down' } });
+    fill();
+    expect(await importSelected()).toBe(false);
+    expect(draft.catalog).not.toBeNull();
+    expect(draft.picked.size).toBe(2);
+    expect(messages.current?.kind).toBe('err');
+  });
+
+  it('importSelected: every link rejected returns false', async () => {
+    reply = (c) => ({ status: 200, body: (c.body as { urls: string[] }).urls.map((u) => ({ url: u, ok: false, error: 'no' })) });
+    fill();
+    expect(await importSelected()).toBe(false);
+    expect(draft.picked.size).toBe(2);
+    expect(messages.current?.text).toContain('no');
+  });
+
+  it('importSelected: some accepted returns true', async () => {
+    reply = (c) => {
+      const [u] = (c.body as { urls: string[] }).urls;
+      return { status: 200, body: [{ url: u, ok: u.endsWith('/1'), error: 'no' }] };
+    };
+    fill();
+    expect(await importSelected()).toBe(true);
+  });
+
+  it('addUrlList: every address rejected returns false and keeps the addresses', async () => {
+    reply = (c) => ({ status: 200, body: (c.body as { urls: string[] }).urls.map((u) => ({ url: u, ok: false, error: 'bad' })) });
+    draft.urlList = 'https://a.example/\nhttps://b.example/';
+    expect(await addUrlList()).toBe(false);
+    expect(draft.urlList).toBe('https://a.example/\nhttps://b.example/');
+    expect(messages.current?.kind).toBe('err');
+  });
+
+  it('addUrlList: some accepted returns true and clears the addresses', async () => {
+    reply = (c) => ({ status: 200, body: (c.body as { urls: string[] }).urls.map((u, i) => ({ url: u, ok: i === 0, error: 'bad' })) });
+    draft.urlList = 'https://a.example/\nhttps://b.example/';
+    expect(await addUrlList()).toBe(true);
+    expect(draft.urlList).toBe('');
+  });
+
+  it('uploadFiles: every file rejected returns false and keeps the files', async () => {
+    reply = () => ({ status: 200, body: [{ file: 'a.txt', ok: false, error: 'unsupported' }] });
+    draft.files = [new File(['x'], 'a.txt')];
+    expect(await uploadFiles()).toBe(false);
+    expect(draft.files).toHaveLength(1);
+    expect(messages.current?.kind).toBe('err');
+  });
+
+  it('uploadFiles: some accepted returns true and clears the files', async () => {
+    reply = () => ({ status: 200, body: [{ file: 'a.txt', ok: true, job_id: 1 }, { file: 'b.txt', ok: false, error: 'no' }] });
+    draft.files = [new File(['x'], 'a.txt'), new File(['y'], 'b.txt')];
+    expect(await uploadFiles()).toBe(true);
+    expect(draft.files).toHaveLength(0);
   });
 });

@@ -72,7 +72,7 @@ describe('Upload files', () => {
     expect(screen.getByText(/Choose files first/)).toBeInTheDocument();
     await choose(new File(['x'], 'a.txt'));
     expect(screen.getByRole('button', { name: 'Upload' })).toBeEnabled();
-    expect(screen.getByText(/1 files/)).toBeInTheDocument();
+    expect(screen.getByText(/1 file/)).toBeInTheDocument();
   });
 
   it('keeps the chosen files when moving to Paste text and back', async () => {

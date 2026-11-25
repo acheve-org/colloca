@@ -196,11 +196,11 @@ export function actionFor(m: Method, sub: string): { label: string; enabled: boo
     const n = draft.urlList.split('\n').filter((l) => l.trim()).length;
     label = t('src.urls.go');
     enabled = n > 0;
-    what = n ? t('add.what.addresses', { n }) : t('add.what.typeAddresses');
+    what = n ? t(n === 1 ? 'add.what.address1' : 'add.what.addresses', { n }) : t('add.what.typeAddresses');
   } else if (m === 'web' && sub === 'index') {
     const n = pickedCount();
     const found = draft.catalog !== null;
-    label = found ? t('add.act.import', { n }) : t('add.act.importNone');
+    label = found ? t(n === 1 ? 'add.act.import1' : 'add.act.import', { n }) : t('add.act.importNone');
     enabled = found && n > 0;
     what = found ? t('add.what.selected', { n, total: visibleLinks().length }) : t('add.what.findLinks');
   } else if (m === 'web') {
@@ -215,7 +215,7 @@ export function actionFor(m: Method, sub: string): { label: string; enabled: boo
     const n = draft.files.length;
     label = t('src.upload.go');
     enabled = n > 0;
-    what = n ? t('add.what.files', { n }) : t('add.what.chooseFiles');
+    what = n ? t(n === 1 ? 'add.what.file1' : 'add.what.files', { n }) : t('add.what.chooseFiles');
   } else if (m === 'paste') {
     label = t('src.paste.go');
     enabled = draft.pasteText.trim() !== '';
@@ -300,8 +300,11 @@ export const addUrlList = () =>
       ...metaParams(),
     });
     if (!still(id)) return false;
+    const results = res.map((r) => ({ file: r.url, ok: r.ok, error: r.error }));
+    reportUpload(results);
+    // Nothing accepted: stay on the page with the addresses, so they can be fixed.
+    if (results.every((r) => !r.ok)) return false;
     draft.urlList = '';
-    reportUpload(res.map((r) => ({ file: r.url, ok: r.ok, error: r.error })));
     watch(true);
     return true;
   });
@@ -347,6 +350,8 @@ export const importSelected = () =>
       if (!still(id)) return false;
     }
     reportUpload(results);
+    // Nothing accepted: stay on the page with the catalog and the selection intact.
+    if (results.every((r) => !r.ok)) return false;
     watch(true);
     return true;
   });
@@ -365,9 +370,11 @@ export const uploadFiles = () =>
       ...metaParams(),
     });
     if (!still(id)) return false;
+    reportUpload(res);
+    // Nothing accepted: stay on the page with the files chosen.
+    if (res.every((r) => !r.ok)) return false;
     draft.files = [];
     draft.clearInput('files');
-    reportUpload(res);
     watch(true);
     return true;
   });
