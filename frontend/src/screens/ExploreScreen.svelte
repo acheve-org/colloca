@@ -3,7 +3,7 @@
   import { corpusStore } from '../lib/corpus.svelte';
   import { t } from '../lib/i18n';
   import Button from '../lib/ui/Button.svelte';
-  import EmptyState from '../lib/ui/EmptyState.svelte';
+  import NoCorpus from '../lib/ui/NoCorpus.svelte';
   import Toolbar from '../lib/ui/Toolbar.svelte';
 
   /**
@@ -32,7 +32,7 @@
 
 <div class="ex">
   {#if corpusStore.currentId === null}
-    {#if corpusStore.loaded}<EmptyState title={t('corpus.selectFirst')} />{/if}
+    {#if corpusStore.loaded}<NoCorpus />{/if}
   {:else}
     <form class="form" {onsubmit}>
       <Toolbar {label}>

@@ -19,7 +19,7 @@
   import DataTable from '../lib/ui/DataTable.svelte';
   import Dialog from '../lib/ui/Dialog.svelte';
   import { cellValue, type Column } from '../lib/ui/DataTable.types';
-  import EmptyState from '../lib/ui/EmptyState.svelte';
+  import NoCorpus from '../lib/ui/NoCorpus.svelte';
   import ReadyHint from '../lib/ui/ReadyHint.svelte';
   import Field from '../lib/ui/Field.svelte';
   import Highlight from '../lib/ui/Highlight.svelte';
@@ -328,7 +328,7 @@
 
 <div class="job">
   {#if corpusStore.currentId === null}
-    {#if corpusStore.loaded}<EmptyState title={t('corpus.selectFirst')} />{/if}
+    {#if corpusStore.loaded}<NoCorpus />{/if}
   {:else}
     <Toolbar label={t('job.toolbar')}>
       <Field label={t('job.file')}>

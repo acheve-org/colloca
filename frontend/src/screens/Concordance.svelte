@@ -40,6 +40,7 @@
   import DetailStrip from '../lib/ui/DetailStrip.svelte';
   import DocViewer from '../lib/ui/DocViewer.svelte';
   import EmptyState from '../lib/ui/EmptyState.svelte';
+  import NoCorpus from '../lib/ui/NoCorpus.svelte';
   import ReadyHint from '../lib/ui/ReadyHint.svelte';
   import Field from '../lib/ui/Field.svelte';
   import Highlight from '../lib/ui/Highlight.svelte';
@@ -321,7 +322,7 @@
 
 <div class="cc">
   {#if !hasCorpus}
-    {#if corpusStore.loaded}<EmptyState title={t('corpus.selectFirst')} />{/if}
+    {#if corpusStore.loaded}<NoCorpus />{/if}
   {:else}
     <form class="cc-form" {onsubmit}>
       <Toolbar label={t('cc.toolbar')}>

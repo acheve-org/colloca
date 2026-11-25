@@ -24,7 +24,7 @@
   import { cellValue, type Column } from '../lib/ui/DataTable.types';
   import DetailStrip from '../lib/ui/DetailStrip.svelte';
   import Dialog from '../lib/ui/Dialog.svelte';
-  import EmptyState from '../lib/ui/EmptyState.svelte';
+  import NoCorpus from '../lib/ui/NoCorpus.svelte';
   import ReadyHint from '../lib/ui/ReadyHint.svelte';
   import Field from '../lib/ui/Field.svelte';
   import Select from '../lib/ui/Select.svelte';
@@ -375,7 +375,7 @@
 
 <div class="sources">
   {#if !hasCorpus}
-    {#if corpusStore.loaded}<EmptyState title={t('corpus.selectFirst')} />{/if}
+    {#if corpusStore.loaded}<NoCorpus />{/if}
   {:else}
     <div class="strip">
       <h3>{t('src.documents')}</h3>

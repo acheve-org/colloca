@@ -25,6 +25,7 @@
   import DataTable from '../lib/ui/DataTable.svelte';
   import { cellValue, type Column } from '../lib/ui/DataTable.types';
   import EmptyState from '../lib/ui/EmptyState.svelte';
+  import NoCorpus from '../lib/ui/NoCorpus.svelte';
   import ReviewControls from '../lib/ui/ReviewControls.svelte';
   import ReviewStatus from '../lib/ui/ReviewStatus.svelte';
   import WordLink from '../lib/ui/WordLink.svelte';
@@ -159,7 +160,7 @@
 
 <div class="cand">
   {#if corpusStore.currentId === null}
-    {#if corpusStore.loaded}<EmptyState title={t('corpus.selectFirst')} />{/if}
+    {#if corpusStore.loaded}<NoCorpus />{/if}
   {:else}
     <div class="strip">
       <span class="count">{t('cand.summary', { n: shown.length })}</span>

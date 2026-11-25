@@ -13,7 +13,7 @@
   import AddUpload from '../lib/ui/add/AddUpload.svelte';
   import AboutDocuments from '../lib/ui/AboutDocuments.svelte';
   import ActionBar from '../lib/ui/ActionBar.svelte';
-  import EmptyState from '../lib/ui/EmptyState.svelte';
+  import NoCorpus from '../lib/ui/NoCorpus.svelte';
   import Tabs from '../lib/ui/Tabs.svelte';
 
   const METHODS: readonly Method[] = ['web', 'up', 'paste', 'al'];
@@ -65,7 +65,7 @@
 
 <div class="page">
   {#if !hasCorpus}
-    {#if corpusStore.loaded}<EmptyState title={t('corpus.selectFirst')} />{/if}
+    {#if corpusStore.loaded}<NoCorpus />{/if}
   {:else}
     <div class="content">
       <Tabs label={t('add.tabs')} {tabs} value={m} idBase={uid} onselect={select} />
