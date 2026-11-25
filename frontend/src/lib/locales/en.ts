@@ -212,6 +212,8 @@ export const en: Messages = {
   'badge.forbidden': 'Forbidden',
   'badge.intb': 'In termbase',
   'cc.toolbar': 'Concordance search',
+  'cc.options': 'Options',
+  'cc.optionsSummary': '{unit} · {width} words · sort: {sort}',
   'cc.query': 'Word or phrase',
   'cc.queryPlaceholder': 'word or phrase, * at the start or end of a word',
   'cc.unit': 'Search by',

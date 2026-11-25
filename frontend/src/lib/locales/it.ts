@@ -212,6 +212,8 @@ export const it: Messages = {
   'badge.forbidden': 'Vietato',
   'badge.intb': 'Nella base terminologica',
   'cc.toolbar': 'Ricerca di concordanze',
+  'cc.options': 'Opzioni',
+  'cc.optionsSummary': '{unit} · {width} parole · ordine: {sort}',
   'cc.query': 'Parola o espressione',
   'cc.queryPlaceholder': 'parola o espressione, * all’inizio o alla fine di una parola',
   'cc.unit': 'Cerca per',

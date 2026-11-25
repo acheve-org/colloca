@@ -212,6 +212,8 @@ export const es: Messages = {
   'badge.forbidden': 'Prohibido',
   'badge.intb': 'En la base terminológica',
   'cc.toolbar': 'Búsqueda de concordancias',
+  'cc.options': 'Opciones',
+  'cc.optionsSummary': '{unit} · {width} palabras · orden: {sort}',
   'cc.query': 'Palabra o expresión',
   'cc.queryPlaceholder': 'palabra o expresión, * al principio o al final de una palabra',
   'cc.unit': 'Buscar por',

@@ -11,6 +11,7 @@ import { go, route } from '../src/lib/router.svelte';
 import { setPlatform } from '../src/lib/shortcuts.svelte';
 import { termStore } from '../src/lib/term.svelte';
 import type { ConcLine } from '../src/lib/types';
+import { __setViewportForTests } from '../src/lib/viewport.svelte';
 
 const corpus = (id: number) => ({
   id, name: `C${id}`, lang: 'es', project_id: null, is_reference: 0, docs: 2, tokens: 100,
@@ -529,5 +530,87 @@ describe('Concordance', () => {
     await search('casa');
     expect(window.location.hash).toContain('q=casa');
     expect(window.location.hash).toContain('unit=lemma');
+  });
+});
+
+describe('Concordance options (narrow)', () => {
+  beforeEach(() => __setViewportForTests({ narrow: true }));
+  afterEach(() => __setViewportForTests({ narrow: false }));
+
+  const optionsBtn = () => screen.getByRole('button', { name: /Options/ });
+  const open = async () => {
+    await fireEvent.click(optionsBtn());
+    await tick();
+  };
+
+  it('folds unit, width, sort, hits and the toggles behind an Options button', async () => {
+    render(Concordance);
+    await tick();
+    expect(queryInput()).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Search' })).toBeInTheDocument();
+    expect(screen.queryByLabelText('Context width')).toBeNull();
+    expect(screen.queryByLabelText('Hits')).toBeNull();
+    expect(screen.queryByRole('switch')).toBeNull();
+    expect(optionsBtn()).toHaveAttribute('aria-expanded', 'false');
+    expect(optionsBtn()).toHaveTextContent('lemma');
+    expect(optionsBtn()).toHaveTextContent('document');
+    await open();
+    expect(optionsBtn()).toHaveAttribute('aria-expanded', 'true');
+    const panel = document.getElementById(optionsBtn().getAttribute('aria-controls')!)!;
+    expect(within(panel).getByLabelText('Context width')).toBeInTheDocument();
+    expect(within(panel).getAllByRole('switch').length).toBeGreaterThan(0);
+    await open();
+    expect(optionsBtn()).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByLabelText('Context width')).toBeNull();
+  });
+
+  it('Enter in the query searches with the options set while it was open', async () => {
+    render(Concordance);
+    await tick();
+    await open();
+    await fireEvent.click(screen.getByRole('switch', { name: 'Case sensitive' }));
+    const w = screen.getByLabelText('Context width') as HTMLInputElement;
+    await fireEvent.input(w, { target: { value: '12' } });
+    await open();
+    await fireEvent.input(queryInput(), { target: { value: 'casa' } });
+    await fireEvent.submit(queryInput().closest('form')!);
+    await waitFor(() => expect(searches().length).toBe(1));
+    expect(searches()[0].params.get('width')).toBe('12');
+    expect(searches()[0].params.get('case_sensitive')).toBe('true');
+    expect(optionsBtn()).toHaveTextContent('12');
+  });
+
+  it('shows an active toggle in the summary while closed', async () => {
+    render(Concordance);
+    await tick();
+    await open();
+    await fireEvent.click(screen.getByRole('switch', { name: 'Case sensitive' }));
+    await open();
+    expect(optionsBtn()).toHaveTextContent('Case sensitive');
+    expect(optionsBtn()).not.toHaveTextContent('Ignore accents');
+  });
+
+  it('keeps the disclosure and the query across crossing 640px', async () => {
+    render(Concordance);
+    await tick();
+    await fireEvent.input(queryInput(), { target: { value: 'casa' } });
+    await open();
+    __setViewportForTests({ narrow: false });
+    await tick();
+    expect(queryInput().value).toBe('casa');
+    expect(screen.getByLabelText('Context width')).toBeInTheDocument();
+    __setViewportForTests({ narrow: true });
+    await tick();
+    expect(queryInput().value).toBe('casa');
+    expect(optionsBtn()).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('button', { name: '+ Term' })).toBeInTheDocument();
+  });
+
+  it('is the full toolbar at 640px and wider', async () => {
+    __setViewportForTests({ narrow: false });
+    render(Concordance);
+    await tick();
+    expect(screen.queryByRole('button', { name: /Options/ })).toBeNull();
+    expect(screen.getByLabelText('Context width')).toBeInTheDocument();
   });
 });
