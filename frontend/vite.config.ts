@@ -4,12 +4,12 @@ import { svelteTesting } from '@testing-library/svelte/vite';
 import { defineConfig } from 'vitest/config';
 
 // The build goes straight into the Python package, which serves it (git-ignored).
-const outDir = resolve(import.meta.dirname, '../src/colloca/static');
+const outDir = resolve(import.meta.dirname, '../src/corpora/static');
 // emptyOutDir wipes outDir before each build: refuse to run unless it is exactly
-// <repo>/src/colloca/static, so a wrong path can never delete anything else.
+// <repo>/src/corpora/static, so a wrong path can never delete anything else.
 const repoRoot = resolve(import.meta.dirname, '..');
-if (outDir !== resolve(repoRoot, 'src', 'colloca', 'static')) {
-  throw new Error(`Refusing to build into ${outDir}: expected <repo>/src/colloca/static`);
+if (outDir !== resolve(repoRoot, 'src', 'corpora', 'static')) {
+  throw new Error(`Refusing to build into ${outDir}: expected <repo>/src/corpora/static`);
 }
 
 export default defineConfig({

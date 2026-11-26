@@ -5,7 +5,7 @@ import json
 import pytest
 from openpyxl import load_workbook
 
-from colloca import db, importer
+from corpora import db, importer
 
 from .test_api import make_corpus
 from .test_jobanalysis import CLIENT, JOB, analyse, term

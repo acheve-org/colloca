@@ -8,6 +8,7 @@
   import { ensureLanguageName, loadLanguageNames } from '../context.svelte';
   import { messages } from '../messages.svelte';
   import { reloadProjects } from '../projects.svelte';
+  import Logo from './Logo.svelte';
   import NavIcon from './NavIcon.svelte';
   import RailMenu from './RailMenu.svelte';
 
@@ -43,7 +44,7 @@
 
 <aside class="rail">
   <div class="brand" title={t('app.name')}>
-    <span aria-hidden="true">{t('app.name').charAt(0)}</span>
+    <Logo size={36} />
     <span class="sr">{t('app.name')}</span>
   </div>
   <nav aria-label={t('nav.label')}>
@@ -72,22 +73,13 @@
     color: var(--rail-fg);
     overflow: visible;
   }
+  /* The heart-hands mark in the rail's own colours carries the identity. */
   .brand {
-    padding: var(--s-3) 0 var(--s-2);
-    text-align: center;
-    font-weight: 700;
-    font-size: 18px; /* literal: brand glyph in a fixed 56px rail */
-  }
-  /* The brand letter sits on an accent tile, so the rail carries the identity colour. */
-  .brand > span[aria-hidden='true'] {
-    display: grid;
-    place-items: center;
-    width: 32px;
-    height: 32px;
-    margin: 0 auto;
-    border-radius: var(--radius-lg);
-    background: var(--rail-accent);
-    color: var(--rail-bg);
+    display: flex;
+    justify-content: center;
+    padding: var(--s-4) 0 var(--s-2);
+    --logo-left: var(--rail-accent);
+    --logo-right: var(--rail-accent-2);
   }
   nav {
     display: flex;

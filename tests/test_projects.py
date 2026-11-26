@@ -3,7 +3,7 @@ import sqlite3
 
 import pytest
 
-from colloca import analysis, db, metadata
+from corpora import analysis, db, metadata
 
 from .test_api import ES_TEXT, add, default_project, make_corpus, wait_for_jobs
 

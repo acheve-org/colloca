@@ -1,4 +1,9 @@
-# Colloca
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/wordmark-dark.svg">
+    <img src="docs/assets/wordmark-light.svg" alt="Corpora" height="56">
+  </picture>
+</h1>
 
 Self-hosted tool for translators: build **monolingual reference corpora** (in the languages you set up) from chosen URLs and client documents, then explore them.
 
@@ -24,7 +29,7 @@ docker compose up
 # (a new install has no languages: add yours there; models are downloaded into `~/.spacy` when you ask)
 ```
 
-Docker uses the `lg` spaCy models by default; data lives in the `colloca-data` volume.
+Docker uses the `lg` spaCy models by default; data lives in the `corpora-data` volume.
 Configuration: [Getting started](docs/getting-started.md). Backups: [Operations](docs/operations.md).
 
 ## Documentation
@@ -68,12 +73,12 @@ mise run dev     # uvicorn with auto-reload on http://localhost:8000
 
 | Path | Role |
 |---|---|
-| `src/colloca/ingest.py` | URL/DOCX/PDF → text |
-| `src/colloca/nlp.py` | spaCy |
-| `src/colloca/analysis.py` | All statistics (SQL + Python) |
-| `src/colloca/main.py` | API; serves the built UI from `static/` |
+| `src/corpora/ingest.py` | URL/DOCX/PDF → text |
+| `src/corpora/nlp.py` | spaCy |
+| `src/corpora/analysis.py` | All statistics (SQL + Python) |
+| `src/corpora/main.py` | API; serves the built UI from `static/` |
 | `tests/` | Python tests |
-| `frontend/` | UI source. Build output `src/colloca/static/` is git-ignored. |
+| `frontend/` | UI source. Build output `src/corpora/static/` is git-ignored. |
 | `docs/` | User documentation, one page per topic |
 
 ### Frontend
@@ -81,7 +86,7 @@ mise run dev     # uvicorn with auto-reload on http://localhost:8000
 Svelte 5 + TypeScript + Vite, in `frontend/`. mise pins Node (LTS).
 
 ```bash
-mise run ui:build   # npm ci + vite build into src/colloca/static/, served by `mise run dev`
+mise run ui:build   # npm ci + vite build into src/corpora/static/, served by `mise run dev`
 mise run dev        # API (and built UI) on http://localhost:8000
 mise run ui:dev     # Vite dev server with hot reload; proxies /api to port 8000
 mise run ui:test    # Vitest
@@ -89,7 +94,7 @@ mise run ui:lint    # eslint + svelte-check
 mise run ui:e2e     # builds the UI, runs Playwright against a real API
 ```
 
-- **Build output**: Vite empties and writes `src/colloca/static/` (refuses any other directory).
+- **Build output**: Vite empties and writes `src/corpora/static/` (refuses any other directory).
   - Fresh checkout: no UI until `mise run ui:build`; `/` shows a *UI not built* page, the API works.
   - `docker compose up --build` builds the UI in a Node stage: Docker users need neither Node nor a build.
   - A wheel (`uv build`) includes the UI only if built first.

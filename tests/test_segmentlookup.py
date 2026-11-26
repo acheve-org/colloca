@@ -2,8 +2,8 @@
 # ruff: noqa: E501
 import pytest
 
-from colloca import db
-from colloca import segmentlookup as sl
+from corpora import db
+from corpora import segmentlookup as sl
 
 from .test_api import make_corpus, wait_for_jobs
 from .test_parallel import import_tmx, tmx

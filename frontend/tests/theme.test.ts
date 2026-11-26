@@ -16,7 +16,7 @@ describe('theme store', () => {
     setMode('dark');
     expect(theme.mode).toBe('dark');
     expect(document.documentElement.dataset.theme).toBe('dark');
-    expect(localStorage.getItem('colloca.theme')).toBe('dark');
+    expect(localStorage.getItem('corpora.theme')).toBe('dark');
   });
 
   it('setMode("auto") removes the attribute', async () => {
@@ -25,18 +25,18 @@ describe('theme store', () => {
     expect(document.documentElement.dataset.theme).toBe('light');
     setMode('auto');
     expect(document.documentElement.hasAttribute('data-theme')).toBe(false);
-    expect(localStorage.getItem('colloca.theme')).toBe('auto');
+    expect(localStorage.getItem('corpora.theme')).toBe('auto');
   });
 
   it('reads the initial mode from storage and applies it', async () => {
-    localStorage.setItem('colloca.theme', 'dark');
+    localStorage.setItem('corpora.theme', 'dark');
     const { theme } = await load();
     expect(theme.mode).toBe('dark');
     expect(document.documentElement.dataset.theme).toBe('dark');
   });
 
   it('falls back to auto for missing or invalid storage', async () => {
-    localStorage.setItem('colloca.theme', 'purple');
+    localStorage.setItem('corpora.theme', 'purple');
     const { theme } = await load();
     expect(theme.mode).toBe('auto');
     expect(document.documentElement.hasAttribute('data-theme')).toBe(false);

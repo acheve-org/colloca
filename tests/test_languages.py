@@ -3,7 +3,7 @@ import sqlite3
 
 import pytest
 
-from colloca import cql, db, languages, nlp
+from corpora import cql, db, languages, nlp
 
 
 def _add_corpus(lang, deleted=False):
@@ -56,7 +56,7 @@ def _add_base_corpus(lang, trashed=False):
         cid = conn.execute("INSERT INTO corpora (name,lang,is_reference) VALUES ('base',?,1)", (lang,)).lastrowid
         conn.execute("INSERT INTO documents (corpus_id,title,text,text_hash) VALUES (?,'d','t','h')", (cid,))
         if trashed:
-            from colloca import trash
+            from corpora import trash
             trash.trash_corpus(conn, cid)
     return cid
 

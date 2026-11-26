@@ -46,7 +46,7 @@ Accepted by *Upload files* on the *Add documents* page (*Sources* > *+ Add docum
 uv sync --extra ocr                                                  # pypdfium2 + Pillow
 brew install tesseract tesseract-lang                                # macOS
 sudo apt install tesseract-ocr                                       # Debian/Ubuntu; language data: Languages screen
-docker build --build-arg WITH_OCR=1 -t colloca .                     # image ~100 MB larger
+docker build --build-arg WITH_OCR=1 -t corpora .                     # image ~100 MB larger
 ```
 
 Check low-confidence OCR text before trusting lemmas.

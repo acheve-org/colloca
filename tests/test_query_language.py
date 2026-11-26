@@ -3,7 +3,7 @@ import sqlite3
 
 import pytest
 
-from colloca import analysis, cql, db
+from corpora import analysis, cql, db
 
 from .test_api import add, make_corpus
 
@@ -271,9 +271,9 @@ def test_migration_v8_builds_the_accent_indexes_for_existing_tokens(tmp_path):
     assert db.migrate(sqlite3.connect(tmp_path / "v7.db")) == db.SCHEMA_VERSION >= 8
     conn2 = sqlite3.connect(tmp_path / "v7.db")
     cql.register(conn2)
-    plan = conn2.execute("EXPLAIN QUERY PLAN SELECT pos FROM tokens WHERE colloca_ascii(norm)=?", ("cafe",)).fetchall()
+    plan = conn2.execute("EXPLAIN QUERY PLAN SELECT pos FROM tokens WHERE corpora_ascii(norm)=?", ("cafe",)).fetchall()
     assert "idx_tokens_norm_ascii" in str(plan)
-    assert conn2.execute("SELECT pos FROM tokens WHERE colloca_ascii(norm)='cafe'").fetchall() == [(0,)]
+    assert conn2.execute("SELECT pos FROM tokens WHERE corpora_ascii(norm)='cafe'").fetchall() == [(0,)]
 
 
 def test_analysis_search_returns_the_parsed_query(client, cid):

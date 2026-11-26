@@ -3,7 +3,7 @@
 
 import pytest
 
-from colloca import ingest, pdftext
+from corpora import ingest, pdftext
 
 from .pdfmaker import lines, make_pdf
 
@@ -133,7 +133,7 @@ def test_empty_pdf_still_goes_to_ocr_path(monkeypatch):
     class Res:
         pages, confidence, text = 1, 99.0, "texto reconocido por ocr de prueba"
 
-    import colloca.ocr as ocr
+    import corpora.ocr as ocr
     monkeypatch.setattr(ocr, "ocr_pdf", lambda data, lang, progress: called.setdefault("ok", True) and Res)
     text, notes, _ = read(make_pdf([[]]))
     assert called and "reconocido" in text and "OCR" in notes[0]

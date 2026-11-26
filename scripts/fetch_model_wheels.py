@@ -2,14 +2,14 @@
 
     uv run python scripts/fetch_model_wheels.py wheels --size lg --langs es it   # on a machine with internet
     uv pip install --no-index --find-links wheels es_core_news_lg it_core_news_lg    # on the offline machine
-    SPACY_WHEELS=/wheels docker compose run --rm colloca download-models # Docker: installs from the directory
+    SPACY_WHEELS=/wheels docker compose run --rm corpora download-models # Docker: installs from the directory
 """
 import argparse
 import sys
 import urllib.request
 from pathlib import Path
 
-from colloca import langcatalog
+from corpora import langcatalog
 
 BASE = "https://github.com/explosion/spacy-models/releases/download"
 

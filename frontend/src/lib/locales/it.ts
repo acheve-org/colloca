@@ -2,7 +2,7 @@ import type { Messages } from './types';
 
 /** Italiano. Stesse chiavi di en.ts (un test lo verifica); i segnaposto {nome} non si traducono. */
 export const it: Messages = {
-  'app.name': 'Colloca',
+  'app.name': 'Corpora',
   'corpus.none': 'Ancora nessun corpus',
   'corpus.working': 'Elaborazione…',
   'corpus.selectFirst': 'Crea o seleziona prima un corpus.',
@@ -758,7 +758,7 @@ export const it: Messages = {
   'base.tip.size': 'Circa 250.000 frasi (~5 M parole), ad es. 100k notizie + 100k web + 50k Wikipedia. Di più aggiunge poco e rallenta l’annotazione.',
   'base.tip.files': 'Un anno e un file per fonte: un file da 300K contiene già quello da 100K.',
   'base.tip.variety': 'Usa la varietà e il registro con cui lavori; non aggiungere mai i tuoi documenti.',
-  'base.tip.format': 'Una frase per riga (i file di Leipzig vanno bene così come sono; controlla la licenza). Qui fino a 25 MB per file; quelli più grandi con colloca-import-reference.',
+  'base.tip.format': 'Una frase per riga (i file di Leipzig vanno bene così come sono; controlla la licenza). Qui fino a 25 MB per file; quelli più grandi con corpora-import-reference.',
   'base.leipzig': 'Leipzig Corpora Collection',
   'base.recipe': 'Ricetta completa nella documentazione',
   'base.howTo': 'Come creare un buon corpus di base',
@@ -998,7 +998,7 @@ export const it: Messages = {
   'lk.extraHint': 'Nel segmento salvato, non nel tuo',
   'lk.missingHint': 'Nel tuo segmento, non in quello salvato',
   'lk.legend': 'Blu sottolineato: parole che ha solo il segmento salvato. Barrato: parole che ha solo il tuo segmento.',
-  'lk.caveat': 'Un aiuto di ricerca sui testi allineati di Colloca: la percentuale conta le parole cambiate e non è il valore di corrispondenza che darebbe il tuo strumento CAT.',
+  'lk.caveat': 'Un aiuto di ricerca sui testi allineati di Corpora: la percentuale conta le parole cambiate e non è il valore di corrispondenza che darebbe il tuo strumento CAT.',
   'job.leverage': 'stima il riutilizzo dai testi allineati',
   'job.leverageHint': 'Cerca ogni frase nei documenti allineati di questo corpus (può richiedere tempo con testi lunghi) e indica quanto è già tradotto',
   'job.stat.leverage': 'nei testi allineati (≥75%)',

@@ -2,7 +2,7 @@ import sqlite3
 
 import pytest
 
-from colloca import candidates, db
+from corpora import candidates, db
 
 from .test_jobanalysis import CLIENT, report
 from .test_projects import doc, project

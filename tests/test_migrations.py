@@ -2,7 +2,7 @@ import sqlite3
 
 import pytest
 
-from colloca import cql, db
+from corpora import cql, db
 
 
 def columns(conn, table):

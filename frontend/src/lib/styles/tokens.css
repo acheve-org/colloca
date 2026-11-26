@@ -1,4 +1,4 @@
-/* Colloca design tokens. Light is the default; dark applies via
+/* Corpora design tokens. Light is the default; dark applies via
    data-theme="dark" or, when no data-theme is set, prefers-color-scheme. */
 :root {
   --bg: #f1f4f3;
@@ -8,6 +8,7 @@
   --fg: #1d2330;
   --muted: #596273;
   --accent: #0f756d;
+  --accent-2: #e46f55; /* coral: the right half of the logo */
   --accent-fg: #ffffff;
   --accent-soft: #d8efeb;
   --danger: #b42318;
@@ -31,6 +32,7 @@
   --rail-muted: #9aa4b5;
   --rail-hover: #2d3445;
   --rail-accent: #5fd1c4;
+  --rail-accent-2: #f08a73; /* the coral half of the logo */
 
   --s-1: 4px;
   --s-2: 8px;
@@ -65,6 +67,7 @@
   --fg: #e8ebf0;
   --muted: #aab4c6;
   --accent: #4fd1c0;
+  --accent-2: #f08a73;
   --accent-fg: #06201d;
   --accent-soft: #1f4742;
   --danger: #ff9a90;
@@ -97,6 +100,7 @@
     --fg: #e8ebf0;
     --muted: #aab4c6;
     --accent: #4fd1c0;
+    --accent-2: #f08a73;
     --accent-fg: #06201d;
     --accent-soft: #1f4742;
     --danger: #ff9a90;

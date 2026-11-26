@@ -3,7 +3,7 @@ import io
 import pytest
 from docx import Document
 
-from colloca import db, importer
+from corpora import db, importer
 
 from .test_api import default_project, make_corpus, wait_for_jobs
 from .test_projects import doc, project

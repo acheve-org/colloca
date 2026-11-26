@@ -11,11 +11,11 @@ docker compose up
 
 | Topic | Detail |
 |---|---|
-| Models | Not in the image. Stored in `~/.spacy` on the host, mounted at `/models` (`COLLOCA_MODELS_DIR`). Installed per language in the Languages screen ([languages.md](languages.md)). |
-| Model size | Default `SPACY_SIZE` (`sm`, `md`, `lg`) on the `colloca` service, compose default `lg` (recommended); each language can use another size. |
-| Prefetch models | `docker compose run --rm colloca download-models CODE...` (e.g. `es it`) |
+| Models | Not in the image. Stored in `~/.spacy` on the host, mounted at `/models` (`CORPORA_MODELS_DIR`). Installed per language in the Languages screen ([languages.md](languages.md)). |
+| Model size | Default `SPACY_SIZE` (`sm`, `md`, `lg`) on the `corpora` service, compose default `lg` (recommended); each language can use another size. |
+| Prefetch models | `docker compose run --rm corpora download-models CODE...` (e.g. `es it`) |
 | Active model | Shown on the Languages screen; a warning appears when a language runs on `sm`. |
-| Data | `colloca-data` volume. See [operations.md](operations.md) for backup and trash. |
+| Data | `corpora-data` volume. See [operations.md](operations.md) for backup and trash. |
 
 ## Workflow
 

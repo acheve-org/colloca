@@ -1,4 +1,4 @@
-// Minimal shapes of the API responses the UI reads (see src/colloca/main.py).
+// Minimal shapes of the API responses the UI reads (see src/corpora/main.py).
 
 import type { TermMark } from "./highlight";
 
@@ -330,7 +330,7 @@ export interface Term {
   updated?: string;
 }
 
-/** Job analysis report (GET /api/jobs/{id}/result; see src/colloca/jobanalysis.py). */
+/** Job analysis report (GET /api/jobs/{id}/result; see src/corpora/jobanalysis.py). */
 export interface JobSummary {
   words: number;
   content_words: number;

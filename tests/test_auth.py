@@ -1,7 +1,7 @@
 """Optional password protection (T23)."""
 import pytest
 
-from colloca import auth
+from corpora import auth
 
 SECRET = "correct horse battery staple"
 
@@ -16,8 +16,8 @@ def _reset(monkeypatch):
 
 @pytest.fixture()
 def locked(client, monkeypatch):
-    monkeypatch.setenv("COLLOCA_PASSWORD", SECRET)
-    monkeypatch.setattr("colloca.main.asyncio.sleep", _nosleep)
+    monkeypatch.setenv("CORPORA_PASSWORD", SECRET)
+    monkeypatch.setattr("corpora.main.asyncio.sleep", _nosleep)
     return client
 
 
@@ -70,7 +70,7 @@ def test_a_good_password_opens_a_session(locked):
     r = login(locked, next="/api/corpora")
     assert r.status_code == 303 and r.headers["location"] == "/api/corpora"
     cookie = r.headers["set-cookie"]
-    assert "colloca_session=" in cookie and "HttpOnly" in cookie and "SameSite=strict" in cookie
+    assert "corpora_session=" in cookie and "HttpOnly" in cookie and "SameSite=strict" in cookie
     assert "Secure" not in cookie                                   # plain http on localhost
     assert locked.get("/api/corpora").status_code == 200            # the client keeps the cookie
     assert locked.get("/api/auth/status").json() == {"required": True, "authenticated": True}
@@ -81,7 +81,7 @@ def test_the_cookie_is_secure_over_https_only_when_the_proxy_is_trusted(locked, 
     r = locked.post("/login", data={"password": SECRET}, headers={"x-forwarded-proto": "https"},
                     follow_redirects=False)
     assert "Secure" not in r.headers["set-cookie"]                  # a forwarded header is ignored by default
-    monkeypatch.setenv("COLLOCA_TRUST_PROXY", "1")
+    monkeypatch.setenv("CORPORA_TRUST_PROXY", "1")
     r = locked.post("/login", data={"password": SECRET}, headers={"x-forwarded-proto": "https"},
                     follow_redirects=False)
     assert "Secure" in r.headers["set-cookie"]
@@ -111,7 +111,7 @@ def test_scripts_can_use_the_password_as_a_bearer_token(locked):
 
 # --------------------------------------------------------------------------- cookies
 def test_cookie_round_trip_expiry_and_tampering(monkeypatch):
-    monkeypatch.setenv("COLLOCA_PASSWORD", SECRET)
+    monkeypatch.setenv("CORPORA_PASSWORD", SECRET)
     value, life = auth.make_cookie(now=1000)
     assert life == int(auth.SESSION_HOURS * 3600)
     assert auth.valid_cookie(value, now=1001)
@@ -121,7 +121,7 @@ def test_cookie_round_trip_expiry_and_tampering(monkeypatch):
     assert not auth.valid_cookie(f"{stamp}.{'0' * 64}", now=1001)
     assert not auth.valid_cookie("garbage", now=1001) and not auth.valid_cookie("", now=1001)
     assert not auth.valid_cookie(None)
-    monkeypatch.setenv("COLLOCA_PASSWORD", "another password")
+    monkeypatch.setenv("CORPORA_PASSWORD", "another password")
     assert not auth.valid_cookie(value, now=1001)                    # changing the password ends every session
 
 
@@ -129,7 +129,7 @@ def test_a_session_survives_a_restart_but_not_a_password_change(locked, monkeypa
     login(locked)
     auth._key.cache_clear()                                          # a new process derives the same key
     assert locked.get("/api/corpora").status_code == 200
-    monkeypatch.setenv("COLLOCA_PASSWORD", "changed")
+    monkeypatch.setenv("CORPORA_PASSWORD", "changed")
     assert locked.get("/api/corpora").status_code == 401
 
 
@@ -160,7 +160,7 @@ def test_a_forwarded_address_counts_only_when_the_proxy_is_trusted(locked, monke
         locked.post("/login", data={"password": "bad"}, headers={"x-forwarded-for": f"1.2.3.{i}"})
     assert login(locked, SECRET).status_code == 429                  # all counted against the real peer
     auth._failures.clear()
-    monkeypatch.setenv("COLLOCA_TRUST_PROXY", "1")
+    monkeypatch.setenv("CORPORA_TRUST_PROXY", "1")
     for _ in range(3):
         locked.post("/login", data={"password": "bad"}, headers={"x-forwarded-for": "9.9.9.9"})
     assert login(locked, SECRET).status_code == 303                  # the peer itself is not locked out

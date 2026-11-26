@@ -11,9 +11,9 @@ from contextlib import contextmanager
 
 from . import cql
 
-log = logging.getLogger("colloca.db")
+log = logging.getLogger("corpora.db")
 
-DATA_DIR = os.environ.get("COLLOCA_DATA_DIR", "./data")
+DATA_DIR = os.environ.get("CORPORA_DATA_DIR", "./data")
 DB_PATH = os.path.join(DATA_DIR, "corpus.db")
 
 # --- v1: the original MVP schema (idempotent, so databases created before versioning adopt it)
@@ -152,10 +152,10 @@ CREATE UNIQUE INDEX idx_rejections_unique ON term_rejections (IFNULL(project_id,
 
 # --- v8: accent-insensitive search (T13). Expression indexes on the accent-stripped form and lemma: SQLite builds
 # (backfills) them from the existing tokens right here, and keeps them current for every later insert. They call
-# colloca_ascii(), which connect() and migrate() register; tokens keeps its columns, so nothing else changes.
+# corpora_ascii(), which connect() and migrate() register; tokens keeps its columns, so nothing else changes.
 _V8 = """
-CREATE INDEX idx_tokens_norm_ascii ON tokens(colloca_ascii(norm));
-CREATE INDEX idx_tokens_lemma_ascii ON tokens(colloca_ascii(lemma));
+CREATE INDEX idx_tokens_norm_ascii ON tokens(corpora_ascii(norm));
+CREATE INDEX idx_tokens_lemma_ascii ON tokens(corpora_ascii(lemma));
 """
 
 # --- v9: near-duplicate detection (T16). `fingerprint` is the MinHash sketch of the text (see dedup.py). It is NULL
@@ -295,8 +295,8 @@ def migrate(conn: sqlite3.Connection, backup_path: str | None = None) -> int:
     cql.register(conn)
     current = schema_version(conn)
     if current > SCHEMA_VERSION:
-        raise RuntimeError(f"Database schema v{current} is newer than this Colloca (v{SCHEMA_VERSION}); "
-                           "upgrade Colloca instead of opening it with an older version.")
+        raise RuntimeError(f"Database schema v{current} is newer than this Corpora (v{SCHEMA_VERSION}); "
+                           "upgrade Corpora instead of opening it with an older version.")
     pending = [(v, sql) for v, sql in MIGRATIONS if v > current]
     if not pending:
         return current

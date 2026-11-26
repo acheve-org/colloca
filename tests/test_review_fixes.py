@@ -5,7 +5,7 @@ import urllib.request
 import pytest
 from fastapi import HTTPException
 
-from colloca import db, languages, main, nlp, ocrdata
+from corpora import db, languages, main, nlp, ocrdata
 
 from .test_api import ES_TEXT, IT_TEXT, make_corpus
 

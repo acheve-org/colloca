@@ -2,7 +2,7 @@
 import pytest
 from defusedxml import ElementTree as ET
 
-from colloca import db, parallel
+from corpora import db, parallel
 
 from .test_api import make_corpus, wait_for_jobs
 from .test_parallel import build_pairs, import_tmx, tmx
@@ -72,7 +72,7 @@ def test_export_is_a_valid_tmx_with_every_pair(client, pair):
     check_tmx14(root)
     assert root.find("header").get("srclang") == "es"
     got = units(root)
-    assert len(got) == len(build_pairs()) == int(r.headers["x-colloca-units"])
+    assert len(got) == len(build_pairs()) == int(r.headers["x-corpora-units"])
     assert [(u["es"], u["it"]) for u in got] == [(a, b) for a, b in build_pairs()]
 
 

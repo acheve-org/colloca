@@ -219,8 +219,8 @@ def _term_cond(alias: str, col: str, term: str, case_sensitive: bool, wild: bool
     if accent:
         value = cql.strip_accents(term)
         if wild and "*" in term:
-            return f"colloca_ascii({alias}.{col}) GLOB ?", [_glob(value)]
-        return f"colloca_ascii({alias}.{col})=?", [value]
+            return f"corpora_ascii({alias}.{col}) GLOB ?", [_glob(value)]
+        return f"corpora_ascii({alias}.{col})=?", [value]
     if case_sensitive:
         lowered = term.lower()
         if wild and "*" in term:

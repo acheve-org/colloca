@@ -1,6 +1,6 @@
 import { get } from './api';
 
-/** Whether a password protects this Colloca (COLLOCA_PASSWORD) and whether this browser is signed in. */
+/** Whether a password protects this Corpora (CORPORA_PASSWORD) and whether this browser is signed in. */
 export const session = $state<{ required: boolean; loaded: boolean }>({ required: false, loaded: false });
 
 export async function loadSession(): Promise<void> {

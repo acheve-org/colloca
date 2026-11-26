@@ -10,7 +10,7 @@ if (!process.env.E2E_PORT) {
     "const s=require('net').createServer();s.listen(0,'127.0.0.1',()=>{console.log(s.address().port);s.close()})";
   process.env.E2E_PORT = execFileSync(process.execPath, ['-e', probe]).toString().trim();
 }
-if (!process.env.E2E_TMP) process.env.E2E_TMP = mkdtempSync(join(tmpdir(), 'colloca-e2e-'));
+if (!process.env.E2E_TMP) process.env.E2E_TMP = mkdtempSync(join(tmpdir(), 'corpora-e2e-'));
 
 const port = Number(process.env.E2E_PORT);
 const repoRoot = resolve(import.meta.dirname, '..');
@@ -27,18 +27,18 @@ export default defineConfig({
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
   use: { baseURL: `http://127.0.0.1:${port}`, trace: 'retain-on-failure' },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
-  // Build the UI first (`npm run e2e`): Vite writes it to src/colloca/static, which the API serves.
+  // Build the UI first (`npm run e2e`): Vite writes it to src/corpora/static, which the API serves.
   webServer: {
-    command: `uv run uvicorn colloca.main:app --host 127.0.0.1 --port ${port}`,
+    command: `uv run uvicorn corpora.main:app --host 127.0.0.1 --port ${port}`,
     cwd: repoRoot,
     url: `http://127.0.0.1:${port}/api/languages`,
     reuseExistingServer: false,
     timeout: 120_000,
     env: {
-      COLLOCA_DATA_DIR: join(process.env.E2E_TMP!, 'data'),
+      CORPORA_DATA_DIR: join(process.env.E2E_TMP!, 'data'),
       SPACY_SIZE: 'sm',
-      // The default location, made explicit so a stray COLLOCA_STATIC_DIR in the shell cannot win.
-      COLLOCA_STATIC_DIR: join(repoRoot, 'src', 'colloca', 'static'),
+      // The default location, made explicit so a stray CORPORA_STATIC_DIR in the shell cannot win.
+      CORPORA_STATIC_DIR: join(repoRoot, 'src', 'corpora', 'static'),
     },
   },
 });

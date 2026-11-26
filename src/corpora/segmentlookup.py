@@ -3,7 +3,7 @@
 The usual translation-memory idea: paste a segment, get the stored source segments that resemble it, each with a
 percentage, its aligned translation and what differs. Candidates come from the token index (segments that share
 words with the query, the rarest words first in effect because shared counts rank them), and each candidate is
-scored by a token-level edit distance. It is a lookup aid over the corpora in Colloca, not a replacement for the
+scored by a token-level edit distance. It is a lookup aid over the corpora in Corpora, not a replacement for the
 memory in your CAT tool: tags are ignored, numbers are ordinary words (and flagged when they are the only
 difference), and the percentage is not comparable to a CAT tool's own."""
 import re

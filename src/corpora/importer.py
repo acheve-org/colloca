@@ -19,7 +19,7 @@ from urllib.parse import urlparse
 
 from . import db, dedup, ingest, langcheck, metadata, nlp, trash
 
-log = logging.getLogger("colloca.importer")
+log = logging.getLogger("corpora.importer")
 
 MIN_CHARS = 20
 LANG_WARNINGS = {
@@ -239,7 +239,7 @@ class Job:
         self.progress = round(min(max(fraction, 0.0), 1.0), 3)
 
 
-_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="colloca-job")
+_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="corpora-job")
 _jobs: dict[int, Job] = {}
 _ids = itertools.count(1)
 _lock = threading.Lock()

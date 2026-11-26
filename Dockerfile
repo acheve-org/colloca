@@ -1,5 +1,5 @@
 # Frontend build (Svelte/Vite). Package files first so `npm ci` is cached.
-# Vite writes to ../src/colloca/static (relative to frontend/), i.e. /ui/src/colloca/static.
+# Vite writes to ../src/corpora/static (relative to frontend/), i.e. /ui/src/corpora/static.
 FROM node:lts-slim AS ui
 WORKDIR /ui/frontend
 COPY frontend/package.json frontend/package-lock.json ./
@@ -15,7 +15,7 @@ ARG WITH_OCR=0
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 ENV PYTHONUNBUFFERED=1 UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy \
-    COLLOCA_DATA_DIR=/data COLLOCA_MODELS_DIR=/models PYTHONPATH=/models PATH="/srv/.venv/bin:$PATH"
+    CORPORA_DATA_DIR=/data CORPORA_MODELS_DIR=/models PYTHONPATH=/models PATH="/srv/.venv/bin:$PATH"
 
 WORKDIR /srv
 
@@ -31,12 +31,12 @@ COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN sed -i 's/\r$//' /usr/local/bin/entrypoint.sh && chmod 755 /usr/local/bin/entrypoint.sh
 COPY src ./src
 # The UI is git-ignored and never in the build context: it comes from the ui stage.
-COPY --from=ui /ui/src/colloca/static/ ./src/colloca/static/
+COPY --from=ui /ui/src/corpora/static/ ./src/corpora/static/
 RUN uv sync --frozen --no-dev $([ "$WITH_OCR" = "1" ] && echo --extra ocr)
 
-RUN useradd -m colloca && mkdir -p /data /models && chown colloca /data /models
-USER colloca
+RUN useradd -m corpora && mkdir -p /data /models && chown corpora /data /models
+USER corpora
 VOLUME /data /models
 EXPOSE 8000
 ENTRYPOINT ["entrypoint.sh"]
-CMD ["uvicorn", "colloca.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "corpora.main:app", "--host", "0.0.0.0", "--port", "8000"]

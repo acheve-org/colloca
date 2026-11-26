@@ -24,7 +24,7 @@ export function withQuery(path: string, params?: Record<string, unknown>): strin
   return q ? `${path}${path.includes('?') ? '&' : '?'}${q}` : path;
 }
 
-/** Where to go when the server says the session is over (only used when a password protects Colloca). */
+/** Where to go when the server says the session is over (only used when a password protects Corpora). */
 export function toLogin(): void {
   if (typeof window === 'undefined' || window.location.pathname === '/login') return;
   const here = window.location.pathname + window.location.search + window.location.hash;

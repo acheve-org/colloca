@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from colloca import termexport
+from corpora import termexport
 
 from .test_termbase import ROWS
 
@@ -110,5 +110,5 @@ def test_tbx2_follows_tbx_basic_value_lists():
 def test_committed_samples_are_current():
     samples = Path(__file__).parent.parent / "docs" / "samples"
     for name, version in (("termbase-sample.tbx", 3), ("termbase-sample-tbx2.tbx", 2)):
-        expected = termexport.to_tbx(MORE_ROWS, version, title="Colloca sample termbase")
+        expected = termexport.to_tbx(MORE_ROWS, version, title="Corpora sample termbase")
         assert (samples / name).read_bytes() == expected, f"regenerate docs/samples/{name}"

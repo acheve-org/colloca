@@ -1,4 +1,4 @@
-"""Glossary import. No real CAT-tool files exist yet: every fixture is built from Colloca's own export
+"""Glossary import. No real CAT-tool files exist yet: every fixture is built from Corpora's own export
 (termexport) or from docs/samples, so these tests prove the round trip, not compatibility with any CAT tool."""
 import io
 import json
@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from openpyxl import Workbook
 
-from colloca import db
+from corpora import db
 
 from .test_projects import project
 

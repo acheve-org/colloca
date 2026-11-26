@@ -29,7 +29,7 @@ describe('configurable keys', () => {
     expect(run).not.toHaveBeenCalled();
     press({ key: 'j' });
     expect(run).toHaveBeenCalledTimes(1);
-    expect(JSON.parse(localStorage.getItem('colloca.keys') ?? '{}')).toEqual({ x: 'j' });
+    expect(JSON.parse(localStorage.getItem('corpora.keys') ?? '{}')).toEqual({ x: 'j' });
     setBinding('x', null);
     press({ key: 'a' });
     expect(run).toHaveBeenCalledTimes(2);

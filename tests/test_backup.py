@@ -5,7 +5,7 @@ import zipfile
 
 import pytest
 
-from colloca import backup, db, trash
+from corpora import backup, db, trash
 
 from .test_api import ES_TEXT, add, make_corpus, wait_for_jobs
 from .test_parallel import build_pairs, import_tmx, tmx
@@ -270,7 +270,7 @@ def test_import_into_a_chosen_project(client):
 
 
 def test_import_puts_a_projectless_working_corpus_into_general(client):
-    payload = {"format": "colloca-export", "format_version": 1,
+    payload = {"format": "corpora-export", "format_version": 1,
                "corpora": [{"ref": 1, "name": "orphan", "lang": "es", "project_ref": None},
                            {"ref": 2, "name": "base", "lang": "es", "is_reference": True}],
                "documents": [{"ref": 1, "corpus_ref": 1, "title": "d", "text": ES_TEXT}]}
@@ -297,7 +297,7 @@ def drop_general(client):
 
 def test_import_counts_a_lazily_created_general_and_dry_run_agrees(client):
     drop_general(client)
-    payload = {"format": "colloca-export", "format_version": 1,
+    payload = {"format": "corpora-export", "format_version": 1,
                "corpora": [{"ref": 1, "name": "orphan", "lang": "es", "project_ref": None}],
                "documents": [{"ref": 1, "corpus_ref": 1, "title": "d", "text": ES_TEXT}]}
     files = {"file": ("p.json", json.dumps(payload).encode())}
@@ -309,7 +309,7 @@ def test_import_counts_a_lazily_created_general_and_dry_run_agrees(client):
 def test_explicit_target_project_wins_over_general(client):
     drop_general(client)
     dst = project(client)
-    payload = {"format": "colloca-export", "format_version": 1,
+    payload = {"format": "corpora-export", "format_version": 1,
                "corpora": [{"ref": 1, "name": "orphan", "lang": "es", "project_ref": None}],
                "documents": [{"ref": 1, "corpus_ref": 1, "title": "d", "text": ES_TEXT}]}
     r = client.post("/api/import", data={"dry_run": "false", "annotate": "false", "project_id": str(dst)},
@@ -364,7 +364,7 @@ def test_oversized_and_malformed_files_are_rejected(client, monkeypatch):
     assert client.post("/api/import", files={"file": ("p.json", b'{"format":"other"}')}).status_code == 400
     assert client.post("/api/import", files={"file": ("p.zip", zipped({"x.txt": b"a"}))}).status_code == 400
     assert client.post("/api/import", files={"file": ("p.json", json.dumps(
-        {"format": "colloca-export", "format_version": 99}).encode())}).status_code == 400
+        {"format": "corpora-export", "format_version": 99}).encode())}).status_code == 400
     monkeypatch.setattr(backup, "MAX_JSON_BYTES", 1000)               # a zip bomb: tiny file, huge member
     bomb = zipped({"data.json": b" " * 100_000})
     assert len(bomb) < 1000
@@ -374,7 +374,7 @@ def test_oversized_and_malformed_files_are_rejected(client, monkeypatch):
 
 
 def test_invalid_records_are_reported_not_stored(client):
-    payload = {"format": "colloca-export", "format_version": 1,
+    payload = {"format": "corpora-export", "format_version": 1,
                "projects": [{"ref": 1, "name": ""}, {"ref": 2, "name": "Hostil"}],
                "corpora": [{"ref": 1, "name": "bad lang", "lang": "fr", "project_ref": 2},
                            {"ref": 2, "name": "ok", "lang": "es", "project_ref": 2}],
@@ -406,7 +406,7 @@ def test_v9_database_upgrades_to_v10_keeping_everything_visible(tmp_path):
 
 
 def test_import_rejects_only_the_corpus_in_an_unregistered_language(client):
-    payload = {"format": "colloca-export", "format_version": 1,
+    payload = {"format": "corpora-export", "format_version": 1,
                "corpora": [{"ref": 1, "name": "klingon", "lang": "xx"}, {"ref": 2, "name": "ok", "lang": "es"}],
                "documents": [{"ref": 1, "corpus_ref": 2, "title": "fine", "text": ES_TEXT}]}
     rep = client.post("/api/import", data={"dry_run": "true", "annotate": "false"},

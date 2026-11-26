@@ -20,7 +20,7 @@ _threads: dict[str, threading.Thread] = {}
 
 def data_dir() -> Path:
     d = models.models_dir()
-    return (d if d is not None else Path(os.environ.get("COLLOCA_DATA_DIR", "./data"))) / "tessdata"
+    return (d if d is not None else Path(os.environ.get("CORPORA_DATA_DIR", "./data"))) / "tessdata"
 
 
 def engine_present() -> bool:

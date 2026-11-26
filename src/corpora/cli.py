@@ -1,9 +1,9 @@
 """Command line: load big sentence files into a language's base (reference) corpus.
 
-    uv run colloca-import-reference --lang es spa_news_2023_300K-sentences.txt --max-sentences 300000
+    uv run corpora-import-reference --lang es spa_news_2023_300K-sentences.txt --max-sentences 300000
 
 Unlike the web upload this streams the file from disk, so it has no size limit. Run it with the same
-COLLOCA_DATA_DIR as the server (in Docker: `docker compose run --rm colloca colloca-import-reference ...`).
+CORPORA_DATA_DIR as the server (in Docker: `docker compose run --rm corpora corpora-import-reference ...`).
 """
 import argparse
 import itertools
@@ -20,7 +20,7 @@ def _count_lines(path: Path) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     db.init_db()            # the languages offered below are the registered ones
-    ap = argparse.ArgumentParser(prog="colloca-import-reference", description=__doc__.split("\n\n")[0])
+    ap = argparse.ArgumentParser(prog="corpora-import-reference", description=__doc__.split("\n\n")[0])
     ap.add_argument("--lang", required=True, choices=sorted(nlp.SUPPORTED))
     ap.add_argument("files", nargs="+", type=Path, help="sentence files: one sentence per line, or Leipzig "
                                                        "'<id><TAB><sentence>' lines")

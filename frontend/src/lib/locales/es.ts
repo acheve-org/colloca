@@ -2,7 +2,7 @@ import type { Messages } from './types';
 
 /** Español. Mismas claves que en.ts (una prueba lo comprueba); los marcadores {nombre} no se traducen. */
 export const es: Messages = {
-  'app.name': 'Colloca',
+  'app.name': 'Corpora',
   'corpus.none': 'Aún no hay ningún corpus',
   'corpus.working': 'Trabajando…',
   'corpus.selectFirst': 'Primero crea o selecciona un corpus.',
@@ -758,7 +758,7 @@ export const es: Messages = {
   'base.tip.size': 'Unas 250 000 oraciones (~5 M palabras), p. ej. 100k de noticias + 100k de web + 50k de Wikipedia. Más aporta poco y ralentiza la anotación.',
   'base.tip.files': 'Un año y un archivo por fuente: un archivo de 300K ya contiene el de 100K.',
   'base.tip.variety': 'Usa la variedad y el registro con que trabajas (p. ej., español de España para España); nunca añadas tus propios documentos.',
-  'base.tip.format': 'Una oración por línea (los archivos de Leipzig sirven tal cual; comprueba su licencia). Aquí, hasta 25 MB por archivo; los más grandes, con colloca-import-reference.',
+  'base.tip.format': 'Una oración por línea (los archivos de Leipzig sirven tal cual; comprueba su licencia). Aquí, hasta 25 MB por archivo; los más grandes, con corpora-import-reference.',
   'base.leipzig': 'Leipzig Corpora Collection',
   'base.recipe': 'Receta completa en la documentación',
   'base.howTo': 'Cómo crear un buen corpus base',
@@ -998,7 +998,7 @@ export const es: Messages = {
   'lk.extraHint': 'En el segmento guardado, no en el tuyo',
   'lk.missingHint': 'En tu segmento, no en el guardado',
   'lk.legend': 'Azul subrayado: palabras que solo tiene el segmento guardado. Tachado: palabras que solo tiene tu segmento.',
-  'lk.caveat': 'Una ayuda de búsqueda sobre los textos alineados de Colloca: el porcentaje cuenta palabras cambiadas y no es el valor de coincidencia que daría tu herramienta TAO.',
+  'lk.caveat': 'Una ayuda de búsqueda sobre los textos alineados de Corpora: el porcentaje cuenta palabras cambiadas y no es el valor de coincidencia que daría tu herramienta TAO.',
   'job.leverage': 'estimar el aprovechamiento de textos alineados',
   'job.leverageHint': 'Busca cada oración en los documentos alineados de este corpus (puede tardar en textos largos) e indica cuánto ya está traducido',
   'job.stat.leverage': 'en textos alineados (≥75%)',

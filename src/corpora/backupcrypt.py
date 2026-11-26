@@ -2,7 +2,7 @@
 
 A backup holds client documents, so it can be written encrypted: AES-256-GCM, key from the passphrase with scrypt,
 the file cut into 1 MiB chunks that are each authenticated (a wrong passphrase, a damaged chunk, a missing end or a
-reordered chunk all fail to decrypt). The file is `COLLOCA-ENC1`, the scrypt parameters and salt, then the chunks.
+reordered chunk all fail to decrypt). The file is `CORPORA-ENC1`, the scrypt parameters and salt, then the chunks.
 Nothing here is secret except the passphrase; losing it loses the backup."""
 import os
 import struct
@@ -11,7 +11,7 @@ from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
 
-MAGIC = b"COLLOCA-ENC1\n"
+MAGIC = b"CORPORA-ENC1\n"
 CHUNK = 1024 * 1024
 MIN_PASSPHRASE = 8
 _LOG_N, _R, _P = 15, 8, 1                       # scrypt cost (about 32 MB of memory, a fraction of a second)
@@ -59,7 +59,7 @@ def decrypt_bytes(data: bytes, passphrase: str, limit: int | None = None) -> byt
     """The plain content of an encrypted backup. `limit` caps the decrypted size (a decompression-bomb guard
     does not apply to a cipher, but memory does)."""
     if not is_encrypted(data):
-        raise CryptError("Not an encrypted Colloca file")
+        raise CryptError("Not an encrypted Corpora file")
     pos = len(MAGIC)
     try:
         log_n, r, p, salt = _HEADER.unpack_from(data, pos)

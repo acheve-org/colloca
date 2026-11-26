@@ -65,7 +65,7 @@ describe('session', () => {
 });
 
 describe('rail', () => {
-  it('shows Log out only when a password protects Colloca', async () => {
+  it('shows Log out only when a password protects Corpora', async () => {
     status = { required: false, authenticated: true };
     const first = render(Rail);
     await waitFor(() => expect(session.loaded).toBe(true));
