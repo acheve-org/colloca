@@ -190,6 +190,7 @@ export const en: Messages = {
   'corpus.create': 'Create',
   'corpus.confirmDelete': 'Move corpus "{name}" and all its documents to the Trash? You can restore it from Backup and Trash.',
   'common.close': 'Close',
+  'common.back': 'Back',
   'status.label': 'Status',
   'status.dismiss': 'Dismiss message',
   'shortcuts.title': 'Keyboard shortcuts',

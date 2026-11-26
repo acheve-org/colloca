@@ -190,6 +190,7 @@ export const es: Messages = {
   'corpus.create': 'Crear',
   'corpus.confirmDelete': '¿Mover el corpus «{name}» y todos sus documentos a la papelera? Podrás restaurarlo desde Copia de seguridad y papelera.',
   'common.close': 'Cerrar',
+  'common.back': 'Volver',
   'status.label': 'Estado',
   'status.dismiss': 'Descartar mensaje',
   'shortcuts.title': 'Atajos de teclado',
