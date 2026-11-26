@@ -19,7 +19,7 @@ test('areas remember their last screen', async ({ page }) => {
   await expect(title(page)).toHaveText('Keyness');
 });
 
-test('the corpus picker switches corpus and the header shows the new name', async ({ page }) => {
+test('the gear opens Projects and Open switches corpus', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   const first = unique('First');
   const second = unique('Second');
@@ -27,17 +27,21 @@ test('the corpus picker switches corpus and the header shows the new name', asyn
   await page.goto('/#/projects');
   await newCorpus(page, second, undefined, project);
 
-  const picker = page.getByRole('group', { name: 'Working in' });
-  await expect(picker).toContainText(second);
-  await picker.getByRole('button').click();
-  await picker.getByRole('group', { name: /.+/ }).getByRole('button', { name: first, exact: true }).click();
-  await expect(picker).toContainText(first);
-  await expect(picker).not.toContainText(second);
+  const context = page.getByRole('group', { name: 'Working in' });
+  await expect(context).toContainText(second);
+  await context.getByRole('link', { name: 'Change corpus or project' }).click();
+  await expect(title(page)).toHaveText('Projects');
+  await page.getByRole('button', { name: `Open ${first}` }).click();
+  await expect(context).toContainText(first);
+  await expect(context).not.toContainText(second);
 });
 
 test('on a 390px wide screen nothing scrolls sideways and the active tab is visible', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 800 });
-  await newCorpus(page, unique('Narrow'));
+  const long = `${unique('Narrow')} `.padEnd(80, 'longname');
+  expect(long).toHaveLength(80);
+  await newCorpus(page, long);
+  await expect(page.getByRole('group', { name: 'Working in' })).toContainText(long);
   await openScreen(page, 'Related terms');
   await expect(title(page)).toHaveText('Related terms');
   await expect(strip(page).getByRole('link', { name: 'Related terms', exact: true })).toBeVisible();
@@ -52,10 +56,16 @@ test('Settings shows Languages, Projects, then Backup and Trash', async ({ page 
   await expect(strip(page).getByRole('link')).toHaveText(['Languages', 'Projects', 'Backup and Trash']);
 });
 
-test('Manage projects… in the picker menu opens the Projects screen', async ({ page }) => {
-  await newCorpus(page, unique('Manage'));
-  const picker = page.getByRole('group', { name: 'Working in' });
-  await picker.getByRole('button').click();
-  await picker.getByRole('link', { name: 'Manage projects…' }).click();
-  await expect(title(page)).toHaveText('Projects');
+test('an error stays in the footer past the fade and its Dismiss button clears it', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await newCorpus(page, unique('Footer'));
+  await openScreen(page, 'Concordance');
+  await page.getByRole('button', { name: 'Search', exact: true }).click(); // an empty query is an error
+  const status = page.getByRole('status', { name: 'Status' });
+  await expect(status).toHaveText('Type a word or phrase.');
+  await page.waitForTimeout(7_000); // past MESSAGE_FADE_MS: ok and info messages would be gone
+  await expect(status).toHaveText('Type a word or phrase.');
+  await page.getByRole('button', { name: 'Dismiss message' }).click();
+  await expect(status).toHaveText('');
+  await expect(page.locator('#main')).toBeFocused();
 });
