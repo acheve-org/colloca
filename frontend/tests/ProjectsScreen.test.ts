@@ -42,6 +42,10 @@ beforeEach(() => {
     calls.push({ method, path, body });
     if (path === '/api/languages') return res(200, { es: 'Spanish', it: 'Italian' });
     if (path === '/api/projects' && method === 'GET') return res(200, projects);
+    if (path === '/api/projects' && method === 'POST') {
+      projects = [...projects, { id: 11, name: body.name, corpora: 0, trashed: 0, terms: 0 }];
+      return res(201, { id: 11 });
+    }
     if (path === '/api/corpora' && method === 'GET') return res(200, corpora);
     if (path === '/api/corpora' && method === 'POST') {
       corpora = [...corpora, corpus(4, body.name, body.project_id)];
@@ -77,7 +81,7 @@ const rows = () => screen.getAllByRole('row').slice(1);
 const rowOf = (name: string) => rows().find((r) => within(r).queryByText(name))!;
 
 describe('Projects screen empty states', () => {
-  it('no projects: first-project prompt with a single field and Create project', async () => {
+  it('no projects: the first-run hint, and + New opens the dialog with the first-run placeholder', async () => {
     projects = [];
     corpora = [];
     corpusStore.list = [];
@@ -86,9 +90,12 @@ describe('Projects screen empty states', () => {
     await waitFor(() => expect(projectStore.loaded).toBe(true));
     await tick();
     expect(screen.getByText('Start your first project')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('Contracts 2024')).toBeInTheDocument();
-    await fireEvent.input(screen.getByLabelText('New project'), { target: { value: 'Acme' } });
-    await fireEvent.click(screen.getByRole('button', { name: 'Create project' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'New project' }));
+    await tick();
+    const dlg = screen.getByRole('dialog', { name: 'New project' });
+    expect(within(dlg).getByPlaceholderText('Contracts 2024')).toBeInTheDocument();
+    await fireEvent.input(within(dlg).getByRole('textbox'), { target: { value: 'Acme' } });
+    await fireEvent.click(within(dlg).getByRole('button', { name: 'Create project' }));
     await waitFor(() => expect(calls.some((c) => c.method === 'POST' && c.path === '/api/projects')).toBe(true));
   });
 
@@ -114,6 +121,45 @@ describe('Projects screen', () => {
     await fireEvent.click(screen.getByRole('button', { name: /Bolt/ }));
     expect(screen.getByText('B1')).toBeInTheDocument();
     expect(screen.queryByText('A1')).toBeNull();
+  });
+
+  it('the list is a navigation landmark with the Projects heading, corpus counts and aria-pressed', async () => {
+    await show();
+    const nav = screen.getByRole('navigation', { name: 'Projects' });
+    expect(within(nav).getByText('Projects')).toBeInTheDocument();
+    const acme = within(nav).getByRole('button', { name: /^Acme/ });
+    expect(acme).toHaveAttribute('aria-pressed', 'true');
+    expect(acme).toHaveTextContent('2');
+    expect(within(nav).getByRole('button', { name: /^Bolt/ })).toHaveAttribute('aria-pressed', 'false');
+    expect(within(nav).queryByRole('button', { name: /No project/ })).toBeNull();
+    expect(within(nav).queryByRole('textbox')).toBeNull();
+  });
+
+  it('"No project" comes last in the list when it has corpora', async () => {
+    corpora = [...corpora, corpus(5, 'Loose', null)];
+    corpusStore.list = [...corpora];
+    await show();
+    const names = within(screen.getByRole('navigation', { name: 'Projects' })).getAllByRole('button')
+      .filter((b) => b.hasAttribute('aria-pressed'))
+      .map((b) => b.textContent?.trim());
+    expect(names).toHaveLength(4);
+    expect(names.at(-1)).toMatch(/^No project/);
+  });
+
+  it('+ New opens the New project dialog; Create posts the name and selects the new project', async () => {
+    await show();
+    await fireEvent.click(screen.getByRole('button', { name: 'New project' }));
+    await tick();
+    const dlg = screen.getByRole('dialog', { name: 'New project' });
+    const input = within(dlg).getByRole('textbox');
+    expect(input).toHaveAttribute('maxlength', '120');
+    expect(within(dlg).getByRole('button', { name: 'Create project' })).toBeDisabled();
+    await fireEvent.input(input, { target: { value: ' Zed ' } });
+    await fireEvent.click(within(dlg).getByRole('button', { name: 'Create project' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Zed/ })).toHaveAttribute('aria-pressed', 'true'));
+    expect(calls.find((c) => c.method === 'POST' && c.path === '/api/projects')?.body).toEqual({ name: 'Zed' });
+    expect(messages.current).toEqual({ text: 'Project created.', kind: 'ok' });
+    expect(screen.getByRole('button', { name: /^Acme/ })).toHaveAttribute('aria-pressed', 'false');
   });
 
   it('Open selects the corpus and the row then shows Working', async () => {
@@ -296,54 +342,51 @@ describe('Projects screen', () => {
 describe('Projects screen stacked below 900px', () => {
   beforeEach(() => __setViewportForTests({ stacked: true }));
 
-  it('shows only the selected project with a Change button', async () => {
+  it('arriving shows the list only', async () => {
     await show();
-    expect(screen.getByRole('button', { name: 'Change' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Acme/ })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /^Bolt/ })).toBeNull();
-    expect(screen.queryByRole('button', { name: /^Empty/ })).toBeNull();
-    expect(rows()).toHaveLength(2);
-  });
-
-  it('Change reveals the list; choosing a project selects it and collapses the list', async () => {
-    await show();
-    await fireEvent.click(screen.getByRole('button', { name: 'Change' }));
     expect(screen.getByRole('button', { name: /^Bolt/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Empty/ })).toBeInTheDocument();
+    expect(screen.queryByRole('table')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Change' })).toBeNull();
+  });
+
+  it('choosing a project shows its panel and Back, without the list', async () => {
+    await show();
     await fireEvent.click(screen.getByRole('button', { name: /^Bolt/ }));
     await tick();
-    expect(screen.queryByRole('button', { name: /^Acme/ })).toBeNull();
-    expect(screen.queryByRole('button', { name: /^Empty/ })).toBeNull();
-    expect(screen.getByRole('button', { name: /^Bolt/ })).toBeInTheDocument();
     expect(screen.getByText('B1')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Change' })).toBeInTheDocument();
+    expect(screen.queryByText('A1')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Projects' })).toBeNull();
   });
 
-  it('Change is a toggle: aria-expanded, stays mounted, closes the list without picking', async () => {
+  it('Back shows the list and focuses the chosen project', async () => {
     await show();
-    const change = screen.getByRole('button', { name: 'Change' });
-    expect(change).toHaveAttribute('aria-expanded', 'false');
-    expect(change).toHaveAttribute('aria-controls', 'proj-list');
-    await fireEvent.click(change);
-    expect(screen.getByRole('button', { name: 'Change' })).toBe(change);
-    expect(change).toHaveAttribute('aria-expanded', 'true');
-    expect(screen.getByRole('button', { name: /^Bolt/ })).toBeInTheDocument();
-    await fireEvent.click(change);
-    expect(change).toHaveAttribute('aria-expanded', 'false');
-    expect(screen.queryByRole('button', { name: /^Bolt/ })).toBeNull();
-    expect(screen.getByRole('button', { name: /^Acme/ })).toBeInTheDocument();
-  });
-
-  it('returns focus to Change after choosing a project', async () => {
-    await show();
-    await fireEvent.click(screen.getByRole('button', { name: 'Change' }));
     await fireEvent.click(screen.getByRole('button', { name: /^Bolt/ }));
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Change' })));
+    await tick();
+    await fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+    await tick();
+    expect(screen.queryByRole('table')).toBeNull();
+    const bolt = screen.getByRole('button', { name: /^Bolt/ });
+    expect(bolt).toHaveAttribute('aria-pressed', 'true');
+    await waitFor(() => expect(document.activeElement).toBe(bolt));
+  });
+
+  it('Back from "No project" focuses the No project item', async () => {
+    corpora = [...corpora, corpus(5, 'Loose', null)];
+    corpusStore.list = [...corpora];
+    await show();
+    await fireEvent.click(screen.getByRole('button', { name: /No project/ }));
+    await tick();
+    expect(screen.getByText('Loose')).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: /No project/ })));
   });
 
   it('keeps the chosen project and its corpora when stacked is toggled', async () => {
     await show();
-    await fireEvent.click(screen.getByRole('button', { name: 'Change' }));
     await fireEvent.click(screen.getByRole('button', { name: /^Bolt/ }));
     __setViewportForTests({ stacked: false });
     await tick();
@@ -354,35 +397,45 @@ describe('Projects screen stacked below 900px', () => {
     await tick();
     expect(screen.getByText('B1')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^Acme/ })).toBeNull();
-    expect(screen.getByRole('button', { name: /^Bolt/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument();
   });
 
   it('New corpus and New project still work', async () => {
     await show();
+    await fireEvent.click(screen.getByRole('button', { name: /^Acme/ }));
+    await tick();
     await fireEvent.click(screen.getByRole('button', { name: 'New corpus' }));
     await tick();
     const dlg = screen.getByRole('dialog', { name: 'New corpus' });
     expect(within(dlg).getByLabelText('Project')).toHaveValue('7');
     await fireEvent.click(within(dlg).getByRole('button', { name: 'Cancel' }));
-    await fireEvent.input(screen.getByLabelText('New project'), { target: { value: 'Zed' } });
-    await fireEvent.click(screen.getByRole('button', { name: 'Add' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+    await tick();
+    await fireEvent.click(screen.getByRole('button', { name: 'New project' }));
+    await tick();
+    const pdlg = screen.getByRole('dialog', { name: 'New project' });
+    await fireEvent.input(within(pdlg).getByRole('textbox'), { target: { value: 'Zed' } });
+    await fireEvent.click(within(pdlg).getByRole('button', { name: 'Create project' }));
     await waitFor(() => expect(calls.some((c) => c.method === 'POST' && c.path === '/api/projects')).toBe(true));
   });
 
-  it('wide layout has no Change button', async () => {
+  it('wide layout has no Back button and shows list and panel together', async () => {
     __setViewportForTests({ stacked: false });
     await show();
-    expect(screen.queryByRole('button', { name: 'Change' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
     expect(screen.getByRole('button', { name: /^Bolt/ })).toBeInTheDocument();
+    expect(rows()).toHaveLength(2);
   });
 
-  it('Change is translated', async () => {
+  it('Back is translated', async () => {
     setLang('es');
     await show();
-    expect(screen.getByRole('button', { name: 'Cambiar' })).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole('button', { name: /^Bolt/ }));
+    await tick();
+    expect(screen.getByRole('button', { name: 'Volver' })).toBeInTheDocument();
     setLang('it');
     await tick();
-    expect(screen.getByRole('button', { name: 'Cambia' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Indietro' })).toBeInTheDocument();
   });
 });
 

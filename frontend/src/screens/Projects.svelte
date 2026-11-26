@@ -13,6 +13,8 @@
   import Button from '../lib/ui/Button.svelte';
   import Dialog from '../lib/ui/Dialog.svelte';
   import EmptyCard from '../lib/ui/EmptyCard.svelte';
+  import Field from '../lib/ui/Field.svelte';
+  import ListPanel from '../lib/ui/ListPanel.svelte';
   import ReadyHint from '../lib/ui/ReadyHint.svelte';
   import NewCorpusDialog from './NewCorpusDialog.svelte';
 
@@ -21,6 +23,7 @@
   // undefined: not chosen yet, follow the working corpus; null: the "No project" entry.
   let picked = $state<number | null | undefined>(undefined);
   let newProject = $state('');
+  let newProjectOpen = $state(false);
   let names = $state<Record<number, string>>({});
   let corpusNames = $state<Record<number, string>>({});
   let renamingId = $state<number | null>(null);
@@ -31,8 +34,8 @@
   let delProject = $state.raw<Project | null>(null);
   let delProjectOpen = $state(false);
   let target = $state('');
-  // Stacked screens show the chosen project as one card; this opens the full list. State lives here, not in the markup branch.
-  let listOpen = $state(false);
+  // Stacked screens show the list or the chosen project's panel: choosing opens the panel, Back closes it.
+  let panelOpen = $state(false);
 
   onMount(() => {
     reloadProjects().catch((err) => messages.say(errMsg(err), 'err'));
@@ -55,17 +58,19 @@
   const firstRun = $derived(projectStore.loaded && !projectStore.list.length && !loose.length);
   const heading = $derived(t('proj.corporaOf', { name: selected?.name ?? t('ctx.noProject') }));
 
-  const collapsed = $derived(viewport.stacked && !listOpen);
-  const hasChoices = $derived(projectStore.list.length > 0 || loose.length > 0);
+  const itemId = (id: number | null) => `proj-item-${id ?? 'none'}`;
+  const focusItem = (id: number | null) => tick().then(() => document.getElementById(itemId(id))?.focus());
   const choose = (id: number | null) => {
     picked = id;
-    listOpen = false;
-    // The clicked project button unmounts: put focus back on the control that opened the list.
-    tick().then(() => document.getElementById('proj-change')?.focus());
+    panelOpen = true;
+  };
+  // Stacked: the list comes back; put focus on the project the user had chosen.
+  const back = () => {
+    panelOpen = false;
+    focusItem(selectedId);
   };
 
   const nameOf = (p: Project) => names[p.id] ?? p.name;
-  const corporaLabel = (n: number) => (n === 1 ? t('proj.corpora1') : t('proj.corpora', { n }));
 
   async function changed(): Promise<void> {
     await reloadProjects();
@@ -89,10 +94,13 @@
     const name = newProject.trim();
     if (!name) return;
     return run(async () => {
-      await post('/api/projects', { name });
+      const { id } = await post<{ id: number }>('/api/projects', { name });
       newProject = '';
+      newProjectOpen = false;
       messages.say(t('proj.created'), 'ok');
       await reloadProjects();
+      picked = id;
+      focusItem(id);
     });
   };
 
@@ -206,80 +214,69 @@
   }
 </script>
 
-<div class="page">
-  <div class="panes">
-    <section class="left">
-      {#if viewport.stacked && hasChoices}
-        <div class="change">
-          <Button id="proj-change" expanded={listOpen} controls="proj-list" onclick={() => (listOpen = !listOpen)}>{t('proj.change')}</Button>
-        </div>
-      {/if}
-      <ul class="plist" id="proj-list">
-        {#each projectStore.list as p (p.id)}
-          {#if !collapsed || p.id === selectedId}
-          <li class:sel={p.id === selectedId}>
-            <button type="button" class="pick" aria-pressed={p.id === selectedId} onclick={() => choose(p.id)}>
-              <span class="pname">{p.name}</span>
-              <span class="muted">{corporaLabel(p.corpora)}</span>
-            </button>
-            {#if p.id === selectedId}
-              <div class="edit">
-                <input
-                  value={nameOf(p)}
-                  maxlength="120"
-                  aria-label={t('proj.nameOf', { name: p.name })}
-                  oninput={(e) => (names = { ...names, [p.id]: e.currentTarget.value })}
-                  onkeydown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      renameProject(p);
-                    }
-                  }}
-                />
-                <Button
-                  ariaLabel={t('proj.renameOf', { name: p.name })}
-                  disabled={busy || !nameOf(p).trim() || nameOf(p).trim() === p.name}
-                  onclick={() => renameProject(p)}>{t('proj.rename')}</Button
-                >
-                <Button
-                  variant="danger"
-                  ariaLabel={t('proj.deleteOf', { name: p.name })}
-                  disabled={busy}
-                  onclick={() => askDeleteProject(p)}>{t('common.delete')}</Button
-                >
-              </div>
-            {/if}
-          </li>
-          {/if}
-        {/each}
-        {#if loose.length && (!collapsed || selectedId === null)}
-          <li class:sel={selectedId === null}>
-            <button type="button" class="pick" aria-pressed={selectedId === null} onclick={() => choose(null)}>
-              <span class="pname">{t('ctx.noProject')}</span>
-              <span class="muted">{corporaLabel(loose.length)}</span>
-            </button>
-          </li>
-        {/if}
-      </ul>
-      {#if firstRun}
+<ListPanel label={t('nav.projects')} showPanel={panelOpen} onback={back}>
+  {#snippet list()}
+    <div class="lh">
+      <span class="ltitle">{t('nav.projects')}</span>
+      <Button pending={firstRun} onclick={() => (newProjectOpen = true)}><span aria-hidden="true">+</span> {t('proj.new')}</Button>
+    </div>
+    {#if firstRun}
+      <div class="hint">
         <ReadyHint title={t('setup.project.title')} hint={t('setup.project.hint')} />
+      </div>
+    {/if}
+    <ul class="plist">
+      {#each projectStore.list as p (p.id)}
+        <li>
+          <button type="button" id={itemId(p.id)} class="pick" aria-pressed={p.id === selectedId} onclick={() => choose(p.id)}>
+            <span class="pname">{p.name}</span>
+            <Badge kind="neutral" label={String(p.corpora)} />
+          </button>
+        </li>
+      {/each}
+      {#if loose.length}
+        <li>
+          <button type="button" id={itemId(null)} class="pick" aria-pressed={selectedId === null} onclick={() => choose(null)}>
+            <span class="pname loose">{t('ctx.noProject')}</span>
+            <Badge kind="neutral" label={String(loose.length)} />
+          </button>
+        </li>
       {/if}
-      <form class="new" onsubmit={addProject}>
-        <input
-          bind:value={newProject}
-          maxlength="120"
-          placeholder={firstRun ? t('proj.firstPlaceholder') : t('proj.newPlaceholder')}
-          aria-label={t('proj.new')}
-        />
-        <Button type="submit" variant="primary" disabled={busy || !newProject.trim()}>{firstRun ? t('proj.create') : t('proj.add')}</Button>
-      </form>
-    </section>
+    </ul>
+  {/snippet}
 
+  {#snippet panel()}
     <section class="right" class:cardsOn={viewport.narrow}>
       <header>
         <h2>{heading}</h2>
         <Button variant="primary" disabled={!projectStore.list.length} onclick={() => (newOpen = true)}>{t('corpus.new')}</Button>
       </header>
+      {#if selected}
+        {@const p = selected}
+        <!-- Interim home for project rename and delete; Task 4 moves them to the heading (✎) and a ⋯ menu. -->
+        <div class="edit">
+          <input
+            value={nameOf(p)}
+            maxlength="120"
+            aria-label={t('proj.nameOf', { name: p.name })}
+            oninput={(e) => (names = { ...names, [p.id]: e.currentTarget.value })}
+            onkeydown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                renameProject(p);
+              }
+            }}
+          />
+          <Button
+            ariaLabel={t('proj.renameOf', { name: p.name })}
+            disabled={busy || !nameOf(p).trim() || nameOf(p).trim() === p.name}
+            onclick={() => renameProject(p)}>{t('proj.rename')}</Button
+          >
+          <Button variant="danger" ariaLabel={t('proj.deleteOf', { name: p.name })} disabled={busy} onclick={() => askDeleteProject(p)}
+            >{t('common.delete')}</Button
+          >
+        </div>
+      {/if}
       {#if shown.length && viewport.narrow}
         <ul class="cards">
           {#each shown as c (c.id)}
@@ -391,8 +388,20 @@
         <p class="muted">{t('corpus.none')}</p>
       {/if}
     </section>
-  </div>
-</div>
+  {/snippet}
+</ListPanel>
+
+<Dialog bind:open={newProjectOpen} title={t('proj.newTitle')}>
+  <form id="proj-new-form" onsubmit={addProject}>
+    <Field label={t('corpus.name')}>
+      <input bind:value={newProject} required maxlength="120" placeholder={firstRun ? t('proj.firstPlaceholder') : t('proj.newPlaceholder')} />
+    </Field>
+  </form>
+  {#snippet footer()}
+    <Button onclick={() => (newProjectOpen = false)}>{t('common.cancel')}</Button>
+    <button type="submit" form="proj-new-form" class="primary" disabled={busy || !newProject.trim()}>{t('proj.create')}</button>
+  {/snippet}
+</Dialog>
 
 <NewCorpusDialog bind:open={newOpen} projectId={selectedId} oncreated={created} />
 
@@ -427,27 +436,32 @@
 </Dialog>
 
 <style>
-  .page {
+  .lh {
     display: flex;
-    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
     gap: var(--s-2);
-    padding: var(--s-2) var(--s-3);
+    padding: var(--s-4) var(--s-4) var(--s-2);
+  }
+  .ltitle {
+    color: var(--muted);
+    font-size: var(--fs-small);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .hint {
+    padding: 0 var(--s-4) var(--s-2);
+  }
+  .right {
+    padding: var(--page-pad) var(--s-6);
   }
   h2 {
     margin: 0;
     min-width: 0;
     overflow-wrap: anywhere; /* a long project name wraps instead of pushing the button out */
   }
-  .panes {
-    display: grid;
-    grid-template-columns: minmax(14rem, 22rem) minmax(0, 1fr);
-    gap: var(--s-3);
-    align-items: start;
-  }
   @media (max-width: 899px) {
-    .panes {
-      grid-template-columns: minmax(0, 1fr);
-    }
     .right {
       overflow-x: auto; /* a wide corpus table scrolls inside its pane, not the page */
     }
@@ -455,7 +469,6 @@
       overflow: visible; /* cards have no wide table, and the menu popover must overlay the page, not grow a scroll area */
     }
   }
-  .left,
   .right {
     display: flex;
     flex-direction: column;
@@ -466,60 +479,51 @@
     flex-direction: column;
     gap: var(--s-1);
     margin: 0;
-    padding: 0;
+    padding: 0 var(--s-2) var(--s-2);
     list-style: none;
-  }
-  .plist li {
-    display: flex;
-    flex-direction: column;
-    gap: var(--s-1);
-    border: 1px solid var(--line);
-    border-radius: var(--radius-lg);
-  }
-  .plist li.sel {
-    background: var(--accent-soft);
-    color: var(--fg);
-    border-color: var(--accent);
   }
   .pick {
     display: flex;
+    align-items: center;
     justify-content: space-between;
-    gap: var(--s-1);
+    gap: var(--s-2);
+    width: 100%;
     height: auto; /* base.css gives every button a fixed control height; a long name wraps and the row grows */
-    min-height: calc(var(--row-h) - var(--s-1));
-    padding: var(--s-1) var(--s-2);
+    min-height: var(--row-h);
+    padding: var(--s-2) var(--s-3);
     text-align: left;
     background: transparent;
-    border: 0;
+    border: 1px solid transparent;
+    border-radius: var(--radius-lg);
+  }
+  .pick[aria-pressed='true'] {
+    background: var(--panel);
+    border-color: var(--accent);
+    box-shadow: inset 3px 0 0 var(--accent); /* literal: the selection bar width */
   }
   .pname {
     min-width: 0;
     font-weight: 600;
     overflow-wrap: anywhere;
   }
-  .pick .muted {
-    flex: none;
-    white-space: nowrap;
+  .pname.loose {
+    color: var(--muted);
+    font-weight: 500;
   }
   header :global(button) {
     flex: none;
     white-space: nowrap; /* "New corpus" keeps its one line next to a long heading */
   }
   .edit,
-  .new,
   header {
     display: flex;
     align-items: center;
     gap: var(--s-1);
   }
-  .edit {
-    padding: 0 var(--s-2) var(--s-1);
-  }
   header {
     justify-content: space-between;
   }
-  .edit input,
-  .new input {
+  .edit input {
     flex: 1;
     min-width: 0;
   }
