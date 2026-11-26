@@ -27,6 +27,8 @@ RUN if [ "$WITH_OCR" = "1" ]; then apt-get update && apt-get install -y --no-ins
 RUN uv sync --frozen --no-dev --no-install-project $([ "$WITH_OCR" = "1" ] && echo --extra ocr)
 
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
+# A Windows checkout may give the script CRLF line endings and no exec bit: normalise both.
+RUN sed -i 's/\r$//' /usr/local/bin/entrypoint.sh && chmod 755 /usr/local/bin/entrypoint.sh
 COPY src ./src
 # The UI is git-ignored and never in the build context: it comes from the ui stage.
 COPY --from=ui /ui/src/colloca/static/ ./src/colloca/static/
