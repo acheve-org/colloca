@@ -33,6 +33,11 @@ test('the Languages screen adds a language from the catalog and removes it again
   const fr = panel(page, 'French');
   await expect(fr.getByText('Model not installed')).toBeVisible();
   await expect(fr.getByText('Not used by any corpus')).toBeVisible();
+  // No base corpus yet: the panel says what it is for and how to build a good one.
+  await expect(fr.getByRole('list', { name: 'Used by' }).getByRole('listitem')).toHaveCount(4);
+  await expect(fr.getByText('A good base corpus is general, large, clean and varied')).toBeVisible();
+  await expect(fr.getByRole('link', { name: 'Leipzig Corpora Collection' })).toBeVisible();
+  await expect(fr.getByRole('link', { name: 'Full recipe in the docs' })).toBeVisible();
 
   // the new language is offered when creating a corpus
   await openScreen(page, 'Projects');

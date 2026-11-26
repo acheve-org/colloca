@@ -39,6 +39,13 @@ beforeEach(() => {
     calls.push({ method, path: u.pathname, params: u.searchParams, body: typeof raw === 'string' ? JSON.parse(raw) : raw });
     const p = u.pathname;
     if (p === '/api/references' && method === 'POST') return res(201, { id: 11 });
+    if (p === '/api/corpora/10/documents') {
+      return res(200, [
+        { id: 1, title: 'spa_news.txt (part 1)', source: 'spa_news.txt', n_tokens: 8000 },
+        { id: 2, title: 'spa_news.txt (part 2)', source: 'spa_news.txt', n_tokens: 4000 },
+        { id: 3, title: 'spa_web.txt (part 1)', source: 'spa_web.txt', n_tokens: 345 },
+      ]);
+    }
     if (p === '/api/corpora/10/jobs') return res(200, jobList.length > 1 ? jobList.shift()! : jobList[0]);
     if (/^\/api\/corpora\/\d+\/jobs$/.test(p)) return res(200, []);
     if (p === '/api/corpora/10/upload') return res(uploadReply.status, uploadReply.body);
@@ -62,6 +69,37 @@ describe('BaseCorpusCard', () => {
     mount();
     expect(screen.getByText('General es')).toBeInTheDocument();
     expect(screen.getByText('3 parts · 12,345 words')).toBeInTheDocument();
+  });
+
+  it('says what the base corpus is used for, with or without one', () => {
+    mount('it', 'Italian', null);
+    const uses = screen.getByRole('list', { name: 'Used by' });
+    expect(within(uses).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
+      'Keyness: default reference',
+      'Frequency list: Base per M',
+      'Collocations: Base per M',
+      'Job: key terms',
+    ]);
+  });
+
+  it('guides building one when there is none, with links to the files and the recipe', () => {
+    mount('it', 'Italian', null);
+    expect(screen.getByText('A good base corpus is general, large, clean and varied')).toBeVisible();
+    expect(screen.getByRole('link', { name: 'Leipzig Corpora Collection' })).toHaveAttribute('href', 'https://wortschatz.uni-leipzig.de/en/download');
+    const recipe = screen.getByRole('link', { name: 'Full recipe in the docs' });
+    expect(recipe.getAttribute('href')).toMatch(/docs\/base-corpora\.md#recipe-a-reliable-base-corpus$/);
+    expect(recipe).toHaveAttribute('target', '_blank');
+    expect(screen.queryByText('How to build a good base corpus')).not.toBeInTheDocument();
+  });
+
+  it('lists the files it was built from and folds the tips away', async () => {
+    mount();
+    const row = await screen.findByText('spa_news.txt');
+    expect(row.closest('li')).toHaveTextContent('2 parts · 12,000 words');
+    expect(screen.getByText('spa_web.txt').closest('li')).toHaveTextContent('1 parts · 345 words');
+    const details = screen.getByText('How to build a good base corpus').closest('details')!;
+    expect(details.open).toBe(false);
+    expect(within(details).getByRole('link', { name: 'Leipzig Corpora Collection', hidden: true })).toBeInTheDocument();
   });
 
   it('offers to create it when there is none', async () => {

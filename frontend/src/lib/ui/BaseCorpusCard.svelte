@@ -6,16 +6,21 @@
     error?: string;
   }
   const ACCEPT = '.txt,.csv,.tsv';
+  const LEIPZIG = 'https://wortschatz.uni-leipzig.de/en/download';
+  const RECIPE = 'https://github.com/acheve-org/colloca/blob/main/docs/base-corpora.md#recipe-a-reliable-base-corpus';
+  const USES = ['keyness', 'frequency', 'collocations', 'jobs'];
+  const TIPS = ['size', 'files', 'variety', 'format'];
 </script>
 
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { del, post, upload } from '../api';
+  import { del, get, post, upload } from '../api';
+  import { baseSources, type BaseSource } from '../baseSources';
   import { corpusStore } from '../corpus.svelte';
   import { t, fmt } from '../i18n';
   import { JOBS_DONE, jobLogs, trackJobs } from '../jobs.svelte';
   import { messages } from '../messages.svelte';
-  import type { Corpus, Job } from '../types';
+  import type { Corpus, Doc, Job } from '../types';
   import Button from './Button.svelte';
   import Dialog from './Dialog.svelte';
 
@@ -41,6 +46,24 @@
 
   $effect(() => {
     if (reference) trackJobs(reference.id);
+  });
+
+  // The files it was built from; refetched when its size changes (an import finished, a part was removed).
+  let sources = $state.raw<BaseSource[]>([]);
+  $effect(() => {
+    const id = reference?.id;
+    void reference?.docs;
+    sources = [];
+    if (id === undefined) return;
+    let live = true;
+    get<Doc[]>(`/api/corpora/${id}/documents`)
+      .then((d) => {
+        if (live) sources = baseSources(d);
+      })
+      .catch(() => {}); // optional information: the card works without it
+    return () => {
+      live = false;
+    };
   });
 
   onMount(() => {
@@ -127,8 +150,28 @@
   }
 </script>
 
+{#snippet tips()}
+  <p class="tipsTitle">{t('base.tipsTitle')}</p>
+  <ul class="tips">
+    {#each TIPS as k (k)}<li>{t(`base.tip.${k}`)}</li>{/each}
+  </ul>
+  <p class="links">
+    <a href={LEIPZIG} target="_blank" rel="noopener noreferrer">{t('base.leipzig')}</a>
+    <span aria-hidden="true">·</span>
+    <a href={RECIPE} target="_blank" rel="noopener noreferrer">{t('base.recipe')}</a>
+  </p>
+{/snippet}
+
 <div class="base">
+  <p class="muted">{t('base.lead', { lang: name })}</p>
+  <div class="uses">
+    <span class="usesLabel">{t('base.usedBy')}</span>
+    <ul aria-label={t('base.usedBy')}>
+      {#each USES as k (k)}<li class="chip">{t(`base.use.${k}`)}</li>{/each}
+    </ul>
+  </div>
   {#if !reference}
+    <div class="guide">{@render tips()}</div>
     <p class="muted">{t('base.none')}</p>
     <div>
       <Button variant="primary" disabled={busy} onclick={create}>{t('base.create', { lang: name })}</Button>
@@ -138,6 +181,23 @@
       <b>{reference.name}</b><br />
       <span class="muted">{t('base.stats', { docs: fmt(reference.docs), words: fmt(reference.tokens) })}</span>
     </p>
+    {#if sources.length}
+      <div>
+        <p class="tipsTitle">{t('base.builtFrom')}</p>
+        <ul class="sources">
+          {#each sources as s (s.source)}
+            <li>
+              <span class="src">{s.source}</span>
+              <span class="muted">{t('base.stats', { docs: fmt(s.parts), words: fmt(s.words) })}</span>
+            </li>
+          {/each}
+        </ul>
+      </div>
+    {/if}
+    <details class="guide">
+      <summary>{t('base.howTo')}</summary>
+      {@render tips()}
+    </details>
     <input
       bind:this={input}
       type="file"
@@ -182,6 +242,66 @@
   }
   .base p {
     margin: 0;
+  }
+  .uses {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--s-1);
+    font-size: var(--fs-small);
+  }
+  .uses ul {
+    display: contents;
+    list-style: none;
+  }
+  .usesLabel {
+    color: var(--muted);
+  }
+  .chip {
+    padding: 1px var(--s-2);
+    border-radius: 999px;
+    border: 1px solid var(--line);
+  }
+  .guide {
+    padding: var(--s-2) var(--s-3);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    font-size: var(--fs-small);
+  }
+  .guide summary {
+    cursor: pointer;
+    color: var(--accent);
+  }
+  .guide[open] summary {
+    margin-bottom: var(--s-1);
+  }
+  .tipsTitle {
+    font-weight: 600;
+    font-size: var(--fs-small);
+  }
+  .tips {
+    margin: var(--s-1) 0;
+    padding-left: 1.2rem;
+  }
+  .links a {
+    color: var(--accent);
+  }
+  .sources {
+    margin: var(--s-1) 0 0;
+    padding: 0;
+    list-style: none;
+    font-size: var(--fs-small);
+  }
+  .sources li {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: var(--s-2);
+    padding: 2px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .src {
+    overflow-wrap: anywhere;
   }
   .base input[type='file'] {
     height: auto;

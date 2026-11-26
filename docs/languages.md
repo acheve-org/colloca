@@ -6,7 +6,7 @@ The panel shows the chosen language: its name, its code, *Used by N corpora*, *E
 
 - **Language model**: the spaCy model in use (name, version, size) with *Install*, *Change size* and *Uninstall* (uninstalling asks first and warns when corpora use the language). Models are downloaded from the official spaCy releases (or from `SPACY_WHEELS` offline) into `COLLOCA_MODELS_DIR` (Docker: `/models`) while you keep working; a failed download leaves nothing half-installed.
 - **OCR data**: whether the Tesseract program is present (it needs `--build-arg WITH_OCR=1` in Docker) and whether the data for the language is installed. *Install data* downloads `<code>.traineddata` from Tesseract's `tessdata_fast` set (or copies it from the folder in `TESSDATA_FILES`) into the same volume, so no root or `apt` is needed.
-- **Base corpus**: create, fill and delete the language's general-language corpus ([base-corpora.md](base-corpora.md)). *Import even if the language looks wrong* sits at the end of this section; it skips the language check for the files you upload to the base corpus ([importing.md](importing.md#checks-on-import)).
+- **Base corpus**: create, fill and delete the language's general-language corpus ([base-corpora.md](base-corpora.md)). It says which tools use it, guides you to good sentence files while it is missing, and once built lists the files it was built from. *Import even if the language looks wrong* sits at the end of this section; it skips the language check for the files you upload to the base corpus ([importing.md](importing.md#checks-on-import)).
 
 Below 900 px the list shows first; choosing a language shows its panel in its place with a *Back* button, which returns to the list with focus on that language.
 
