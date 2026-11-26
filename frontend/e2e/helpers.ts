@@ -9,7 +9,7 @@ export function unique(prefix: string): string {
 }
 
 /**
- * Creates a project through the API (the page then loads it), opens it on the Projects page,
+ * Creates a project through the API (the page then loads it), picks it in the Projects list,
  * and returns its name. The database is shared by the whole run, so the name is unique.
  */
 export async function newProject(page: Page, prefix = 'Project'): Promise<string> {
@@ -18,13 +18,17 @@ export async function newProject(page: Page, prefix = 'Project'): Promise<string
   expect(made.ok()).toBeTruthy();
   await page.goto('/#/projects');
   await page.reload();
-  const pick = page.getByRole('button', { name: new RegExp(`^${escapeRegExp(name)}`) });
-  const change = page.getByRole('button', { name: 'Change' }); // below 900px the list is folded behind Change
-  await expect(pick.or(change).first()).toBeVisible();
-  if (!(await pick.isVisible())) await change.click();
-  await pick.click();
-  await expect(page.getByRole('heading', { name: `Corpora in ${name}` })).toBeVisible();
+  await pickProject(page, name);
   return name;
+}
+
+/**
+ * On the Projects page, chooses a project in the list and waits for its panel. Below 900px the
+ * list shows first and the panel takes its place.
+ */
+export async function pickProject(page: Page, name: string): Promise<void> {
+  await page.getByRole('navigation', { name: 'Projects' }).getByRole('button', { name: new RegExp(`^${escapeRegExp(name)}`) }).click();
+  await expect(page.getByRole('heading', { level: 2, name, exact: true })).toBeVisible();
 }
 
 /**
@@ -42,7 +46,7 @@ export async function newCorpus(page: Page, name: string, lang?: string, project
   await expect(dialog).toBeHidden();
   // A table row from 640px up, a card (list item) below it.
   const entry = page.getByRole('row', { name: new RegExp(escapeRegExp(name)) }).or(page.getByRole('listitem').filter({ hasText: name }));
-  await expect(entry.getByText('Working', { exact: true })).toBeVisible();
+  await expect(entry.getByText('Current', { exact: true })).toBeVisible();
   await openScreen(page, 'Sources');
   return proj;
 }

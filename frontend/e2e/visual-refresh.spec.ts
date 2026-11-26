@@ -40,28 +40,31 @@ test('at 1280px the same search shows the table', async ({ page }) => {
   await expect(page.getByRole('listbox', { name: 'Hit list' })).toHaveCount(0);
 });
 
-test('at 800px Projects stacks, shows Change and does not scroll sideways', async ({ page }) => {
+test('at 800px Projects stacks, shows the list first and does not scroll sideways', async ({ page }) => {
   await page.setViewportSize({ width: 800, height: 800 });
   await page.request.post('/api/projects', { data: { name: unique('Stack') } });
   await page.goto('/#/projects');
   await page.reload();
-  await expect(page.getByRole('button', { name: 'Change' })).toBeVisible();
+  await expect(page.getByRole('navigation', { name: 'Projects' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Back' })).toHaveCount(0);
   expect(await noHorizontalScroll(page)).toBe(true);
 });
 
-test('stacked Projects: choosing a project returns focus to Change', async ({ page }) => {
+test('stacked Projects: choosing a project shows its panel and Back returns focus to it', async ({ page }) => {
   await page.setViewportSize({ width: 800, height: 800 });
   const a = unique('Focus A');
   const b = unique('Focus B');
   for (const name of [a, b]) expect((await page.request.post('/api/projects', { data: { name } })).ok()).toBeTruthy();
   await page.goto('/#/projects');
   await page.reload();
-  const change = page.getByRole('button', { name: 'Change' });
-  await change.click();
-  await expect(change).toHaveAttribute('aria-expanded', 'true');
-  await page.getByRole('button', { name: new RegExp(`^${escapeRegExp(b)}`) }).click();
-  await expect(change).toHaveAttribute('aria-expanded', 'false');
-  await expect(change).toBeFocused();
+  const list = page.getByRole('navigation', { name: 'Projects' });
+  const item = list.getByRole('button', { name: new RegExp(`^${escapeRegExp(b)}`) });
+  await item.click();
+  await expect(page.getByRole('heading', { level: 2, name: b, exact: true })).toBeVisible();
+  await expect(list).toHaveCount(0);
+  await page.getByRole('button', { name: 'Back' }).click();
+  await expect(item).toHaveAttribute('aria-pressed', 'true');
+  await expect(item).toBeFocused();
 });
 
 test('the More tab has the geometry of its sibling tabs and its popover opens right under it', async ({ page }) => {

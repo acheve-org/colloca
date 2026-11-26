@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { escapeRegExp, newCorpus, openScreen, pasteText, unique } from './helpers';
+import { escapeRegExp, newCorpus, newProject, openScreen, pasteText, pickProject, unique } from './helpers';
 
 const TEXT =
   'El parque eólico produce energía limpia. El parque eólico de la sierra es nuevo. ' +
@@ -68,42 +68,70 @@ test('the Concordance options and the query survive crossing 640px', async ({ pa
   await expect(page.getByLabel('Context width')).toHaveValue('12');
 });
 
-test('at 390px Projects shows a card per corpus with a menu, a confirmed delete and no sideways scroll', async ({ page }) => {
+test('at 390px Projects shows a card per corpus whose settings cover the page, rename it and delete another after confirming', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 800 });
-  const other = unique('Other');
-  expect((await page.request.post('/api/projects', { data: { name: other } })).ok()).toBeTruthy(); // a Move target
+  const proj = await newProject(page, 'Cards');
+  const doomed = unique('Doomed');
+  await newCorpus(page, doomed, 'es', proj);
+  await page.goto('/#/projects');
   const name = unique('Cards');
-  await newCorpus(page, name, 'es');
+  await pickProject(page, proj);
+  await newCorpus(page, name, 'es', proj);
   await openScreen(page, 'Projects');
 
-  await expect(page.getByRole('heading', { name: /^Corpora in/ })).toBeVisible();
+  // Below 900px the list comes first; choosing the project shows its panel with a Back button.
+  await expect(page.getByRole('button', { name: 'Back' })).toHaveCount(0);
+  await pickProject(page, proj);
+  await expect(page.getByRole('button', { name: 'Back' })).toBeVisible();
   await expect(page.locator('table')).toHaveCount(0);
-  const trigger = page.getByRole('button', { name: new RegExp(`More actions: ${escapeRegExp(name)}`) });
-  await expect(trigger).toBeVisible();
+  const card = page.getByRole('button', { name, exact: true });
+  await expect(card).toBeVisible();
   expect(await noHorizontalScroll(page)).toBe(true);
 
-  await trigger.click();
-  await expect(page.getByRole('menuitem', { name: 'Rename' })).toBeVisible();
-  await expect(page.getByRole('menuitem', { name: new RegExp(`^Move.*${escapeRegExp(other)}`) })).toBeVisible();
-  await expect(page.getByRole('menuitem', { name: 'Delete' })).toBeVisible();
+  // The settings panel covers the page.
+  await card.click();
+  const panel = page.getByRole('complementary', { name: 'Corpus settings' });
+  await expect(panel).toBeVisible();
+  const box = (await panel.boundingBox())!;
+  expect(box.x).toBe(0);
+  expect(box.width).toBe(390);
+  await expect(panel.getByRole('button', { name: 'Close' })).toBeVisible();
   expect(await noHorizontalScroll(page)).toBe(true);
 
-  await page.getByRole('menuitem', { name: 'Delete' }).click();
-  const dialog = page.getByRole('dialog');
-  await expect(dialog).toBeVisible();
-  await expect(dialog).toContainText(name);
+  const renamed = unique('Renamed');
+  await panel.getByLabel('Corpus name').fill(renamed);
+  await panel.getByRole('button', { name: 'Save' }).click();
+  await expect(page.getByText('Corpus saved.')).toBeVisible();
+  await panel.getByRole('button', { name: 'Close' }).click();
+  await expect(panel).toBeHidden();
+  await expect(page.getByRole('button', { name: renamed, exact: true })).toBeFocused();
+  await expect(page.getByRole('button', { name, exact: true })).toHaveCount(0);
+
+  // Deleting asks first: Cancel keeps the corpus, Delete removes it.
+  await page.getByRole('button', { name: doomed, exact: true }).click();
+  await panel.getByRole('button', { name: 'Delete corpus…' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Delete corpus' });
+  await expect(dialog).toContainText(doomed);
   await dialog.getByRole('button', { name: 'Cancel' }).click();
   await expect(dialog).toBeHidden();
-  await expect(trigger).toBeVisible(); // cancelling deleted nothing
+  await expect(page.getByRole('button', { name: doomed, exact: true })).toHaveCount(1); // cancelling deleted nothing
+  await panel.getByRole('button', { name: 'Delete corpus…' }).click();
+  await dialog.getByRole('button', { name: 'Delete', exact: true }).click();
+  await expect(dialog).toBeHidden();
+  await expect(panel).toBeHidden();
+  await expect(page.getByRole('button', { name: doomed, exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: renamed, exact: true })).toBeVisible();
+  expect(await noHorizontalScroll(page)).toBe(true);
 });
 
 test('at 640px Projects is a table again and the Concordance shows the full toolbar', async ({ page }) => {
   await page.setViewportSize({ width: 640, height: 800 });
   const name = unique('Wide');
-  await newCorpus(page, name, 'es');
+  const proj = await newCorpus(page, name, 'es');
   await openScreen(page, 'Projects');
-  await expect(page.getByRole('row', { name: new RegExp(escapeRegExp(name)) })).toBeVisible();
-  await expect(page.getByRole('button', { name: /More actions/ })).toHaveCount(0);
+  await pickProject(page, proj);
+  await expect(page.getByRole('table', { name: `Corpora in ${proj}` }).getByRole('row', { name: new RegExp(escapeRegExp(name)) })).toBeVisible();
+  await expect(page.getByRole('button', { name, exact: true })).toHaveCount(0); // no card name buttons
 
   await openScreen(page, 'Concordance');
   await expect(page.getByRole('button', { name: /^Options/ })).toHaveCount(0);
