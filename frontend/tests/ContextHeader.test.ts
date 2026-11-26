@@ -54,6 +54,7 @@ describe('ContextHeader', () => {
   it('the gear goes to Projects', () => {
     render(ContextHeader);
     expect(gear()).toHaveAttribute('href', '#/projects');
+    expect(gear().querySelector('svg[data-icon="gear"]')).not.toBeNull();
     expect(gear()).not.toHaveAttribute('aria-current');
   });
 
@@ -85,6 +86,16 @@ describe('ContextHeader', () => {
     expect(screen.getByText('No corpus selected')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Choose a corpus' })).toHaveAttribute('href', '#/projects');
     expect(screen.queryByRole('link', { name: 'Change corpus or project' })).toBeNull();
+  });
+
+  it('the Choose a corpus link is the current page on Projects', async () => {
+    corpusStore.currentId = null;
+    render(ContextHeader);
+    const choose = screen.getByRole('link', { name: 'Choose a corpus' });
+    expect(choose).not.toHaveAttribute('aria-current');
+    go('projects');
+    await tick();
+    expect(choose).toHaveAttribute('aria-current', 'page');
   });
 
   it('renders its children', () => {

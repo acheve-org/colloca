@@ -57,13 +57,14 @@ test('Settings shows Languages, Projects, then Backup and Trash', async ({ page 
 });
 
 test('an error stays in the footer past the fade and its Dismiss button clears it', async ({ page }) => {
+  await page.clock.install();
   await page.setViewportSize({ width: 1280, height: 800 });
   await newCorpus(page, unique('Footer'));
   await openScreen(page, 'Concordance');
   await page.getByRole('button', { name: 'Search', exact: true }).click(); // an empty query is an error
   const status = page.getByRole('status', { name: 'Status' });
   await expect(status).toHaveText('Type a word or phrase.');
-  await page.waitForTimeout(7_000); // past MESSAGE_FADE_MS: ok and info messages would be gone
+  await page.clock.fastForward(7_000); // past MESSAGE_FADE_MS: ok and info messages would be gone
   await expect(status).toHaveText('Type a word or phrase.');
   await page.getByRole('button', { name: 'Dismiss message' }).click();
   await expect(status).toHaveText('');

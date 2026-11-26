@@ -29,11 +29,13 @@
         href={screenHref('projects')}
         aria-label={t('ctx.change')}
         title={t('ctx.change')}
-        aria-current={onProjects ? 'page' : undefined}><NavIcon name="settings" /></a
+        aria-current={onProjects ? 'page' : undefined}><NavIcon name="gear" /></a
       >
     {:else}
       <span class="empty">{t('ctx.noCorpus')}</span>
-      <a class="choose" href={screenHref('projects')}>{t('ctx.choose')}</a>
+      <a class="choose" href={screenHref('projects')} aria-current={onProjects ? 'page' : undefined}
+        >{t('ctx.choose')}</a
+      >
     {/if}
   </div>
   {#if children}<div class="extra">{@render children()}</div>{/if}
@@ -99,22 +101,32 @@
   .aligned::first-letter {
     text-transform: uppercase;
   }
-  .gear {
+  .gear,
+  .choose {
     flex: none;
-    display: grid;
-    place-items: center;
-    width: 30px;
-    height: 30px;
     box-sizing: border-box;
     border: 1px solid var(--line);
     border-radius: var(--radius);
     background: var(--bg);
     color: var(--muted);
   }
-  .gear:hover {
+  .gear {
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+  }
+  .choose {
+    padding: 4px 10px;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  .gear:hover,
+  .choose:hover {
     color: var(--fg);
   }
-  .gear[aria-current='page'] {
+  .gear[aria-current='page'],
+  .choose[aria-current='page'] {
     border-color: var(--accent);
     background: var(--accent-soft);
     color: var(--accent);

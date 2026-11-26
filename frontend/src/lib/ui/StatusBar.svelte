@@ -4,6 +4,9 @@
   import { messages } from '../messages.svelte';
   import { t } from '../i18n';
 
+  const kind = $derived(messages.current?.kind ?? '');
+  const text = $derived(messages.current?.text ?? (activity.busy ? t('activity.working') : ''));
+
   function dismiss() {
     messages.clear();
     document.getElementById('main')?.focus();
@@ -11,9 +14,15 @@
 </script>
 
 <footer class="bar">
-  <div class="status {messages.current?.kind ?? ''}" role="status" aria-label={t('status.label')}>
+  <div
+    class="status {kind}"
+    class:oneline={kind !== 'err'}
+    role="status"
+    aria-label={t('status.label')}
+    title={text || undefined}
+  >
     {#if activity.busy}<span class="spin" aria-hidden="true"></span>{/if}
-    {messages.current?.text ?? (activity.busy ? t('activity.working') : '')}
+    {text}
   </div>
   {#if messages.current?.kind === 'err'}
     <button type="button" class="dismiss" aria-label={t('status.dismiss')} onclick={dismiss}>×</button>
@@ -31,7 +40,8 @@
     display: flex;
     align-items: center;
     gap: var(--s-3);
-    height: 28px;
+    min-height: 28px;
+    box-sizing: border-box;
     flex-shrink: 0;
     padding: 0 var(--s-3);
     font-size: var(--fs-small);
@@ -58,12 +68,17 @@
   .status {
     flex: 1;
     min-width: 0;
+    color: var(--muted);
+  }
+  .oneline {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    color: var(--muted);
   }
   .err {
+    padding: var(--s-1) 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
     color: var(--danger);
   }
   .ok {

@@ -46,6 +46,30 @@ describe('StatusBar', () => {
     expect(screen.queryByRole('button', { name: 'Dismiss message' })).toBeNull();
   });
 
+  it('keeps the full message text in a title', async () => {
+    render(StatusBar);
+    const long = 'Saved '.repeat(40).trim();
+    messages.say(long, 'ok');
+    await tick();
+    expect(screen.getByRole('status', { name: 'Status' })).toHaveAttribute('title', long);
+  });
+
+  it('keeps ok and info messages on one line but lets an error wrap', async () => {
+    render(StatusBar);
+    const status = () => screen.getByRole('status', { name: 'Status' });
+    messages.say('Saved', 'ok');
+    await tick();
+    expect(status()).toHaveClass('oneline');
+    messages.say('Loading', 'info');
+    await tick();
+    expect(status()).toHaveClass('oneline');
+    messages.say('Bad query', 'err');
+    await tick();
+    expect(status()).toHaveClass('err');
+    expect(status()).not.toHaveClass('oneline');
+    expect(status()).toHaveAttribute('title', 'Bad query');
+  });
+
   it('reads Working… while busy with no message', async () => {
     render(StatusBar);
     activity.busy = true;

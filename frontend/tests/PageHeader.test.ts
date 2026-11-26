@@ -127,7 +127,7 @@ describe('PageHeader', () => {
   describe('scope control', () => {
     const pill = () => screen.queryByRole('button', { name: /All documents|of .* documents/ });
 
-    it.each(['concordance', 'frequency', 'job'] as const)('shows the pill beside the picker on %s', async (id) => {
+    it.each(['concordance', 'frequency', 'job'] as const)('shows the pill in the context band on %s', async (id) => {
       go(id);
       render(PageHeader);
       await tick();
