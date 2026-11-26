@@ -3,8 +3,8 @@ import { tick } from 'svelte';
 import { describe, expect, it } from 'vitest';
 import SidePanelHost from './SidePanelHost.svelte';
 
-async function openPanel() {
-  render(SidePanelHost);
+async function openPanel(props: { returnFocus?: string; empty?: boolean } = {}) {
+  render(SidePanelHost, props);
   const opener = screen.getByRole('button', { name: 'opener' });
   opener.focus();
   opener.click();
@@ -61,5 +61,17 @@ describe('SidePanel', () => {
     await tick();
     expect(screen.getByRole('complementary')).toBeInTheDocument();
     expect(screen.getByTestId('closed')).toHaveTextContent('0');
+  });
+
+  it('focuses the heading when the body has nothing focusable', async () => {
+    await openPanel({ empty: true });
+    expect(document.activeElement).toBe(screen.getByRole('heading', { level: 3, name: 'Settings' }));
+  });
+
+  it('returnFocus: closing focuses the element with that id instead of the opener', async () => {
+    await openPanel({ returnFocus: 'elsewhere' });
+    screen.getByRole('button', { name: 'Close' }).click();
+    await tick();
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'elsewhere' }));
   });
 });

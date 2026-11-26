@@ -131,7 +131,8 @@ test('at 640px Projects is a table again and the Concordance shows the full tool
   await openScreen(page, 'Projects');
   await pickProject(page, proj);
   await expect(page.getByRole('table', { name: `Corpora in ${proj}` }).getByRole('row', { name: new RegExp(escapeRegExp(name)) })).toBeVisible();
-  await expect(page.getByRole('button', { name, exact: true })).toHaveCount(0); // no card name buttons
+  // The name button is in the table row, not on a card.
+  await expect(page.getByRole('listitem').filter({ has: page.getByRole('button', { name, exact: true }) })).toHaveCount(0);
 
   await openScreen(page, 'Concordance');
   await expect(page.getByRole('button', { name: /^Options/ })).toHaveCount(0);

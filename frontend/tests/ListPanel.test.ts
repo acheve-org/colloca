@@ -16,7 +16,16 @@ describe('ListPanel', () => {
     expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
   });
 
+  it('wide with showPanel: still shows the list and the panel, with no Back button', () => {
+    __setViewportForTests({ stacked: false });
+    render(ListPanelHost, { showPanel: true });
+    expect(screen.getByText('the list')).toBeInTheDocument();
+    expect(screen.getByText('the panel')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
+  });
+
   it('names the list column navigation by its label', () => {
+    __setViewportForTests({ stacked: false });
     render(ListPanelHost);
     expect(screen.getByRole('navigation', { name: 'Projects' })).toContainElement(screen.getByText('the list'));
   });

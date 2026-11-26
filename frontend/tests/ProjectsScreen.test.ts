@@ -79,6 +79,9 @@ async function show() {
 }
 const rows = () => screen.getAllByRole('row').slice(1);
 const rowOf = (name: string) => rows().find((r) => within(r).queryByText(name))!;
+// The corpus name in a row: the button that selects the corpus and opens its settings.
+const nameOf = (name: string) => within(rowOf(name)).getByRole('button', { name });
+const names = () => rows().map((r) => within(r).getAllByRole('button')[0]);
 const openProjectMenu = async () => {
   await fireEvent.click(screen.getByRole('button', { name: 'Project actions' }));
   await tick();
@@ -263,27 +266,33 @@ describe('Projects screen', () => {
 
   it('clicking a row expands it; clicking Open does not', async () => {
     await show();
-    for (const r of rows()) expect(r).toHaveAttribute('aria-expanded', 'false');
-    expect(rowOf('A2')).toHaveAttribute('tabindex', '0');
+    for (const b of names()) expect(b).toHaveAttribute('aria-expanded', 'false');
     await fireEvent.click(rowOf('A2'));
-    expect(rowOf('A2')).toHaveAttribute('aria-expanded', 'true');
-    expect(rowOf('A1')).toHaveAttribute('aria-expanded', 'false');
+    expect(nameOf('A2')).toHaveAttribute('aria-expanded', 'true');
+    expect(nameOf('A1')).toHaveAttribute('aria-expanded', 'false');
     await fireEvent.click(rowOf('A1'));
-    expect(rowOf('A1')).toHaveAttribute('aria-expanded', 'true');
-    expect(rowOf('A2')).toHaveAttribute('aria-expanded', 'false');
+    expect(nameOf('A1')).toHaveAttribute('aria-expanded', 'true');
+    expect(nameOf('A2')).toHaveAttribute('aria-expanded', 'false');
     await fireEvent.click(within(rowOf('A2')).getByRole('button', { name: 'Open A2' }));
     await waitFor(() => expect(corpusStore.currentId).toBe(2));
-    expect(rowOf('A2')).toHaveAttribute('aria-expanded', 'false');
-    expect(rowOf('A1')).toHaveAttribute('aria-expanded', 'true');
+    expect(nameOf('A2')).toHaveAttribute('aria-expanded', 'false');
+    expect(nameOf('A1')).toHaveAttribute('aria-expanded', 'true');
   });
 
-  it('Enter and Space on a row expand it', async () => {
+  it('the corpus name is the keyboard control: a button that expands the row, and the row is not focusable', async () => {
     await show();
-    await fireEvent.keyDown(rowOf('A2'), { key: 'Enter' });
-    expect(rowOf('A2')).toHaveAttribute('aria-expanded', 'true');
-    await fireEvent.keyDown(rowOf('A1'), { key: ' ' });
-    expect(rowOf('A1')).toHaveAttribute('aria-expanded', 'true');
-    expect(rowOf('A2')).toHaveAttribute('aria-expanded', 'false');
+    for (const r of rows()) {
+      expect(r).not.toHaveAttribute('tabindex');
+      expect(r).not.toHaveAttribute('aria-expanded');
+      expect(r).not.toHaveAttribute('aria-controls');
+    }
+    await fireEvent.click(nameOf('A2'));
+    expect(nameOf('A2')).toHaveAttribute('aria-expanded', 'true');
+    await fireEvent.click(nameOf('A1'));
+    expect(nameOf('A1')).toHaveAttribute('aria-expanded', 'true');
+    expect(nameOf('A2')).toHaveAttribute('aria-expanded', 'false');
+    const src = import.meta.glob('../src/screens/Projects.svelte', { query: '?raw', import: 'default', eager: true });
+    expect(Object.values(src)[0] as string).toMatch(/tr:has\(\.cname\[aria-expanded='true'\]\)/);
   });
 
   it('deleting the project while renaming it leaves no rename input and sends no PATCH', async () => {
@@ -305,14 +314,14 @@ describe('Projects screen', () => {
   it('switching the working corpus to another project (nothing picked) clears the corpus selection', async () => {
     await show();
     await fireEvent.click(rowOf('A2'));
-    expect(rowOf('A2')).toHaveAttribute('aria-expanded', 'true');
+    expect(nameOf('A2')).toHaveAttribute('aria-expanded', 'true');
     corpusStore.currentId = 3; // B1, in Bolt: the panel follows the working corpus
     await tick();
     expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent(/^Bolt$/);
-    for (const r of rows()) expect(r).toHaveAttribute('aria-expanded', 'false');
+    for (const b of names()) expect(b).toHaveAttribute('aria-expanded', 'false');
     corpusStore.currentId = 1; // back to Acme: the old selection does not come back
     await tick();
-    for (const r of rows()) expect(r).toHaveAttribute('aria-expanded', 'false');
+    for (const b of names()) expect(b).toHaveAttribute('aria-expanded', 'false');
   });
 
   it('choosing another project clears the corpus selection', async () => {
@@ -321,7 +330,7 @@ describe('Projects screen', () => {
     await fireEvent.click(screen.getByRole('button', { name: /^Bolt/ }));
     await fireEvent.click(screen.getByRole('button', { name: /^Acme/ }));
     await tick();
-    for (const r of rows()) expect(r).toHaveAttribute('aria-expanded', 'false');
+    for (const b of names()) expect(b).toHaveAttribute('aria-expanded', 'false');
   });
 
   it('deleting a project with corpora needs a target, moves them, then deletes', async () => {
@@ -508,6 +517,21 @@ describe('Projects screen stacked below 900px', () => {
     await waitFor(() => expect(calls.some((c) => c.method === 'POST' && c.path === '/api/projects')).toBe(true));
   });
 
+  it('deleting the shown project goes back to the list, focused on the project now chosen', async () => {
+    await show();
+    await fireEvent.click(screen.getByRole('button', { name: /^Empty/ }));
+    await tick();
+    expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument();
+    await askDeleteProject();
+    projects = projects.filter((p) => p.id !== 9);
+    await fireEvent.click(within(screen.getByRole('dialog', { name: 'Delete this project?' })).getByRole('button', { name: 'Delete' }));
+    await waitFor(() => expect(screen.getByRole('navigation', { name: 'Projects' })).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
+    const acme = screen.getByRole('button', { name: /^Acme/ });
+    expect(acme).toHaveAttribute('aria-pressed', 'true');
+    await waitFor(() => expect(acme).toHaveFocus());
+  });
+
   it('wide layout has no Back button and shows list and panel together', async () => {
     __setViewportForTests({ stacked: false });
     await show();
@@ -632,9 +656,9 @@ describe('Projects screen corpus settings panel', () => {
     expect(projectField()).toHaveValue('7');
     expect(within(projectField()).getAllByRole('option').map((o) => o.textContent)).toEqual(['Acme', 'Bolt', 'Empty']);
     expect(panel()).toHaveTextContent('Spanish · 3 documents · 1,002 words');
-    expect(rowOf('A2')).toHaveAttribute('aria-expanded', 'true');
-    expect(rowOf('A2')).toHaveAttribute('aria-controls', panel().id);
-    expect(rowOf('A1')).not.toHaveAttribute('aria-controls');
+    expect(nameOf('A2')).toHaveAttribute('aria-expanded', 'true');
+    expect(nameOf('A2')).toHaveAttribute('aria-controls', panel().id);
+    expect(nameOf('A1')).not.toHaveAttribute('aria-controls');
   });
 
   it('Save sends one PATCH with name and project_id and says Corpus saved.', async () => {
@@ -671,7 +695,7 @@ describe('Projects screen corpus settings panel', () => {
     await fireEvent.click(save());
     await waitFor(() => expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent(/^Bolt$/));
     expect(patches()).toEqual([{ method: 'PATCH', path: '/api/corpora/2', body: { name: 'A2', project_id: 8 } }]);
-    await waitFor(() => expect(rowOf('A2')).toHaveAttribute('aria-expanded', 'true'));
+    await waitFor(() => expect(nameOf('A2')).toHaveAttribute('aria-expanded', 'true'));
     expect(screen.getByRole('button', { name: /^Bolt/ })).toHaveAttribute('aria-pressed', 'true');
     expect(nameField()).toHaveValue('A2');
     expect(projectField()).toHaveValue('8');
@@ -702,19 +726,73 @@ describe('Projects screen corpus settings panel', () => {
     await fireEvent.click(within(dlg).getByRole('button', { name: 'Delete' }));
     await waitFor(() => expect(calls.some((c) => c.method === 'DELETE' && c.path === '/api/corpora/2')).toBe(true));
     await waitFor(() => expect(screen.queryByRole('complementary')).toBeNull());
+    // A2 was last: focus goes to the previous corpus, not to the page.
+    await waitFor(() => expect(nameOf('A1')).toHaveFocus());
   });
 
-  it('Esc closes the panel and focuses the row', async () => {
+  it('deleting a corpus focuses the next corpus name; deleting the only one focuses the heading', async () => {
     await show();
-    rowOf('A2').focus();
+    // Picked, so the screen stays on Acme when its working corpus goes.
+    await fireEvent.click(screen.getByRole('button', { name: /^Acme/ }));
+    await fireEvent.click(rowOf('A1'));
+    await tick();
+    await fireEvent.click(within(panel()).getByRole('button', { name: 'Delete corpus…' }));
+    await tick();
+    corpora = corpora.filter((c) => c.id !== 1);
+    await fireEvent.click(within(screen.getByRole('dialog', { name: 'Delete corpus' })).getByRole('button', { name: 'Delete' }));
+    await waitFor(() => expect(nameOf('A2')).toHaveFocus());
+    await fireEvent.click(rowOf('A2'));
+    await tick();
+    await fireEvent.click(within(panel()).getByRole('button', { name: 'Delete corpus…' }));
+    await tick();
+    corpora = corpora.filter((c) => c.id !== 2);
+    await fireEvent.click(within(screen.getByRole('dialog', { name: 'Delete corpus' })).getByRole('button', { name: 'Delete' }));
+    await waitFor(() => expect(screen.getByRole('heading', { level: 2, name: 'Acme' })).toHaveFocus());
+  });
+
+  it('Esc closes the panel and focuses the corpus name', async () => {
+    await show();
+    // A click on the row, not the button: Safari-like, nothing was focused when the panel opened.
     await fireEvent.click(rowOf('A2'));
     await tick();
     expect(nameField()).toHaveFocus();
     await fireEvent.keyDown(nameField(), { key: 'Escape' });
     await tick();
     expect(screen.queryByRole('complementary')).toBeNull();
-    expect(rowOf('A2')).toHaveFocus();
-    expect(rowOf('A2')).toHaveAttribute('aria-expanded', 'false');
+    expect(nameOf('A2')).toHaveFocus();
+    expect(nameOf('A2')).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('switching rows while the panel is open, then Esc, focuses the newly selected corpus name', async () => {
+    await show();
+    nameOf('A2').focus();
+    await fireEvent.click(nameOf('A2'));
+    await tick();
+    await fireEvent.click(rowOf('A1'));
+    await tick();
+    expect(nameField()).toHaveValue('A1');
+    await fireEvent.keyDown(nameField(), { key: 'Escape' });
+    await tick();
+    expect(nameOf('A1')).toHaveFocus();
+  });
+
+  it('the draft survives a switch to the narrow card layout while the panel is open', async () => {
+    try {
+      await show();
+      await fireEvent.click(rowOf('A2'));
+      await tick();
+      await fireEvent.input(nameField(), { target: { value: 'Half typed' } });
+      __setViewportForTests({ narrow: true });
+      await tick();
+      expect(document.querySelector('table')).toBeNull();
+      expect(nameField()).toHaveValue('Half typed');
+      // The card's name button carries the same id, so closing still lands on the corpus.
+      await fireEvent.keyDown(nameField(), { key: 'Escape' });
+      await tick();
+      expect(screen.getByRole('button', { name: 'A2' })).toHaveFocus();
+    } finally {
+      __setViewportForTests({ narrow: false });
+    }
   });
 
   it('narrow: tapping the card name opens the panel', async () => {

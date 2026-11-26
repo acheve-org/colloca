@@ -99,7 +99,7 @@ test('corpus settings: rename and move the current corpus from Projects', async 
   await row.click();
   const panel = page.getByRole('complementary', { name: 'Corpus settings' });
   await expect(panel).toBeVisible();
-  await expect(row).toHaveAttribute('aria-expanded', 'true');
+  await expect(row.getByRole('button', { name: corpus, exact: true })).toHaveAttribute('aria-expanded', 'true');
 
   const renamed = unique('Settled');
   await panel.getByLabel('Corpus name').fill(renamed);
@@ -117,3 +117,32 @@ test('corpus settings: rename and move the current corpus from Projects', async 
   const moved = page.getByRole('table', { name: `Corpora in ${to}` }).getByRole('row', { name: new RegExp(escapeRegExp(renamed)) });
   await expect(moved.getByText('Current', { exact: true })).toBeVisible();
 });
+
+for (const size of [{ width: 1100, height: 800 }, { width: 1440, height: 900 }]) {
+  test(`corpus settings stay in view when the table is scrolled (${size.width}×${size.height})`, async ({ page }) => {
+    await page.setViewportSize(size);
+    const name = unique('Many');
+    const made = await page.request.post('/api/projects', { data: { name } });
+    expect(made.ok()).toBeTruthy();
+    const id = (await made.json()).id;
+    const prefix = unique('Bulk');
+    for (let i = 1; i <= 25; i++) {
+      const label = `${prefix} ${String(i).padStart(2, '0')}`;
+      expect((await page.request.post('/api/corpora', { data: { name: label, lang: 'es', project_id: id } })).ok()).toBeTruthy();
+    }
+    await page.goto('/#/projects');
+    await page.reload();
+    await item(page, name).click();
+    await expect(page.getByRole('heading', { level: 2, name, exact: true })).toBeVisible();
+
+    const last = page.getByRole('button', { name: `${prefix} 25`, exact: true });
+    await last.scrollIntoViewIfNeeded();
+    await last.click();
+    const panel = page.getByRole('complementary', { name: 'Corpus settings' });
+    await expect(panel).toBeVisible();
+    await expect(panel.getByLabel('Corpus name')).toHaveValue(`${prefix} 25`);
+    const box = (await panel.boundingBox())!;
+    expect(box.y).toBeGreaterThanOrEqual(0);
+    expect(box.y + box.height).toBeLessThanOrEqual(size.height);
+  });
+}

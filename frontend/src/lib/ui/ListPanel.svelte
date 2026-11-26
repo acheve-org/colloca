@@ -53,9 +53,13 @@
   .stacked nav {
     border-right: none;
   }
+  /* A flex column so the panel's content can fill it and scroll its own parts (Projects keeps its
+     side panel in view while the table scrolls); content that does not still scrolls here. */
   .panel {
     position: relative;
     min-height: 0;
+    display: flex;
+    flex-direction: column;
     overflow-y: auto;
   }
   .backrow {

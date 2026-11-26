@@ -159,6 +159,7 @@
     const p = delProject;
     delProjectOpen = false;
     if (!p) return;
+    let deleted = false;
     await run(async () => {
       try {
         if (target) {
@@ -168,12 +169,18 @@
           picked = Number(target);
         }
         await del(`/api/projects/${p.id}`);
+        deleted = true;
         messages.say(t('proj.deleted'), 'ok');
       } finally {
         // Also after a failed move: corpora already moved must show under their new project.
         await changed();
       }
     });
+    // Stacked, the panel showed the project that is gone: go back to the list, on the project now chosen.
+    if (deleted && viewport.stacked) {
+      panelOpen = false;
+      focusItem(selectedId);
+    }
   }
 
   const open = (c: Corpus) => run(() => corpusStore.select(c.id));
@@ -185,7 +192,9 @@
   };
 
   const SETTINGS_ID = 'corpus-settings';
-  const rowId = (id: number) => `corpus-${id}`;
+  // The corpus name button, in the table row or the card: one id, so focus finds it in either layout.
+  const nameId = (id: number) => `corpus-${id}`;
+  let headingEl = $state<HTMLHeadingElement | null>(null);
   const projectValue = (c: Corpus) => (c.project_id != null && projectIds.has(c.project_id) ? String(c.project_id) : '');
   const editing = $derived(shown.find((c) => c.id === selectedCorpusId) ?? null);
   const projectOptions = $derived([
@@ -219,23 +228,16 @@
       messages.say(t('src.corpusSaved'), 'ok');
       if (projectId != null && projectId !== c.project_id) {
         // Showing the new project resets the selection; re-select the corpus once that has run,
-        // with focus on its row so closing the panel returns there.
+        // with focus on its name so closing the panel returns there.
         picked = projectId;
         await tick();
-        document.getElementById(rowId(c.id))?.focus();
+        document.getElementById(nameId(c.id))?.focus();
         selectedCorpusId = c.id;
       } else if (selectedCorpusId === c.id) {
         setName = name;
       }
     });
   };
-  function rowKey(e: KeyboardEvent, c: Corpus): void {
-    // Only the row itself: Enter or Space on its Open button must not select it.
-    if (e.target !== e.currentTarget || (e.key !== 'Enter' && e.key !== ' ')) return;
-    e.preventDefault();
-    selectCorpus(c);
-  }
-
   function askDeleteCorpus(c: Corpus): void {
     delCorpus = c;
     delCorpusOpen = true;
@@ -245,10 +247,17 @@
     const c = delCorpus;
     delCorpusOpen = false;
     if (!c) return;
+    // Focus moves to the next corpus, else the previous one, else the heading: the panel it was in is gone.
+    const ids = shown.map((x) => x.id);
+    const at = ids.indexOf(c.id);
+    const neighbours = [...ids.slice(at + 1), ...ids.slice(0, Math.max(at, 0)).reverse()];
     await run(async () => {
       await del(`/api/corpora/${c.id}`);
       if (selectedCorpusId === c.id) selectedCorpusId = null;
       await changed();
+      await tick();
+      const next = neighbours.map((id) => document.getElementById(nameId(id))).find((el) => el !== null);
+      (next ?? headingEl)?.focus();
     });
   }
 
@@ -314,7 +323,8 @@
               }}
             />
           {:else}
-            <h2>{heading}</h2>
+            <!-- Focusable from script only: focus lands here when the last corpus is deleted. -->
+            <h2 tabindex="-1" bind:this={headingEl}>{heading}</h2>
             {#if selected}
               {@const p = selected}
               <!-- Never disabled: focus comes back here right after a save, while busy is still set. -->
@@ -339,7 +349,7 @@
               <li class="ccard">
                 <button
                   type="button"
-                  id={rowId(c.id)}
+                  id={nameId(c.id)}
                   class="cname"
                   aria-expanded={c.id === selectedCorpusId}
                   aria-controls={c.id === selectedCorpusId ? SETTINGS_ID : undefined}
@@ -371,33 +381,37 @@
             </thead>
             <tbody>
               {#each shown as c (c.id)}
-                <tr
-                  class:cur={c.id === corpusStore.currentId}
-                  id={rowId(c.id)}
-                  tabindex="0"
-                  aria-expanded={c.id === selectedCorpusId}
-                  aria-controls={c.id === selectedCorpusId ? SETTINGS_ID : undefined}
-                  onclick={() => selectCorpus(c)}
-                  onkeydown={(e) => rowKey(e, c)}
-                >
-                  <td class="cn">{c.name}</td>
+                <!-- The whole row is a mouse target; keyboard and screen-reader users have the name button. -->
+                <tr class:cur={c.id === corpusStore.currentId} onclick={() => selectCorpus(c)}>
+                  <td>
+                    <button
+                      type="button"
+                      id={nameId(c.id)}
+                      class="cname"
+                      aria-expanded={c.id === selectedCorpusId}
+                      aria-controls={c.id === selectedCorpusId ? SETTINGS_ID : undefined}
+                      onclick={() => selectCorpus(c)}>{c.name}</button
+                    >
+                  </td>
                   <td>{languageName(c.lang)}</td>
                   <td class="num">{fmt(c.docs)}</td>
                   <td class="num">{fmt(c.tokens)}</td>
-                  <td class="actions">
-                    {#if c.id === corpusStore.currentId}
-                      <Badge kind="intb" label={t('proj.working')} />
-                    {:else}
-                      <!-- Open switches the working corpus; it must not also select the row. -->
-                      <Button
-                        ariaLabel={t('proj.open') + ' ' + c.name}
-                        disabled={busy}
-                        onclick={(e) => {
-                          e.stopPropagation();
-                          open(c);
-                        }}>{t('proj.open')}</Button
-                      >
-                    {/if}
+                  <td>
+                    <div class="actions">
+                      {#if c.id === corpusStore.currentId}
+                        <Badge kind="intb" label={t('proj.working')} />
+                      {:else}
+                        <!-- Open switches the working corpus; it must not also select the row. -->
+                        <Button
+                          ariaLabel={t('proj.open') + ' ' + c.name}
+                          disabled={busy}
+                          onclick={(e) => {
+                            e.stopPropagation();
+                            open(c);
+                          }}>{t('proj.open')}</Button
+                        >
+                      {/if}
+                    </div>
                   </td>
                 </tr>
               {/each}
@@ -413,9 +427,15 @@
           <p class="muted">{t('corpus.none')}</p>
         {/if}
       </section>
-      <!-- Keyed: each corpus opens its own panel, so closing it returns focus to that corpus's row. -->
+      <!-- Keyed: each corpus opens its own panel (focus moves into it), and closing returns to that corpus's name. -->
       {#key editing?.id}
-        <SidePanel open={editing !== null} id={SETTINGS_ID} title={t('proj.settings')} onclose={() => (selectedCorpusId = null)}>
+        <SidePanel
+          open={editing !== null}
+          id={SETTINGS_ID}
+          title={t('proj.settings')}
+          returnFocus={editing ? nameId(editing.id) : undefined}
+          onclose={() => (selectedCorpusId = null)}
+        >
           {#if editing}
             {@const c = editing}
             <form class="settings" onsubmit={saveCorpus}>
@@ -503,16 +523,20 @@
   .hint {
     padding: 0 var(--s-4) var(--s-2);
   }
-  /* The project's content and, when a corpus is selected, its settings panel beside or over it. */
+  /* The project's content and, when a corpus is selected, its settings panel beside or over it.
+     Fills the panel column: the content scrolls on its own and the settings panel stays in view. */
   .split {
     position: relative;
     display: flex;
-    min-height: 100%;
+    flex: 1;
+    min-height: 0;
   }
   .right {
     flex: 1;
     min-width: 0;
-    padding: var(--page-pad) var(--s-6);
+    /* No top padding on the scroller: the sticky table header would stick below it, with rows showing above. */
+    padding: 0 var(--s-6) var(--page-pad);
+    overflow-y: auto;
   }
   .settings {
     display: flex;
@@ -580,6 +604,7 @@
     display: flex;
     align-items: center;
     gap: var(--s-1);
+    padding-top: var(--page-pad);
   }
   header :global(button) {
     flex: none;
@@ -633,12 +658,8 @@
   tr.cur :global(.badge) {
     background: var(--panel); /* the pill stays legible on the tinted row */
   }
-  tr[aria-expanded='true'] {
+  tr:has(.cname[aria-expanded='true']) {
     box-shadow: inset 3px 0 0 var(--accent); /* literal: the selection bar width */
-  }
-  .cn {
-    font-weight: 600;
-    overflow-wrap: anywhere;
   }
   .cards {
     display: flex;
