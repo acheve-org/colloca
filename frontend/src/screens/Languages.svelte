@@ -4,6 +4,7 @@
   import { t } from '../lib/i18n';
   import { loadLanguageNames } from '../lib/context.svelte';
   import { messages } from '../lib/messages.svelte';
+  import { viewport } from '../lib/viewport.svelte';
   import { langStatus, type Dot } from '../lib/langStatus';
   import type { CatalogEntry, Corpus, LanguageSetting } from '../lib/types';
   import ActionMenu from '../lib/ui/ActionMenu.svelte';
@@ -45,14 +46,25 @@
   let panelOpen = $state(false);
   const selected = $derived(rows.find((r) => r.code === selectedCode) ?? rows[0] ?? null);
 
+  // Force re-import applies to one language's base corpus: it is switched off when another language is shown.
+  let forceFor: string | undefined;
+  $effect(() => {
+    const code = selected?.code;
+    if (code === forceFor) return;
+    forceFor = code;
+    force = false;
+  });
+
   const itemId = (code: string) => `${uid}-item-${code}`;
   const focusItem = (code: string | undefined) =>
     tick().then(() => {
       if (code) document.getElementById(itemId(code))?.focus();
     });
+  // Stacked: the list unmounts when the panel opens, so focus goes to the panel's heading.
   const choose = (code: string) => {
     selectedCode = code;
     panelOpen = true;
+    if (viewport.stacked) tick().then(() => document.getElementById(`${uid}-name`)?.focus());
   };
   // Stacked: the list comes back; put focus on the language the user had chosen.
   const back = () => {
@@ -173,11 +185,10 @@
     });
 
   // A newly added language is selected (its panel opens on stacked screens) so its model can be installed right away.
+  // A poll may overtake the reload, so the row can arrive later; until then the first language is shown.
   async function added(code: string): Promise<void> {
     await load();
-    if (!rows.some((r) => r.code === code)) return;
-    selectedCode = code;
-    panelOpen = true;
+    choose(code);
   }
 
   function askRemove(r: LanguageSetting): void {
@@ -194,6 +205,8 @@
       await del(`/api/languages/${r.code}${alsoUninstall ? '?uninstall_model=true' : ''}`);
       messages.say(t('lang.removed', { name: r.name }), 'ok');
       delete seen[r.code];
+      // Drop it now: a reload overtaken by a poll must not leave it listed and selected.
+      rows = rows.filter((x) => x.code !== r.code);
       await load();
       // The first remaining language is shown now; the list is where the user picks next. The old
       // choice is forgotten, so adding this language back does not silently select it again.
@@ -248,7 +261,7 @@
       {@const r = selected}
       <section class="lp" aria-labelledby="{uid}-name">
         <header class="ph">
-          <h2 id="{uid}-name">{r.name}</h2>
+          <h2 id="{uid}-name" tabindex="-1">{r.name}</h2>
           <Badge kind="neutral" label={r.code} />
           <span class="muted small">{usedBy(r.corpus_count)}</span>
           <div class="hactions">
@@ -498,7 +511,7 @@
     color: var(--danger);
   }
   .dot .x {
-    stroke: var(--bg);
+    stroke: var(--panel); /* the selected row's background; contrast with --danger is checked in contrast.test */
     stroke-width: 1.5;
     stroke-linecap: round;
   }

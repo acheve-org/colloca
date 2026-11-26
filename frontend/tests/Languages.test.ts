@@ -22,11 +22,19 @@ interface Call { method: string; path: string; search: string; body?: unknown }
 let calls: Call[];
 let settings: ReturnType<typeof row>[][];
 let references: Record<string, unknown>[];
+// Each /api/language-settings request takes the next gate and answers once it resolves (the answer is picked when the request is made).
+let gates: Promise<void>[];
+const hold = () => {
+  let release!: () => void;
+  gates.push(new Promise((r) => (release = r)));
+  return () => release();
+};
 const res = (status: number, body: unknown) => ({ ok: status < 400, status, statusText: 'x', json: async () => body });
 
 beforeEach(() => {
   calls = [];
   references = [];
+  gates = [];
   settings = [[row('es', 'Spanish', { corpus_count: 2 }), row('it', 'Italian', {}, { name: null, version: null, size: null }), row('fr', 'French', {}, { name: null, state: 'failed', message: 'no network' })]];
   messages.clear();
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
@@ -35,7 +43,12 @@ beforeEach(() => {
     const raw = init?.body;
     calls.push({ method, path: u.pathname, search: u.search, body: typeof raw === 'string' ? JSON.parse(raw) : raw });
     const p = u.pathname;
-    if (p === '/api/language-settings') return res(200, settings.length > 1 ? settings.shift()! : settings[0]);
+    if (p === '/api/language-settings') {
+      const body = settings.length > 1 ? settings.shift()! : settings[0];
+      const gate = gates.shift();
+      if (gate) await gate;
+      return res(200, body);
+    }
     if (p === '/api/language-catalog') return res(200, catalog);
     if (p === '/api/languages' && method === 'GET') return res(200, { es: 'Spanish', it: 'Italian', fr: 'French' });
     if (p === '/api/references') return res(200, references);
@@ -69,6 +82,8 @@ const removeItem = async (name: string) => {
   return within(screen.getByRole('menu', { name: 'Language actions' })).getByRole('menuitem', { name: 'Remove' });
 };
 const section = (lang: string, name: string) => within(card(lang)).getByRole('region', { name });
+// The name of the language whose panel is showing.
+const selectedName = () => screen.getByRole('heading', { level: 2 }).textContent!;
 
 describe('Languages', () => {
   it('lists one button per language with its name, code and three status dots', async () => {
@@ -199,6 +214,57 @@ describe('Languages', () => {
     await waitFor(() => expect(item('German')).toHaveAttribute('aria-pressed', 'true'));
     expect(item('Spanish')).toHaveAttribute('aria-pressed', 'false');
     expect(within(card('German')).getByRole('button', { name: 'Install model for German' })).toBeInTheDocument();
+  });
+
+  it('a language added while another installs is selected even when a poll overtakes the reload', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const base = [row('es', 'Spanish'), row('it', 'Italian', {}, { name: null, state: 'installing' })];
+    const withDe = [...base, row('de', 'German', {}, { name: null, version: null, size: null })];
+    settings = [base, withDe, withDe];
+    render(Languages);
+    await loaded();
+    await fireEvent.click(within(nav()).getByRole('button', { name: 'Add language' }));
+    const dlg = await screen.findByRole('dialog', { name: 'Add a language' });
+    await fireEvent.click(await within(dlg).findByRole('radio', { name: 'German' }));
+    const answerReload = hold();
+    const answerPoll = hold();
+    const before = calls.filter((c) => c.path === '/api/language-settings').length;
+    await fireEvent.click(within(dlg).getByRole('button', { name: 'Add' }));
+    // The reload after adding is in flight; a poll fires before it answers, so the reload's answer is dropped.
+    await waitFor(() => expect(calls.filter((c) => c.path === '/api/language-settings').length).toBe(before + 1));
+    await vi.advanceTimersByTimeAsync(2100);
+    expect(calls.filter((c) => c.path === '/api/language-settings').length).toBeGreaterThan(before + 1);
+    answerReload();
+    await vi.advanceTimersByTimeAsync(10);
+    answerPoll();
+    await waitFor(() => expect(item('German')).toHaveAttribute('aria-pressed', 'true'));
+    expect(card('German')).toBeInTheDocument();
+  });
+
+  it('force re-import is switched off when another language is chosen', async () => {
+    render(Languages);
+    await loaded();
+    const sw = () => within(section(selectedName(), 'Base corpus')).getByRole('switch', { name: 'Import even if the language looks wrong' });
+    await fireEvent.click(sw());
+    expect(sw()).toBeChecked();
+    await pick('Italian');
+    expect(sw()).not.toBeChecked();
+  });
+
+  it('a removed language leaves the list at once, before the reload answers', async () => {
+    const [es, it_] = settings[0];
+    settings = [settings[0], [es, it_]];
+    render(Languages);
+    await loaded();
+    await pick('French');
+    await fireEvent.click(await removeItem('French'));
+    const release = hold();
+    await fireEvent.click(within(screen.getByRole('dialog', { name: 'Remove French?' })).getByRole('button', { name: 'Remove' }));
+    await waitFor(() => expect(calls.some((c) => c.method === 'DELETE' && c.path === '/api/languages/fr')).toBe(true));
+    await waitFor(() => expect(within(nav()).queryByRole('button', { name: /^French / })).toBeNull());
+    expect(screen.queryByRole('region', { name: 'French' })).toBeNull();
+    expect(item('Spanish')).toHaveAttribute('aria-pressed', 'true');
+    release();
   });
 
   it('with no languages the panel is empty: no header and no sections', async () => {
@@ -389,6 +455,8 @@ describe('Languages stacked below 900px', () => {
     await waitFor(() => expect(card('German')).toBeInTheDocument());
     expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument();
     expect(screen.queryByRole('navigation', { name: 'Languages' })).toBeNull();
+    // The list is gone, so focus moves to the panel's heading rather than falling to the page.
+    await waitFor(() => expect(within(card('German')).getByRole('heading', { level: 2, name: 'German' })).toHaveFocus());
   });
 
   it('arriving shows the list only', async () => {
@@ -405,6 +473,7 @@ describe('Languages stacked below 900px', () => {
     await pick('Italian');
     expect(within(card('Italian')).getByText('Model not installed')).toBeInTheDocument();
     expect(screen.queryByRole('navigation', { name: 'Languages' })).toBeNull();
+    await waitFor(() => expect(within(card('Italian')).getByRole('heading', { level: 2, name: 'Italian' })).toHaveFocus());
     await fireEvent.click(screen.getByRole('button', { name: 'Back' }));
     await tick();
     expect(screen.queryByRole('region', { name: 'Italian' })).toBeNull();

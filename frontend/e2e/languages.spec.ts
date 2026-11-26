@@ -67,6 +67,8 @@ test('a language with a corpus cannot be removed', async ({ page, request }) => 
   // Inert but reachable: it takes focus, and Enter on it opens nothing.
   await expect(remove).toBeFocused();
   await page.keyboard.press('Enter');
+  await expect(page.getByRole('menu', { name: 'Language actions' })).toBeVisible();
+  await expect(remove).toBeFocused();
   await expect(page.getByRole('dialog', { name: 'Remove Italian?' })).toHaveCount(0);
 });
 

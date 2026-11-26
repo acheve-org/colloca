@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import tableSrc from '../src/lib/ui/DataTable.svelte?raw';
+import languagesSrc from '../src/screens/Languages.svelte?raw';
 import css from '../src/lib/styles/tokens.css?raw';
 import baseCss from '../src/lib/styles/base.css?raw';
 
@@ -161,6 +162,13 @@ describe('status badges on a selected DataTable row', () => {
         expect(contrast(t[k], t['--panel'])).toBeGreaterThanOrEqual(4.5);
       }
     }
+  });
+});
+
+describe('the error dot on the Languages list', () => {
+  it('draws its cross in --panel, which reads on the --danger disc in both themes', () => {
+    expect(languagesSrc).toMatch(/\.dot \.x\s*\{[^}]*stroke:\s*var\(--panel\)/);
+    for (const t of [light, dark]) expect(contrast(t['--danger'], t['--panel'])).toBeGreaterThanOrEqual(3);
   });
 });
 

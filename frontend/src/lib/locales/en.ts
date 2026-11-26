@@ -97,7 +97,6 @@ export const en: Messages = {
   'lang.removeData': 'Remove data',
   'lang.removeOcrFor': 'Remove OCR data for {name}',
   'lang.baseCorpus': 'Base corpus',
-  'lang.working': 'Working…',
   'nav.concordance': 'Concordance',
   'nav.collocations': 'Collocations',
   'nav.ngrams': 'N-grams',
