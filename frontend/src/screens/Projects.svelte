@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, tick } from 'svelte';
+  import { onMount, tick, untrack } from 'svelte';
   import { del, patch, post } from '../lib/api';
   import { languageName } from '../lib/context.svelte';
   import { corpusStore } from '../lib/corpus.svelte';
@@ -16,6 +16,8 @@
   import Field from '../lib/ui/Field.svelte';
   import ListPanel from '../lib/ui/ListPanel.svelte';
   import ReadyHint from '../lib/ui/ReadyHint.svelte';
+  import Select from '../lib/ui/Select.svelte';
+  import SidePanel from '../lib/ui/SidePanel.svelte';
   import NewCorpusDialog from './NewCorpusDialog.svelte';
 
   const errMsg = (err: unknown) => (err instanceof Error ? err.message : String(err));
@@ -28,8 +30,11 @@
   let renaming = $state(false);
   let draft = $state('');
   let pencil = $state<HTMLButtonElement | null>(null);
-  // The corpus row the user picked (Task 5 opens its settings panel); only meaningful within the shown project.
+  // The corpus row the user picked: its settings panel is open. Only meaningful within the shown project.
   let selectedCorpusId = $state<number | null>(null);
+  // The settings panel's form, reset from the corpus whenever the selection changes.
+  let setName = $state('');
+  let setProject = $state('');
   let busy = $state(false);
   let newOpen = $state(false);
   let delCorpus = $state.raw<Corpus | null>(null);
@@ -179,7 +184,51 @@
     node.select();
   };
 
+  const SETTINGS_ID = 'corpus-settings';
+  const rowId = (id: number) => `corpus-${id}`;
+  const projectValue = (c: Corpus) => (c.project_id != null && projectIds.has(c.project_id) ? String(c.project_id) : '');
+  const editing = $derived(shown.find((c) => c.id === selectedCorpusId) ?? null);
+  const projectOptions = $derived([
+    ...(setProject ? [] : [{ value: '', label: t('src.chooseProject'), disabled: true }]),
+    ...projectStore.list.map((p) => ({ value: String(p.id), label: p.name })),
+  ]);
+  const canSave = $derived(
+    !!editing && !!setName.trim() && (setName.trim() !== editing.name || setProject !== projectValue(editing)),
+  );
+  // Only a change of selection resets the form: a list reload must not wipe what the user is typing.
+  $effect(() => {
+    const id = selectedCorpusId;
+    untrack(() => {
+      const c = corpusStore.list.find((x) => x.id === id);
+      setName = c?.name ?? '';
+      setProject = c ? projectValue(c) : '';
+    });
+  });
+
   const selectCorpus = (c: Corpus) => (selectedCorpusId = c.id);
+
+  const saveCorpus = (e: SubmitEvent) => {
+    e.preventDefault();
+    const c = editing;
+    if (!c || !canSave) return;
+    const name = setName.trim();
+    const projectId = setProject ? Number(setProject) : null;
+    return run(async () => {
+      await patch(`/api/corpora/${c.id}`, { name, ...(projectId != null ? { project_id: projectId } : {}) });
+      await changed();
+      messages.say(t('src.corpusSaved'), 'ok');
+      if (projectId != null && projectId !== c.project_id) {
+        // Showing the new project resets the selection; re-select the corpus once that has run,
+        // with focus on its row so closing the panel returns there.
+        picked = projectId;
+        await tick();
+        document.getElementById(rowId(c.id))?.focus();
+        selectedCorpusId = c.id;
+      } else if (selectedCorpusId === c.id) {
+        setName = name;
+      }
+    });
+  };
   function rowKey(e: KeyboardEvent, c: Corpus): void {
     // Only the row itself: Enter or Space on its Open button must not select it.
     if (e.target !== e.currentTarget || (e.key !== 'Enter' && e.key !== ' ')) return;
@@ -187,7 +236,6 @@
     selectCorpus(c);
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- the corpus settings panel (next task) opens it
   function askDeleteCorpus(c: Corpus): void {
     delCorpus = c;
     delCorpusOpen = true;
@@ -199,6 +247,7 @@
     if (!c) return;
     await run(async () => {
       await del(`/api/corpora/${c.id}`);
+      if (selectedCorpusId === c.id) selectedCorpusId = null;
       await changed();
     });
   }
@@ -243,117 +292,152 @@
   {/snippet}
 
   {#snippet panel()}
-    <section class="right" class:cardsOn={viewport.narrow}>
-      <header>
-        {#if selected && renaming}
-          {@const p = selected}
-          <input
-            class="rename"
-            bind:value={draft}
-            maxlength="120"
-            use:focusOnMount
-            aria-label={t('proj.nameOf', { name: p.name })}
-            onkeydown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                renameProject(p);
-              } else if (e.key === 'Escape') {
-                e.preventDefault();
-                cancelRenameProject();
-              }
-            }}
-          />
-        {:else}
-          <h2>{heading}</h2>
-          {#if selected}
+    <div class="split">
+      <section class="right" class:cardsOn={viewport.narrow}>
+        <header>
+          {#if selected && renaming}
             {@const p = selected}
-            <!-- Never disabled: focus comes back here right after a save, while busy is still set. -->
-            <button type="button" class="pencil" aria-label={t('proj.renameProject')} bind:this={pencil} onclick={() => startRenameProject(p)}>✎</button>
-          {/if}
-        {/if}
-        <div class="hactions">
-          <Button variant="primary" disabled={!projectStore.list.length} onclick={() => (newOpen = true)}>{t('corpus.new')}</Button>
-          {#if selected}
-            {@const p = selected}
-            <ActionMenu
-              label={t('proj.projectMenu')}
-              disabled={busy}
-              items={[{ label: t('common.delete'), danger: true, onclick: () => askDeleteProject(p) }]}
+            <input
+              class="rename"
+              bind:value={draft}
+              maxlength="120"
+              use:focusOnMount
+              aria-label={t('proj.nameOf', { name: p.name })}
+              onkeydown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  renameProject(p);
+                } else if (e.key === 'Escape') {
+                  e.preventDefault();
+                  cancelRenameProject();
+                }
+              }}
             />
+          {:else}
+            <h2>{heading}</h2>
+            {#if selected}
+              {@const p = selected}
+              <!-- Never disabled: focus comes back here right after a save, while busy is still set. -->
+              <button type="button" class="pencil" aria-label={t('proj.renameProject')} bind:this={pencil} onclick={() => startRenameProject(p)}>✎</button>
+            {/if}
           {/if}
-        </div>
-      </header>
-      {#if shown.length && viewport.narrow}
-        <ul class="cards">
-          {#each shown as c (c.id)}
-            <li class="ccard">
-              <button type="button" class="cname" aria-pressed={c.id === selectedCorpusId} onclick={() => selectCorpus(c)}>{c.name}</button>
-              <div class="cmeta">
-                <span>{languageName(c.lang)}</span>
-                <span>{t('proj.colDocs')} {fmt(c.docs)}</span>
-                <span>{t('proj.colWords')} {fmt(c.tokens)}</span>
-              </div>
-              {#if c.id === corpusStore.currentId}
-                <Badge kind="intb" label={t('proj.working')} />
-              {:else}
-                <Button variant="primary" ariaLabel={t('proj.open') + ' ' + c.name} disabled={busy} onclick={() => open(c)}>{t('proj.open')}</Button>
-              {/if}
-            </li>
-          {/each}
-        </ul>
-      {:else if shown.length}
-        <table aria-label={tableLabel}>
-          <thead>
-            <tr>
-              <th>{t('proj.colCorpus')}</th>
-              <th>{t('proj.colLang')}</th>
-              <th class="num">{t('proj.colDocs')}</th>
-              <th class="num">{t('proj.colWords')}</th>
-              <th><span class="sr">{t('proj.colActions')}</span></th>
-            </tr>
-          </thead>
-          <tbody>
+          <div class="hactions">
+            <Button variant="primary" disabled={!projectStore.list.length} onclick={() => (newOpen = true)}>{t('corpus.new')}</Button>
+            {#if selected}
+              {@const p = selected}
+              <ActionMenu
+                label={t('proj.projectMenu')}
+                disabled={busy}
+                items={[{ label: t('proj.deleteProject'), danger: true, onclick: () => askDeleteProject(p) }]}
+              />
+            {/if}
+          </div>
+        </header>
+        {#if shown.length && viewport.narrow}
+          <ul class="cards">
             {#each shown as c (c.id)}
-              <tr
-                class:cur={c.id === corpusStore.currentId}
-                tabindex="0"
-                aria-selected={c.id === selectedCorpusId}
-                onclick={() => selectCorpus(c)}
-                onkeydown={(e) => rowKey(e, c)}
-              >
-                <td class="cn">{c.name}</td>
-                <td>{languageName(c.lang)}</td>
-                <td class="num">{fmt(c.docs)}</td>
-                <td class="num">{fmt(c.tokens)}</td>
-                <td class="actions">
-                  {#if c.id === corpusStore.currentId}
-                    <Badge kind="intb" label={t('proj.working')} />
-                  {:else}
-                    <!-- Open switches the working corpus; it must not also select the row. -->
-                    <Button
-                      ariaLabel={t('proj.open') + ' ' + c.name}
-                      disabled={busy}
-                      onclick={(e) => {
-                        e.stopPropagation();
-                        open(c);
-                      }}>{t('proj.open')}</Button
-                    >
-                  {/if}
-                </td>
-              </tr>
+              <li class="ccard">
+                <button
+                  type="button"
+                  id={rowId(c.id)}
+                  class="cname"
+                  aria-expanded={c.id === selectedCorpusId}
+                  aria-controls={c.id === selectedCorpusId ? SETTINGS_ID : undefined}
+                  onclick={() => selectCorpus(c)}>{c.name}</button
+                >
+                <div class="cmeta">
+                  <span>{languageName(c.lang)}</span>
+                  <span>{t('proj.colDocs')} {fmt(c.docs)}</span>
+                  <span>{t('proj.colWords')} {fmt(c.tokens)}</span>
+                </div>
+                {#if c.id === corpusStore.currentId}
+                  <Badge kind="intb" label={t('proj.working')} />
+                {:else}
+                  <Button variant="primary" ariaLabel={t('proj.open') + ' ' + c.name} disabled={busy} onclick={() => open(c)}>{t('proj.open')}</Button>
+                {/if}
+              </li>
             {/each}
-          </tbody>
-        </table>
-      {:else if selected}
-        <EmptyCard icon="folder" title={t('proj.noCorpusTitle')} hint={t('proj.noCorpusHint')}>
-          {#snippet actions()}
-            <Button variant="primary" onclick={() => (newOpen = true)}>{t('corpus.new')}</Button>
+          </ul>
+        {:else if shown.length}
+          <table aria-label={tableLabel}>
+            <thead>
+              <tr>
+                <th>{t('proj.colCorpus')}</th>
+                <th>{t('proj.colLang')}</th>
+                <th class="num">{t('proj.colDocs')}</th>
+                <th class="num">{t('proj.colWords')}</th>
+                <th><span class="sr">{t('proj.colActions')}</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              {#each shown as c (c.id)}
+                <tr
+                  class:cur={c.id === corpusStore.currentId}
+                  id={rowId(c.id)}
+                  tabindex="0"
+                  aria-expanded={c.id === selectedCorpusId}
+                  aria-controls={c.id === selectedCorpusId ? SETTINGS_ID : undefined}
+                  onclick={() => selectCorpus(c)}
+                  onkeydown={(e) => rowKey(e, c)}
+                >
+                  <td class="cn">{c.name}</td>
+                  <td>{languageName(c.lang)}</td>
+                  <td class="num">{fmt(c.docs)}</td>
+                  <td class="num">{fmt(c.tokens)}</td>
+                  <td class="actions">
+                    {#if c.id === corpusStore.currentId}
+                      <Badge kind="intb" label={t('proj.working')} />
+                    {:else}
+                      <!-- Open switches the working corpus; it must not also select the row. -->
+                      <Button
+                        ariaLabel={t('proj.open') + ' ' + c.name}
+                        disabled={busy}
+                        onclick={(e) => {
+                          e.stopPropagation();
+                          open(c);
+                        }}>{t('proj.open')}</Button
+                      >
+                    {/if}
+                  </td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        {:else if selected}
+          <EmptyCard icon="folder" title={t('proj.noCorpusTitle')} hint={t('proj.noCorpusHint')}>
+            {#snippet actions()}
+              <Button variant="primary" onclick={() => (newOpen = true)}>{t('corpus.new')}</Button>
+            {/snippet}
+          </EmptyCard>
+        {:else}
+          <p class="muted">{t('corpus.none')}</p>
+        {/if}
+      </section>
+      <!-- Keyed: each corpus opens its own panel, so closing it returns focus to that corpus's row. -->
+      {#key editing?.id}
+        <SidePanel open={editing !== null} id={SETTINGS_ID} title={t('proj.settings')} onclose={() => (selectedCorpusId = null)}>
+          {#if editing}
+            {@const c = editing}
+            <form class="settings" onsubmit={saveCorpus}>
+              <Field label={t('src.corpusName')}>
+                <input bind:value={setName} required maxlength="120" />
+              </Field>
+              <Field label={t('src.project')}>
+                <Select label={t('src.project')} bind:value={setProject} options={projectOptions} />
+              </Field>
+              <p class="muted">{t('proj.summary', { lang: languageName(c.lang), docs: fmt(c.docs), words: fmt(c.tokens) })}</p>
+              <div><Button type="submit" variant="primary" disabled={busy || !canSave}>{t('common.save')}</Button></div>
+            </form>
+          {/if}
+          {#snippet footer()}
+            {#if editing}
+              {@const c = editing}
+              <Button variant="danger" disabled={busy} onclick={() => askDeleteCorpus(c)}>{t('proj.deleteCorpus')}</Button>
+            {/if}
           {/snippet}
-        </EmptyCard>
-      {:else}
-        <p class="muted">{t('corpus.none')}</p>
-      {/if}
-    </section>
+        </SidePanel>
+      {/key}
+    </div>
   {/snippet}
 </ListPanel>
 
@@ -419,8 +503,24 @@
   .hint {
     padding: 0 var(--s-4) var(--s-2);
   }
+  /* The project's content and, when a corpus is selected, its settings panel beside or over it. */
+  .split {
+    position: relative;
+    display: flex;
+    min-height: 100%;
+  }
   .right {
+    flex: 1;
+    min-width: 0;
     padding: var(--page-pad) var(--s-6);
+  }
+  .settings {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s-3);
+  }
+  .settings input {
+    width: 100%;
   }
   h2 {
     margin: 0;
@@ -533,7 +633,7 @@
   tr.cur :global(.badge) {
     background: var(--panel); /* the pill stays legible on the tinted row */
   }
-  tr[aria-selected='true'] {
+  tr[aria-expanded='true'] {
     box-shadow: inset 3px 0 0 var(--accent); /* literal: the selection bar width */
   }
   .cn {
@@ -569,7 +669,7 @@
     background: none;
     border: 0;
   }
-  .cname[aria-pressed='true'] {
+  .cname[aria-expanded='true'] {
     text-decoration: underline;
     text-decoration-color: var(--accent);
     text-decoration-thickness: 2px; /* literal: the selection underline weight */

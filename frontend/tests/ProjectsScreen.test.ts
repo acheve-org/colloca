@@ -84,9 +84,9 @@ const openProjectMenu = async () => {
   await tick();
   return screen.getByRole('menu', { name: 'Project actions' });
 };
-// The project's ⋯ menu: Delete opens the existing delete-project dialog.
+// The project's ⋯ menu: Delete project… opens the existing delete-project dialog.
 const askDeleteProject = async () => {
-  await fireEvent.click(within(await openProjectMenu()).getByRole('menuitem', { name: 'Delete' }));
+  await fireEvent.click(within(await openProjectMenu()).getByRole('menuitem', { name: 'Delete project…' }));
   await tick();
 };
 
@@ -203,7 +203,7 @@ describe('Projects screen', () => {
     expect(screen.getByRole('table', { name: 'Corpora in Acme' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Rename project' })).toBeInTheDocument();
     const menu = await openProjectMenu();
-    expect(within(menu).getAllByRole('menuitem').map((i) => i.textContent?.trim())).toEqual(['Delete']);
+    expect(within(menu).getAllByRole('menuitem').map((i) => i.textContent?.trim())).toEqual(['Delete project…']);
   });
 
   it('✎ swaps the heading for an input; Enter renames the project with PATCH', async () => {
@@ -261,29 +261,29 @@ describe('Projects screen', () => {
     expect(Object.values(src)[0] as string).toMatch(/tr\.cur[^}]*background:\s*var\(--accent-soft\)/s);
   });
 
-  it('clicking a row selects it; clicking Open does not', async () => {
+  it('clicking a row expands it; clicking Open does not', async () => {
     await show();
-    for (const r of rows()) expect(r).toHaveAttribute('aria-selected', 'false');
+    for (const r of rows()) expect(r).toHaveAttribute('aria-expanded', 'false');
     expect(rowOf('A2')).toHaveAttribute('tabindex', '0');
     await fireEvent.click(rowOf('A2'));
-    expect(rowOf('A2')).toHaveAttribute('aria-selected', 'true');
-    expect(rowOf('A1')).toHaveAttribute('aria-selected', 'false');
+    expect(rowOf('A2')).toHaveAttribute('aria-expanded', 'true');
+    expect(rowOf('A1')).toHaveAttribute('aria-expanded', 'false');
     await fireEvent.click(rowOf('A1'));
-    expect(rowOf('A1')).toHaveAttribute('aria-selected', 'true');
-    expect(rowOf('A2')).toHaveAttribute('aria-selected', 'false');
+    expect(rowOf('A1')).toHaveAttribute('aria-expanded', 'true');
+    expect(rowOf('A2')).toHaveAttribute('aria-expanded', 'false');
     await fireEvent.click(within(rowOf('A2')).getByRole('button', { name: 'Open A2' }));
     await waitFor(() => expect(corpusStore.currentId).toBe(2));
-    expect(rowOf('A2')).toHaveAttribute('aria-selected', 'false');
-    expect(rowOf('A1')).toHaveAttribute('aria-selected', 'true');
+    expect(rowOf('A2')).toHaveAttribute('aria-expanded', 'false');
+    expect(rowOf('A1')).toHaveAttribute('aria-expanded', 'true');
   });
 
-  it('Enter and Space on a row select it', async () => {
+  it('Enter and Space on a row expand it', async () => {
     await show();
     await fireEvent.keyDown(rowOf('A2'), { key: 'Enter' });
-    expect(rowOf('A2')).toHaveAttribute('aria-selected', 'true');
+    expect(rowOf('A2')).toHaveAttribute('aria-expanded', 'true');
     await fireEvent.keyDown(rowOf('A1'), { key: ' ' });
-    expect(rowOf('A1')).toHaveAttribute('aria-selected', 'true');
-    expect(rowOf('A2')).toHaveAttribute('aria-selected', 'false');
+    expect(rowOf('A1')).toHaveAttribute('aria-expanded', 'true');
+    expect(rowOf('A2')).toHaveAttribute('aria-expanded', 'false');
   });
 
   it('deleting the project while renaming it leaves no rename input and sends no PATCH', async () => {
@@ -305,14 +305,14 @@ describe('Projects screen', () => {
   it('switching the working corpus to another project (nothing picked) clears the corpus selection', async () => {
     await show();
     await fireEvent.click(rowOf('A2'));
-    expect(rowOf('A2')).toHaveAttribute('aria-selected', 'true');
+    expect(rowOf('A2')).toHaveAttribute('aria-expanded', 'true');
     corpusStore.currentId = 3; // B1, in Bolt: the panel follows the working corpus
     await tick();
     expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent(/^Bolt$/);
-    for (const r of rows()) expect(r).toHaveAttribute('aria-selected', 'false');
+    for (const r of rows()) expect(r).toHaveAttribute('aria-expanded', 'false');
     corpusStore.currentId = 1; // back to Acme: the old selection does not come back
     await tick();
-    for (const r of rows()) expect(r).toHaveAttribute('aria-selected', 'false');
+    for (const r of rows()) expect(r).toHaveAttribute('aria-expanded', 'false');
   });
 
   it('choosing another project clears the corpus selection', async () => {
@@ -321,7 +321,7 @@ describe('Projects screen', () => {
     await fireEvent.click(screen.getByRole('button', { name: /^Bolt/ }));
     await fireEvent.click(screen.getByRole('button', { name: /^Acme/ }));
     await tick();
-    for (const r of rows()) expect(r).toHaveAttribute('aria-selected', 'false');
+    for (const r of rows()) expect(r).toHaveAttribute('aria-expanded', 'false');
   });
 
   it('deleting a project with corpora needs a target, moves them, then deletes', async () => {
@@ -563,21 +563,22 @@ describe('Projects screen corpora as cards below 640px', () => {
     expect(Object.values(src)[0] as string).toMatch(/\.cname[^}]*overflow-wrap:\s*anywhere/s);
   });
 
-  it('cards have no ⋯ menu; the name is a button that selects the corpus', async () => {
+  it('cards have no ⋯ menu; the name is a button that expands the corpus', async () => {
     await show();
     for (const c of cards()) expect(within(c).queryByRole('button', { name: /actions/i })).toBeNull();
     const name = within(cardOf('A2')).getByRole('button', { name: 'A2' });
-    expect(name).toHaveAttribute('aria-pressed', 'false');
+    expect(name).toHaveAttribute('aria-expanded', 'false');
     await fireEvent.click(name);
-    expect(name).toHaveAttribute('aria-pressed', 'true');
-    expect(within(cardOf('A1')).getByRole('button', { name: 'A1' })).toHaveAttribute('aria-pressed', 'false');
+    expect(name).toHaveAttribute('aria-expanded', 'true');
+    expect(name).toHaveAttribute('aria-controls', screen.getByRole('complementary', { name: 'Corpus settings' }).id);
+    expect(within(cardOf('A1')).getByRole('button', { name: 'A1' })).toHaveAttribute('aria-expanded', 'false');
   });
 
   it('Open on a card does not select it', async () => {
     await show();
     await fireEvent.click(within(cardOf('A2')).getByRole('button', { name: 'Open A2' }));
     await waitFor(() => expect(corpusStore.currentId).toBe(2));
-    expect(within(cardOf('A2')).getByRole('button', { name: 'A2' })).toHaveAttribute('aria-pressed', 'false');
+    expect(within(cardOf('A2')).getByRole('button', { name: 'A2' })).toHaveAttribute('aria-expanded', 'false');
   });
 
   it('the project menu is still there, and its label is translated', async () => {
@@ -610,4 +611,122 @@ describe('Projects screen corpora as cards below 640px', () => {
     expect(screen.queryAllByRole('listitem').filter((li) => li.classList.contains('ccard'))).toHaveLength(0);
   });
 
+});
+
+describe('Projects screen corpus settings panel', () => {
+  const panel = () => screen.getByRole('complementary', { name: 'Corpus settings' });
+  const nameField = () => within(panel()).getByLabelText('Corpus name');
+  const projectField = () => within(panel()).getByLabelText('Project');
+  const save = () => within(panel()).getByRole('button', { name: 'Save' });
+  const patches = () => calls.filter((c) => c.method === 'PATCH');
+
+  it('selecting a row opens the panel with the corpus name, project and summary', async () => {
+    await loadLanguageNames();
+    await show();
+    expect(screen.queryByRole('complementary')).toBeNull();
+    await fireEvent.click(rowOf('A2'));
+    await tick();
+    expect(nameField()).toHaveValue('A2');
+    expect(nameField()).toBeRequired();
+    expect(nameField()).toHaveAttribute('maxlength', '120');
+    expect(projectField()).toHaveValue('7');
+    expect(within(projectField()).getAllByRole('option').map((o) => o.textContent)).toEqual(['Acme', 'Bolt', 'Empty']);
+    expect(panel()).toHaveTextContent('Spanish · 3 documents · 1,002 words');
+    expect(rowOf('A2')).toHaveAttribute('aria-expanded', 'true');
+    expect(rowOf('A2')).toHaveAttribute('aria-controls', panel().id);
+    expect(rowOf('A1')).not.toHaveAttribute('aria-controls');
+  });
+
+  it('Save sends one PATCH with name and project_id and says Corpus saved.', async () => {
+    await show();
+    await fireEvent.click(rowOf('A2'));
+    await tick();
+    await fireEvent.input(nameField(), { target: { value: ' A2 renamed ' } });
+    await fireEvent.click(save());
+    await waitFor(() => expect(messages.current).toEqual({ text: 'Corpus saved.', kind: 'ok' }));
+    expect(patches()).toEqual([{ method: 'PATCH', path: '/api/corpora/2', body: { name: 'A2 renamed', project_id: 7 } }]);
+    await waitFor(() => expect(within(rowOf('A2 renamed')).getByText('A2 renamed')).toBeInTheDocument());
+  });
+
+  it('Save is disabled when nothing changed and when the name is blank', async () => {
+    await show();
+    await fireEvent.click(rowOf('A2'));
+    await tick();
+    expect(save()).toBeDisabled();
+    await fireEvent.input(nameField(), { target: { value: 'Other' } });
+    expect(save()).toBeEnabled();
+    await fireEvent.input(nameField(), { target: { value: '   ' } });
+    expect(save()).toBeDisabled();
+    await fireEvent.input(nameField(), { target: { value: 'A2' } });
+    expect(save()).toBeDisabled();
+    await fireEvent.change(projectField(), { target: { value: '8' } });
+    expect(save()).toBeEnabled();
+  });
+
+  it('moving the corpus to another project selects that project and keeps the panel on the corpus', async () => {
+    await show();
+    await fireEvent.click(rowOf('A2'));
+    await tick();
+    await fireEvent.change(projectField(), { target: { value: '8' } });
+    await fireEvent.click(save());
+    await waitFor(() => expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent(/^Bolt$/));
+    expect(patches()).toEqual([{ method: 'PATCH', path: '/api/corpora/2', body: { name: 'A2', project_id: 8 } }]);
+    await waitFor(() => expect(rowOf('A2')).toHaveAttribute('aria-expanded', 'true'));
+    expect(screen.getByRole('button', { name: /^Bolt/ })).toHaveAttribute('aria-pressed', 'true');
+    expect(nameField()).toHaveValue('A2');
+    expect(projectField()).toHaveValue('8');
+    expect(save()).toBeDisabled();
+  });
+
+  it('selecting another row resets the form to that corpus', async () => {
+    await show();
+    await fireEvent.click(rowOf('A2'));
+    await tick();
+    await fireEvent.input(nameField(), { target: { value: 'Half typed' } });
+    await fireEvent.click(rowOf('A1'));
+    await tick();
+    expect(nameField()).toHaveValue('A1');
+    expect(save()).toBeDisabled();
+  });
+
+  it('Delete corpus… confirms, then DELETEs and closes the panel', async () => {
+    await show();
+    await fireEvent.click(rowOf('A2'));
+    await tick();
+    await fireEvent.click(within(panel()).getByRole('button', { name: 'Delete corpus…' }));
+    await tick();
+    const dlg = screen.getByRole('dialog', { name: 'Delete corpus' });
+    expect(dlg).toHaveTextContent('Move corpus "A2"');
+    expect(calls.some((c) => c.method === 'DELETE')).toBe(false);
+    corpora = corpora.filter((c) => c.id !== 2); // the server no longer lists it after the DELETE
+    await fireEvent.click(within(dlg).getByRole('button', { name: 'Delete' }));
+    await waitFor(() => expect(calls.some((c) => c.method === 'DELETE' && c.path === '/api/corpora/2')).toBe(true));
+    await waitFor(() => expect(screen.queryByRole('complementary')).toBeNull());
+  });
+
+  it('Esc closes the panel and focuses the row', async () => {
+    await show();
+    rowOf('A2').focus();
+    await fireEvent.click(rowOf('A2'));
+    await tick();
+    expect(nameField()).toHaveFocus();
+    await fireEvent.keyDown(nameField(), { key: 'Escape' });
+    await tick();
+    expect(screen.queryByRole('complementary')).toBeNull();
+    expect(rowOf('A2')).toHaveFocus();
+    expect(rowOf('A2')).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('narrow: tapping the card name opens the panel', async () => {
+    __setViewportForTests({ narrow: true });
+    try {
+      await show();
+      const card = screen.getAllByRole('listitem').find((li) => li.classList.contains('ccard') && within(li).queryByText('A2'))!;
+      await fireEvent.click(within(card).getByRole('button', { name: 'A2' }));
+      await tick();
+      expect(nameField()).toHaveValue('A2');
+    } finally {
+      __setViewportForTests({ narrow: false });
+    }
+  });
 });

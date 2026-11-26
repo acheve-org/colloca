@@ -5,12 +5,14 @@
 
   interface Props {
     open: boolean;
+    /** For the opener's aria-controls. */
+    id?: string;
     title: string;
     onclose?: () => void;
     children: Snippet;
     footer?: Snippet;
   }
-  let { open = $bindable(), title, onclose, children, footer }: Props = $props();
+  let { open = $bindable(), id, title, onclose, children, footer }: Props = $props();
 
   const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
@@ -43,7 +45,7 @@
 
 {#if open}
   <!-- svelte-ignore a11y_no_noninteractive_element_interactions (Esc anywhere inside closes the panel) -->
-  <aside aria-labelledby="{uid}-t" {onkeydown}>
+  <aside {id} aria-labelledby="{uid}-t" {onkeydown}>
     <header>
       <h3 id="{uid}-t" tabindex="-1" bind:this={heading}>{title}</h3>
       <Button ariaLabel={t('common.close')} onclick={close}>×</Button>
