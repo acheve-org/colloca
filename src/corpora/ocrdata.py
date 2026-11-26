@@ -75,6 +75,35 @@ def tessdata_args(codes: list[str]) -> list[str]:
 FETCH_TIMEOUT_S = 60       # per socket operation: a stalled connection must end as "failed", not hang forever
 
 
+def _remote_size(url: str) -> int | None:
+    """Size of the file at `url` (HEAD request); None when the server can't be reached or doesn't say."""
+    req = urllib.request.Request(url, method="HEAD")  # noqa: S310 - fixed https GitHub URL from the catalog
+    try:
+        with urllib.request.urlopen(req, timeout=FETCH_TIMEOUT_S) as resp:  # noqa: S310
+            length = resp.headers.get("Content-Length")
+    except OSError:
+        return None
+    return int(length) if length and length.isdigit() else None
+
+
+def _source_size(tess: str) -> int | None:
+    """Size of the data file the install would copy (TESSDATA_FILES) or download."""
+    offline = os.environ.get("TESSDATA_FILES")
+    if offline:
+        src = Path(offline) / f"{tess}.traineddata"
+        return src.stat().st_size if src.is_file() else None
+    return _remote_size(langcatalog.tessdata_url(tess))
+
+
+def already_installed(tess: str) -> bool:
+    """The app's folder already holds this data file with the same size as the source, so there is nothing to
+    download. (tessdata files carry no version; the catalog always points at the same `tessdata_fast` set.)"""
+    have = data_dir() / f"{tess}.traineddata"
+    if not have.is_file():
+        return False
+    return have.stat().st_size == _source_size(tess)
+
+
 def _fetch(url: str, dest: Path) -> None:
     with urllib.request.urlopen(url, timeout=FETCH_TIMEOUT_S) as resp, dest.open("wb") as out:  # noqa: S310
         shutil.copyfileobj(resp, out)       # the URL is a fixed https GitHub URL built from the catalog
@@ -95,6 +124,9 @@ def _do_install(code: str, tess: str) -> None:
     folder = data_dir()
     part = folder / f"{tess}.traineddata.part"
     try:
+        if already_installed(tess):
+            _set(code, "idle")
+            return
         folder.mkdir(parents=True, exist_ok=True)
         offline = os.environ.get("TESSDATA_FILES")
         if offline:

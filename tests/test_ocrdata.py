@@ -37,6 +37,41 @@ def test_install_downloads_catalog_url_to_temp_then_renames(tdir, monkeypatch):
     assert ocrdata.state("es")["state"] == "idle"
 
 
+def test_install_skips_download_when_file_matches_remote_size(tdir, monkeypatch):
+    tdir.mkdir(parents=True)
+    (tdir / "spa.traineddata").write_bytes(b"data")
+    monkeypatch.setattr(ocrdata, "_remote_size", lambda url: 4)
+    monkeypatch.setattr(ocrdata, "_fetch", lambda *a: pytest.fail("must not download"))
+    ocrdata.install("es")
+    wait("es")
+    assert ocrdata.state("es")["state"] == "idle"
+    assert (tdir / "spa.traineddata").read_bytes() == b"data"
+
+
+@pytest.mark.parametrize("remote", [99, None])
+def test_install_downloads_when_size_differs_or_is_unknown(tdir, monkeypatch, remote):
+    tdir.mkdir(parents=True)
+    (tdir / "spa.traineddata").write_bytes(b"old")
+    monkeypatch.setattr(ocrdata, "_remote_size", lambda url: remote)
+    monkeypatch.setattr(ocrdata, "_fetch", lambda url, dest: dest.write_bytes(b"new data"))
+    ocrdata.install("es")
+    wait("es")
+    assert (tdir / "spa.traineddata").read_bytes() == b"new data"
+
+
+def test_offline_install_skips_copy_when_file_matches_source_size(tdir, tmp_path, monkeypatch):
+    src = tmp_path / "files"
+    src.mkdir()
+    (src / "ita.traineddata").write_bytes(b"offline")
+    tdir.mkdir(parents=True)
+    (tdir / "ita.traineddata").write_bytes(b"present")      # same size
+    monkeypatch.setenv("TESSDATA_FILES", str(src))
+    monkeypatch.setattr(ocrdata.shutil, "copyfile", lambda *a: pytest.fail("must not copy"))
+    ocrdata.install("it")
+    wait("it")
+    assert (tdir / "ita.traineddata").read_bytes() == b"present"
+
+
 def test_failed_download_leaves_no_file(tdir, monkeypatch):
     def fetch(url, dest):
         dest.write_bytes(b"half")
