@@ -111,6 +111,7 @@ def blocks(conn, doc_id: int, start: int = 0, limit: int = 100) -> dict:
                 "SELECT seg, start_pos, end_pos FROM segments WHERE doc_id=? AND seg BETWEEN ? AND ?",
                 (doc["pair_doc_id"], spans[0]["seg"], spans[-1]["seg"]))}
         out = []
+        # An aligned block's n is its seg, numbered contiguously from 0 (which the partner BETWEEN relies on).
         for sp in spans:
             other = partner.get(sp["seg"])
             out.append({"n": sp["seg"], "text": parallel.segment_text(conn, doc_id, sp["start_pos"], sp["end_pos"]),

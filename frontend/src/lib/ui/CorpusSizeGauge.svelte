@@ -22,6 +22,7 @@
       class="pill"
       class:warn={size.warn}
       aria-expanded={open}
+      aria-controls={open ? `${uid}-pop` : undefined}
       bind:this={trigger}
       onclick={() => (open = !open)}
     >
@@ -32,7 +33,7 @@
       <span aria-hidden="true">▾</span>
     </button>
     {#if open}
-      <div class="pop" role="group" aria-labelledby="{uid}-heading" use:dismiss={{ close: () => (open = false), trigger }}>
+      <div class="pop" id="{uid}-pop" role="group" aria-labelledby="{uid}-heading" use:dismiss={{ close: () => (open = false), trigger }}>
         <p class="heading" id="{uid}-heading">
           {t('size.heading', { total: fmt(size.total), sentence: t(`size.sentence.${size.band}`) })}
         </p>
@@ -40,7 +41,7 @@
           {#each size.rows as r (r.key)}
             <li>
               <span>{t(`size.row.${r.key}`)}</span>
-              <span class={r.level}><span aria-hidden="true">{r.level === 'ok' ? '✓' : '~'}</span> {t(r.note)}</span>
+              <span class={r.level}><span aria-hidden="true">{r.level === 'ok' ? '✓' : '~'}</span> {t(r.note, r.vars)}</span>
             </li>
           {/each}
         </ul>

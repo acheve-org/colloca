@@ -15,30 +15,36 @@
     docs: number;
   }
 
-  // card: the card itself. disclosure: the card in a collapsed <details>. button: an "Export TMX" button
-  // opening the card in a dialog. Whatever the mode, it exists only while there are partners.
-  let { mode = 'card' }: { mode?: 'card' | 'disclosure' | 'button' } = $props();
+  // card: the card itself. button: an "Export TMX" button opening the form in a dialog. Whatever the mode,
+  // it exists only while there are partners.
+  let { mode = 'card' }: { mode?: 'card' | 'button' } = $props();
   const uid = $props.id();
   let partners = $state.raw<Partner[]>([]);
   let choice = $state('');
   let markup = $state(true);
   let open = $state(false);
 
+  // No partners, no button: a dialog left open would come back open with the next partners.
+  function setPartners(rows: Partner[]): void {
+    partners = rows;
+    if (!rows.length) open = false;
+  }
+
   // The corpora that hold the translations of this corpus's aligned documents (none: the card is not shown).
   $effect(() => {
     const id = corpusStore.currentId;
     void corpusStore.aligned;
     if (id === null || !corpusStore.aligned) {
-      partners = [];
+      setPartners([]);
       return;
     }
     get<Partner[]>(`/api/corpora/${id}/aligned-partners`)
       .then((rows) => {
         if (corpusStore.currentId !== id) return;
-        partners = rows;
+        setPartners(rows);
         if (!rows.some((p) => String(p.id) === choice)) choice = rows[0] ? String(rows[0].id) : '';
       })
-      .catch(() => (partners = []));
+      .catch(() => setPartners([]));
   });
 
   const options = $derived(partners.map((p) => ({ value: String(p.id), label: `${p.name} [${p.lang}]` })));
@@ -79,30 +85,12 @@
         <Button onclick={() => (open = false)}>{t('common.close')}</Button>
       {/snippet}
     </Dialog>
-  {:else if mode === 'disclosure'}
-    <details class="disc tmx">
-      <summary>{t('tmx.title')}</summary>
-      <div class="inner">{@render card()}</div>
-    </details>
   {:else}
     {@render card()}
   {/if}
 {/if}
 
 <style>
-  .disc {
-    flex: none;
-    padding: var(--s-1) var(--s-3);
-    border-top: 1px solid var(--line);
-    font-size: var(--fs-small);
-  }
-  .disc summary {
-    cursor: pointer;
-    font-weight: 600;
-  }
-  .inner {
-    padding: var(--s-2) 0;
-  }
   .card {
     display: flex;
     flex-direction: column;

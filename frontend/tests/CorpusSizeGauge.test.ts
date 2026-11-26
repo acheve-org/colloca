@@ -34,10 +34,12 @@ describe('CorpusSizeGauge', () => {
     render(CorpusSizeGauge, { docs: balanced });
     await fireEvent.click(pill());
     expect(pill()).toHaveAttribute('aria-expanded', 'true');
+    expect(popover()!.id).not.toBe('');
+    expect(pill()).toHaveAttribute('aria-controls', popover()!.id);
     const g = screen.getByRole('group', { name: '182,400 words: enough for most analyses on core terms.' });
     expect(g).toHaveTextContent('Concordance, frequency');
     expect(g).toHaveTextContent('✓ core terms');
-    expect(g).toHaveTextContent('~ rough below 200k');
+    expect(g).toHaveTextContent('~ rough below 200,000');
     expect(g).toHaveTextContent('Next band (solid) at 250,000: about 67,600 more words.');
     expect(g).not.toHaveTextContent('of the words');
   });

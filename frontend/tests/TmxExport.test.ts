@@ -67,6 +67,17 @@ describe('TmxExport', () => {
       expect(within(dlg).getByRole('switch', { name: 'keep inline markup' })).toBeInTheDocument();
     });
 
+    it('closes the dialog when the partners go away, so it does not come back open', async () => {
+      render(TmxExport, { mode: 'button' });
+      await fireEvent.click(await screen.findByRole('button', { name: 'Export TMX' }));
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+      corpusStore.aligned = false;
+      await waitFor(() => expect(screen.queryByRole('button', { name: 'Export TMX' })).toBeNull());
+      corpusStore.aligned = true;
+      await screen.findByRole('button', { name: 'Export TMX' });
+      expect(screen.queryByRole('dialog')).toBeNull();
+    });
+
     it('shows no button when the corpus has no partner', async () => {
       partners = [];
       render(TmxExport, { mode: 'button' });

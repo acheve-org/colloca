@@ -38,7 +38,8 @@
   let seq = 0;
   // The page request on its way, so that loading the whole document waits for it instead of asking twice.
   let inflight: Promise<void> | null = null;
-  let loadingAll = false;
+  // The document (its seq) whose remaining pages are being loaded for find, if any.
+  let loadingAll: number | null = null;
 
   // Find in document: the query, and which match is current.
   let query = $state('');
@@ -65,7 +66,13 @@
     return { byBlock, count };
   });
   const findStatus = $derived(
-    !finding || more ? '' : hits.count ? t('reader.findCount', { n: current + 1, total: hits.count }) : t('reader.findNone'),
+    !finding
+      ? ''
+      : more
+        ? pageError === null ? t('reader.findLoading') : ''
+        : hits.count
+          ? t('reader.findCount', { n: current + 1, total: hits.count })
+          : t('reader.findNone'),
   );
 
   const errMsg = (err: unknown) => (err instanceof Error ? err.message : String(err));
@@ -114,6 +121,11 @@
       notFound = id === null;
       if (id !== null) void requestPage(id, n, 0);
     });
+    // Leaving the document (or the reader) drops its pending answers and stops loading its pages.
+    return () => {
+      seq++;
+      inflight = null;
+    };
   });
 
   function loadMore(): void {
@@ -128,15 +140,15 @@
 
   /** Every remaining page, one request at a time, so that find counts the whole document. */
   async function loadAll(): Promise<void> {
-    if (loadingAll) return;
-    loadingAll = true;
     const n = seq;
+    if (loadingAll === n) return;
+    loadingAll = n;
     try {
       while (n === seq && docId !== null && more && pageError === null) {
         await (inflight ?? requestPage(docId, n, blocks.length));
       }
     } finally {
-      loadingAll = false;
+      if (loadingAll === n) loadingAll = null;
     }
   }
 
@@ -154,7 +166,7 @@
   });
 
   function onFindKey(e: KeyboardEvent): void {
-    if (e.key !== 'Enter') return;
+    if (e.key !== 'Enter' || e.isComposing) return;
     e.preventDefault();
     const n = hits.count;
     if (n) current = (current + (e.shiftKey ? n - 1 : 1)) % n;

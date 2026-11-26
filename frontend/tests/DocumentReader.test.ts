@@ -310,6 +310,78 @@ describe('DocumentReader', () => {
       expect(document.querySelectorAll('mark')).toHaveLength(0);
     });
 
+    /** Later pages of document 7 wait until released; everything else answers at once. */
+    const holdLaterPages = () => {
+      const held: (() => void)[] = [];
+      const answer = reply;
+      reply = (u, method) => {
+        const r = answer(u, method);
+        if (u.pathname !== '/api/documents/7/blocks' || u.searchParams.get('start') === '0') return r;
+        return new Promise((res) => held.push(() => res(r)));
+      };
+      return held;
+    };
+
+    it('says it is loading the whole document until the matches can be counted', async () => {
+      const held = holdLaterPages();
+      open('7');
+      await screen.findByText(/D7 p99/);
+      await fireEvent.input(findBox(), { target: { value: 'razon' } });
+      await waitFor(() => expect(held).toHaveLength(1));
+      expect(count()).toHaveTextContent('Loading the whole document…');
+      held[0]();
+      await waitFor(() => expect(held).toHaveLength(2));
+      expect(count()).toHaveTextContent('Loading the whole document…');
+      held[1]();
+      await waitFor(() => expect(count()).toHaveTextContent('1 of 3'));
+    });
+
+    it('stops loading pages when the reader is left', async () => {
+      const held = holdLaterPages();
+      const { unmount } = open('7');
+      await screen.findByText(/D7 p99/);
+      await fireEvent.input(findBox(), { target: { value: 'razon' } });
+      await waitFor(() => expect(held).toHaveLength(1));
+      unmount();
+      held[0]();
+      await new Promise((r) => setTimeout(r, 20));
+      expect(blockCalls().map((u) => u.searchParams.get('start'))).toEqual(['0', '100']);
+    });
+
+    it('finds in the next document while the last one was still loading', async () => {
+      reply = (u) => {
+        const id = Number(u.pathname.split('/')[3]);
+        return { status: 200, body: page(id, Number(u.searchParams.get('start')), 100, 250) };
+      };
+      const held = holdLaterPages();
+      open('7');
+      await screen.findByText(/D7 p99/);
+      await fireEvent.input(findBox(), { target: { value: 'p1' } });
+      await waitFor(() => expect(held).toHaveLength(1));
+      go('sources-read', { doc: '8' });
+      await screen.findByText('D8 p99');
+      await fireEvent.input(findBox(), { target: { value: 'p24' } });
+      await waitFor(() => expect(count()).toHaveTextContent('1 of 11'));
+      const doc8 = blockCalls().filter((u) => u.pathname === '/api/documents/8/blocks');
+      expect(doc8.map((u) => u.searchParams.get('start'))).toEqual(['0', '100', '200']);
+      // Document 7's page, answered late, changes nothing.
+      held[0]();
+      await new Promise((r) => setTimeout(r, 20));
+      expect(screen.queryByText(/D7 p/)).not.toBeInTheDocument();
+      expect(count()).toHaveTextContent('1 of 11');
+    });
+
+    it('does not move between matches on an Enter that ends a composition', async () => {
+      open('7');
+      await screen.findByText(/D7 p99/);
+      await fireEvent.input(findBox(), { target: { value: 'razon' } });
+      await waitFor(() => expect(count()).toHaveTextContent('1 of 3'));
+      await fireEvent.keyDown(findBox(), { key: 'Enter', isComposing: true });
+      expect(count()).toHaveTextContent('1 of 3');
+      await fireEvent.keyDown(findBox(), { key: 'Enter' });
+      expect(count()).toHaveTextContent('2 of 3');
+    });
+
     it('highlights matches in both sides of aligned rows', async () => {
       reply = () => ({
         status: 200,

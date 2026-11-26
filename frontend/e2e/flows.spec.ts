@@ -21,7 +21,8 @@ test('aligned texts: import a two-column file, then search source + target', asy
     tmxDialog.getByRole('link', { name: 'Download TMX' }).click(),
   ]);
   expect(tmx.suggestedFilename()).toBe('Alineados.tmx');
-  await tmxDialog.getByRole('button', { name: 'Close' }).last().click();
+  // The footer's Close, not the header's ×, which has the same name.
+  await tmxDialog.locator('footer').getByRole('button', { name: 'Close' }).click();
   await expect(tmxDialog).toBeHidden();
 
   await openScreen(page, 'Concordance');

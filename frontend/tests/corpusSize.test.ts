@@ -50,6 +50,7 @@ describe('corpusSize', () => {
     expect(corpusSize(docs(199_999))!.rows.find((r) => r.key === 'related')!.level).toBe('rough');
     expect(row(200_000, 'related').level).toBe('ok');
     expect(corpusSize(docs(199_999))!.rows.find((r) => r.key === 'related')!.note).toBe('size.note.roughBelow');
+    expect(corpusSize(docs(199_999))!.rows.find((r) => r.key === 'related')!.vars).toEqual({ n: '200,000' });
   });
 
   it('notes the largest document only past 40% with at least 2 documents', () => {

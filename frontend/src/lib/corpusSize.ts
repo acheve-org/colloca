@@ -1,7 +1,14 @@
+import { fmt } from './i18n';
 import type { Doc } from './types';
 
 export type SizeBand = 'small' | 'workable' | 'solid' | 'large';
-export type Readiness = { key: 'concordance' | 'collocations' | 'keyness' | 'related'; level: 'ok' | 'rough'; note: string };
+export type Readiness = {
+  key: 'concordance' | 'collocations' | 'keyness' | 'related';
+  level: 'ok' | 'rough';
+  note: string;
+  /** Values for the note's placeholders. */
+  vars?: Record<string, string>;
+};
 
 export interface CorpusSize {
   total: number;
@@ -35,7 +42,7 @@ function readiness(band: SizeBand, total: number): Readiness[] {
       ok('concordance'),
       ok('collocations', 'size.note.coreTerms'),
       ok('keyness'),
-      total < RELATED_OK ? rough('related', 'size.note.roughBelow') : ok('related'),
+      total < RELATED_OK ? { ...rough('related', 'size.note.roughBelow'), vars: { n: fmt(RELATED_OK) } } : ok('related'),
     ];
   }
   return [ok('concordance'), ok('collocations'), ok('keyness'), ok('related')];
