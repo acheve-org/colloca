@@ -14,12 +14,15 @@ test('aligned texts: import a two-column file, then search source + target', asy
   await expect(page.getByRole('row', { name: /aligned/ })).toBeVisible({ timeout: 60_000 });
 
   // the memory goes back out as TMX
-  await page.locator('summary', { hasText: 'Export aligned texts (TMX)' }).click();
+  await page.getByRole('button', { name: 'Export TMX' }).click();
+  const tmxDialog = page.getByRole('dialog', { name: 'Export aligned texts (TMX)' });
   const [tmx] = await Promise.all([
     page.waitForEvent('download'),
-    page.getByRole('link', { name: 'Download TMX' }).click(),
+    tmxDialog.getByRole('link', { name: 'Download TMX' }).click(),
   ]);
   expect(tmx.suggestedFilename()).toBe('Alineados.tmx');
+  await tmxDialog.getByRole('button', { name: 'Close' }).last().click();
+  await expect(tmxDialog).toBeHidden();
 
   await openScreen(page, 'Concordance');
   await page.getByLabel('Word or phrase').fill('parque eólico');

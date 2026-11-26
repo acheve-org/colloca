@@ -34,6 +34,8 @@ docker compose up
    The *About these documents* card (Tags, Text type, Date, Author, *Import even if the language looks wrong*) applies to everything added in that step, including a translation-memory import. *Align two documents* is the exception: it has its own buttons and does not use these details or the bar below. For the other methods, the bar at the foot of the page shows what will be added and where, with *Cancel* and the action of the current method. *Cancel* returns to the document list and discards the form. After a successful add the app also returns to the list, where the job log shows progress, and the *About* values are kept for the next add; they are cleared on *Cancel* and when the corpus changes.
 
    Index imports flag in the job report: very short texts, cookie/JavaScript/paywall boilerplate, landing-page titles, repeated titles. Flagged documents are still added.
+
+   To check what was stored, select the document on *Sources* and choose *Read* in its side panel: the whole text opens in a reader, with *Find in document*. See [importing.md](importing.md).
 3. **Explore**: pick Explore in the rail, then a tab.
    - Click any word in a table to open its concordance.
    - Every table: sort by header, *Filter in results*, CSV export.
