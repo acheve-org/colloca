@@ -51,6 +51,43 @@ def test_remove_refused_when_only_trashed_corpus_exists(xx):
     assert e.value.count == 1
 
 
+def _add_base_corpus(lang, trashed=False):
+    with db.session() as conn:
+        cid = conn.execute("INSERT INTO corpora (name,lang,is_reference) VALUES ('base',?,1)", (lang,)).lastrowid
+        conn.execute("INSERT INTO documents (corpus_id,title,text,text_hash) VALUES (?,'d','t','h')", (cid,))
+        if trashed:
+            from colloca import trash
+            trash.trash_corpus(conn, cid)
+    return cid
+
+
+@pytest.mark.parametrize("trashed", [False, True])
+def test_base_corpus_is_not_counted_as_a_corpus_using_the_language(xx, trashed):
+    _add_base_corpus("xx", trashed=trashed)
+    assert languages.corpus_count("xx") == 0
+    _add_corpus("xx")
+    assert languages.corpus_count("xx") == 1
+
+
+@pytest.mark.parametrize("trashed", [False, True])
+def test_remove_deletes_the_language_base_corpus(xx, trashed):
+    cid = _add_base_corpus("xx", trashed=trashed)
+    languages.remove("xx")
+    assert languages.get("xx") is None
+    with db.session() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM corpora WHERE id=?", (cid,)).fetchone()[0] == 0
+        assert conn.execute("SELECT COUNT(*) FROM documents WHERE corpus_id=?", (cid,)).fetchone()[0] == 0
+
+
+def test_remove_refused_keeps_the_base_corpus(xx):
+    cid = _add_base_corpus("xx")
+    _add_corpus("xx")
+    with pytest.raises(languages.LanguageInUse):
+        languages.remove("xx")
+    with db.session() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM corpora WHERE id=?", (cid,)).fetchone()[0] == 1
+
+
 def test_registry_mapping_is_live(client):
     assert "xx" not in nlp.SUPPORTED
     languages.add("xx", "Name", None, "")
