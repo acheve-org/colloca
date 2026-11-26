@@ -172,6 +172,14 @@
       await loadSettings();
     });
 
+  // A newly added language is selected (its panel opens on stacked screens) so its model can be installed right away.
+  async function added(code: string): Promise<void> {
+    await load();
+    if (!rows.some((r) => r.code === code)) return;
+    selectedCode = code;
+    panelOpen = true;
+  }
+
   function askRemove(r: LanguageSetting): void {
     removing = r;
     alsoUninstall = false;
@@ -332,7 +340,7 @@
   {/snippet}
 </ListPanel>
 
-<AddLanguageDialog bind:open={addOpen} {catalog} onadded={load} />
+<AddLanguageDialog bind:open={addOpen} {catalog} onadded={added} />
 <EditLanguageDialog bind:open={editOpen} lang={editing} sizes={editing ? sizesOf(editing.code) : SIZES} onsaved={load} />
 <Dialog bind:open={uninstallOpen} title={t('lang.uninstallTitle', { name: uninstalling?.name ?? '' })}>
   <p class="confirm">{t('lang.uninstallBody')}</p>

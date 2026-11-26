@@ -170,7 +170,7 @@ describe('Languages', () => {
     expect(card('Spanish')).toBeInTheDocument();
   });
 
-  it('a removed language that is added again is not selected again', async () => {
+  it('a removed language that comes back on a later reload is not selected again', async () => {
     const [es, it_, fr] = settings[0];
     settings = [settings[0], [es, it_], [es, it_, fr]];
     render(Languages);
@@ -179,14 +179,26 @@ describe('Languages', () => {
     await fireEvent.click(await removeItem('French'));
     await fireEvent.click(within(screen.getByRole('dialog', { name: 'Remove French?' })).getByRole('button', { name: 'Remove' }));
     await waitFor(() => expect(within(nav()).queryByRole('button', { name: /^French / })).toBeNull());
-    await fireEvent.click(within(nav()).getByRole('button', { name: 'Add language' }));
-    const dlg = await screen.findByRole('dialog', { name: 'Add a language' });
-    await fireEvent.click(await within(dlg).findByRole('radio', { name: 'French' }));
-    await fireEvent.click(within(dlg).getByRole('button', { name: 'Add' }));
+    // Any reload (here: saving an edit of Spanish) that brings French back must not reselect it.
+    await fireEvent.click(within(card('Spanish')).getByRole('button', { name: 'Edit Spanish' }));
+    await fireEvent.click(within(screen.getByRole('dialog', { name: 'Edit Spanish' })).getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(item('French')).toBeInTheDocument());
     expect(item('Spanish')).toHaveAttribute('aria-pressed', 'true');
     expect(item('French')).toHaveAttribute('aria-pressed', 'false');
     expect(card('Spanish')).toBeInTheDocument();
+  });
+
+  it('a newly added language is selected so its model can be installed', async () => {
+    settings = [settings[0], [...settings[0], row('de', 'German', {}, { name: null, version: null, size: null })]];
+    render(Languages);
+    await loaded();
+    await fireEvent.click(within(nav()).getByRole('button', { name: 'Add language' }));
+    const dlg = await screen.findByRole('dialog', { name: 'Add a language' });
+    await fireEvent.click(await within(dlg).findByRole('radio', { name: 'German' }));
+    await fireEvent.click(within(dlg).getByRole('button', { name: 'Add' }));
+    await waitFor(() => expect(item('German')).toHaveAttribute('aria-pressed', 'true'));
+    expect(item('Spanish')).toHaveAttribute('aria-pressed', 'false');
+    expect(within(card('German')).getByRole('button', { name: 'Install model for German' })).toBeInTheDocument();
   });
 
   it('with no languages the panel is empty: no header and no sections', async () => {
@@ -366,6 +378,19 @@ describe('Languages', () => {
 
 describe('Languages stacked below 900px', () => {
   beforeEach(() => __setViewportForTests({ stacked: true }));
+
+  it('adding a language opens its panel', async () => {
+    settings = [settings[0], [...settings[0], row('de', 'German', {}, { name: null, version: null, size: null })]];
+    render(Languages);
+    await screen.findByRole('button', { name: /^Spanish / });
+    await fireEvent.click(within(nav()).getByRole('button', { name: 'Add language' }));
+    const dlg = await screen.findByRole('dialog', { name: 'Add a language' });
+    await fireEvent.click(await within(dlg).findByRole('radio', { name: 'German' }));
+    await fireEvent.click(within(dlg).getByRole('button', { name: 'Add' }));
+    await waitFor(() => expect(card('German')).toBeInTheDocument());
+    expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Languages' })).toBeNull();
+  });
 
   it('arriving shows the list only', async () => {
     render(Languages);

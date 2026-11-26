@@ -11,7 +11,8 @@
   interface Props {
     open: boolean;
     catalog: CatalogEntry[];
-    onadded: () => void;
+    /** Called with the code of the language just added. */
+    onadded: (code: string) => void;
   }
   let { open = $bindable(), catalog, onadded }: Props = $props();
 
@@ -41,11 +42,12 @@
   async function add(): Promise<void> {
     if (!chosen || busy) return;
     busy = true;
+    const added = chosen.code;
     try {
-      await post('/api/languages', { code: chosen.code, size, install_model: installModel, install_ocr: installOcr });
+      await post('/api/languages', { code: added, size, install_model: installModel, install_ocr: installOcr });
       messages.say(t('lang.added', { name: chosen.name }), 'ok');
       open = false;
-      onadded();
+      onadded(added);
     } catch (err) {
       messages.say(err instanceof Error ? err.message : String(err), 'err');
     } finally {
