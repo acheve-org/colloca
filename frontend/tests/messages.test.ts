@@ -61,6 +61,7 @@ describe('messages fade', () => {
     messages.say('A', 'ok');
     messages.clear();
     expect(messages.current).toBeNull();
+    expect(vi.getTimerCount()).toBe(0);
     messages.say('D', 'err');
     vi.advanceTimersByTime(MESSAGE_FADE_MS * 2);
     expect(messages.current).toEqual({ text: 'D', kind: 'err' });

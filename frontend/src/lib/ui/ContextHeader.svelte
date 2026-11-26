@@ -46,7 +46,7 @@
     flex-wrap: wrap;
     align-items: center;
     gap: var(--s-3);
-    padding: 12px 20px;
+    padding: 12px var(--page-pad);
     background: var(--panel);
     border-bottom: 1px solid var(--line);
     min-width: 0;

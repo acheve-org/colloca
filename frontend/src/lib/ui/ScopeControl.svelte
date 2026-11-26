@@ -184,13 +184,13 @@
   .panel {
     position: absolute;
     left: auto;
-    right: 20px; /* literal: matches the context band's side padding */
+    right: var(--page-pad); /* matches the context band's side padding */
     top: 100%;
     z-index: 10;
     box-sizing: border-box;
     /* Positioned against the nearest positioned ancestor (the context band), opening under the
        pill at the band's right edge; on narrow screens it spans the band minus its side padding. */
-    width: min(340px, calc(100% - 40px));
+    width: min(340px, calc(100% - 2 * var(--page-pad)));
     display: flex;
     flex-direction: column;
     gap: var(--s-2);
