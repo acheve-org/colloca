@@ -24,9 +24,12 @@
   let picked = $state<number | null | undefined>(undefined);
   let newProject = $state('');
   let newProjectOpen = $state(false);
-  let names = $state<Record<number, string>>({});
-  let corpusNames = $state<Record<number, string>>({});
-  let renamingId = $state<number | null>(null);
+  // The project name is renamed in place: ✎ swaps the heading for this draft.
+  let renaming = $state(false);
+  let draft = $state('');
+  let pencil = $state<HTMLButtonElement | null>(null);
+  // The corpus row the user picked (Task 5 opens its settings panel); only meaningful within the shown project.
+  let selectedCorpusId = $state<number | null>(null);
   let busy = $state(false);
   let newOpen = $state(false);
   let delCorpus = $state.raw<Corpus | null>(null);
@@ -56,12 +59,21 @@
   const shown = $derived(selected ? working.filter((c) => c.project_id === selected.id) : loose);
   // Nothing to choose from yet (and the list has been fetched, not just empty while loading).
   const firstRun = $derived(projectStore.loaded && !projectStore.list.length && !loose.length);
-  const heading = $derived(t('proj.corporaOf', { name: selected?.name ?? t('ctx.noProject') }));
+  const heading = $derived(selected?.name ?? t('ctx.noProject'));
+  const tableLabel = $derived(t('proj.corporaOf', { name: heading }));
 
   const itemId = (id: number | null) => `proj-item-${id ?? 'none'}`;
   const focusItem = (id: number | null) => tick().then(() => document.getElementById(itemId(id))?.focus());
-  const choose = (id: number | null) => {
+  // Showing another project drops the corpus selection and any rename in progress.
+  const pick = (id: number | null) => {
+    if (id !== selectedId) {
+      selectedCorpusId = null;
+      renaming = false;
+    }
     picked = id;
+  };
+  const choose = (id: number | null) => {
+    pick(id);
     panelOpen = true;
   };
   // Stacked: the list comes back; put focus on the project the user had chosen.
@@ -69,8 +81,6 @@
     panelOpen = false;
     focusItem(selectedId);
   };
-
-  const nameOf = (p: Project) => names[p.id] ?? p.name;
 
   async function changed(): Promise<void> {
     await reloadProjects();
@@ -99,19 +109,34 @@
       newProjectOpen = false;
       messages.say(t('proj.created'), 'ok');
       await reloadProjects();
-      picked = id;
+      pick(id);
       focusItem(id);
     });
   };
 
+  const focusPencil = () => tick().then(() => pencil?.focus());
+
+  function startRenameProject(p: Project): void {
+    draft = p.name;
+    renaming = true;
+  }
+
+  function cancelRenameProject(): void {
+    renaming = false;
+    focusPencil();
+  }
+
+  // A failed PATCH keeps the input open with the draft, so the user can retry or press Escape.
   const renameProject = (p: Project) =>
     run(async () => {
-      const name = nameOf(p).trim();
-      if (!name || name === p.name) return;
-      await patch(`/api/projects/${p.id}`, { name });
-      names = Object.fromEntries(Object.entries(names).filter(([k]) => k !== String(p.id)));
-      messages.say(t('proj.renamed'), 'ok');
-      await reloadProjects();
+      const name = draft.trim();
+      if (name && name !== p.name) {
+        await patch(`/api/projects/${p.id}`, { name });
+        messages.say(t('proj.renamed'), 'ok');
+        await reloadProjects();
+      }
+      renaming = false;
+      focusPencil();
     });
 
   function askDeleteProject(p: Project): void {
@@ -135,7 +160,7 @@
           for (const c of corpusStore.list.filter((x) => x.project_id === p.id)) {
             await patch(`/api/corpora/${c.id}`, { project_id: Number(target) });
           }
-          picked = Number(target);
+          pick(Number(target));
         }
         await del(`/api/projects/${p.id}`);
         messages.say(t('proj.deleted'), 'ok');
@@ -148,49 +173,21 @@
 
   const open = (c: Corpus) => run(() => corpusStore.select(c.id));
 
-  function startRename(c: Corpus): void {
-    corpusNames = { ...corpusNames, [c.id]: c.name };
-    renamingId = c.id;
-  }
-
-  const renameCorpus = (c: Corpus) =>
-    run(async () => {
-      const name = (corpusNames[c.id] ?? c.name).trim();
-      renamingId = null;
-      if (!name || name === c.name) return;
-      await patch(`/api/corpora/${c.id}`, { name });
-      await changed();
-    });
-
-  const moveTo = (c: Corpus, to: string) =>
-    run(async () => {
-      await patch(`/api/corpora/${c.id}`, { project_id: Number(to) });
-      await changed();
-    });
-  const moveCorpus = async (c: Corpus, select: HTMLSelectElement) => {
-    if (!select.value) return;
-    await moveTo(c, select.value);
-    // A failed move leaves the row in place: show the placeholder again, not the rejected choice.
-    select.value = '';
-  };
-
-  // The phone card's menu: Rename (Save while renaming), a Move item per other project, Delete.
-  const menuItems = (c: Corpus) => [
-    renamingId === c.id
-      ? { label: t('common.save'), onclick: () => void renameCorpus(c) }
-      : { label: t('proj.rename'), onclick: () => startRename(c) },
-    ...projectStore.list
-      .filter((p) => p.id !== c.project_id)
-      .map((p) => ({ label: `${t('proj.move')}: ${p.name}`, onclick: () => void moveTo(c, String(p.id)) })),
-    { label: t('common.delete'), danger: true, onclick: () => askDeleteCorpus(c) },
-  ];
-
-  // Rename mode is explicit for corpora: put the cursor in the field it opens.
+  // Rename mode is explicit: put the cursor in the field it opens.
   const focusOnMount = (node: HTMLInputElement) => {
     node.focus();
     node.select();
   };
 
+  const selectCorpus = (c: Corpus) => (selectedCorpusId = c.id);
+  function rowKey(e: KeyboardEvent, c: Corpus): void {
+    // Only the row itself: Enter or Space on its Open button must not select it.
+    if (e.target !== e.currentTarget || (e.key !== 'Enter' && e.key !== ' ')) return;
+    e.preventDefault();
+    selectCorpus(c);
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- the corpus settings panel (next task) opens it
   function askDeleteCorpus(c: Corpus): void {
     delCorpus = c;
     delCorpusOpen = true;
@@ -207,7 +204,7 @@
   }
 
   async function created(id: number, projectId: number): Promise<void> {
-    picked = projectId;
+    pick(projectId);
     await corpusStore.reload();
     await corpusStore.select(id);
     await reloadProjects();
@@ -248,59 +245,49 @@
   {#snippet panel()}
     <section class="right" class:cardsOn={viewport.narrow}>
       <header>
-        <h2>{heading}</h2>
-        <Button variant="primary" disabled={!projectStore.list.length} onclick={() => (newOpen = true)}>{t('corpus.new')}</Button>
-      </header>
-      {#if selected}
-        {@const p = selected}
-        <!-- Interim home for project rename and delete; Task 4 moves them to the heading (✎) and a ⋯ menu. -->
-        <div class="edit">
+        {#if selected && renaming}
+          {@const p = selected}
           <input
-            value={nameOf(p)}
+            class="rename"
+            bind:value={draft}
             maxlength="120"
+            use:focusOnMount
             aria-label={t('proj.nameOf', { name: p.name })}
-            oninput={(e) => (names = { ...names, [p.id]: e.currentTarget.value })}
             onkeydown={(e) => {
               if (e.key === 'Enter') {
                 e.preventDefault();
                 renameProject(p);
+              } else if (e.key === 'Escape') {
+                e.preventDefault();
+                cancelRenameProject();
               }
             }}
           />
-          <Button
-            ariaLabel={t('proj.renameOf', { name: p.name })}
-            disabled={busy || !nameOf(p).trim() || nameOf(p).trim() === p.name}
-            onclick={() => renameProject(p)}>{t('proj.rename')}</Button
-          >
-          <Button variant="danger" ariaLabel={t('proj.deleteOf', { name: p.name })} disabled={busy} onclick={() => askDeleteProject(p)}
-            >{t('common.delete')}</Button
-          >
+        {:else}
+          <h2>{heading}</h2>
+          {#if selected}
+            {@const p = selected}
+            <!-- Never disabled: focus comes back here right after a save, while busy is still set. -->
+            <button type="button" class="pencil" aria-label={t('proj.renameProject')} bind:this={pencil} onclick={() => startRenameProject(p)}>✎</button>
+          {/if}
+        {/if}
+        <div class="hactions">
+          <Button variant="primary" disabled={!projectStore.list.length} onclick={() => (newOpen = true)}>{t('corpus.new')}</Button>
+          {#if selected}
+            {@const p = selected}
+            <ActionMenu
+              label={t('proj.projectMenu')}
+              disabled={busy}
+              items={[{ label: t('common.delete'), danger: true, onclick: () => askDeleteProject(p) }]}
+            />
+          {/if}
         </div>
-      {/if}
+      </header>
       {#if shown.length && viewport.narrow}
         <ul class="cards">
           {#each shown as c (c.id)}
             <li class="ccard">
-              <div class="chead">
-                {#if renamingId === c.id}
-                  <input
-                    value={corpusNames[c.id] ?? c.name}
-                    maxlength="120"
-                    use:focusOnMount
-                    aria-label={t('proj.nameOf', { name: c.name })}
-                    oninput={(e) => (corpusNames = { ...corpusNames, [c.id]: e.currentTarget.value })}
-                    onkeydown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        renameCorpus(c);
-                      } else if (e.key === 'Escape') renamingId = null;
-                    }}
-                  />
-                {:else}
-                  <span class="cname">{c.name}</span>
-                {/if}
-                <ActionMenu label={t('proj.more') + ': ' + c.name} disabled={busy} items={menuItems(c)} />
-              </div>
+              <button type="button" class="cname" aria-pressed={c.id === selectedCorpusId} onclick={() => selectCorpus(c)}>{c.name}</button>
               <div class="cmeta">
                 <span>{languageName(c.lang)}</span>
                 <span>{t('proj.colDocs')} {fmt(c.docs)}</span>
@@ -315,7 +302,7 @@
           {/each}
         </ul>
       {:else if shown.length}
-        <table>
+        <table aria-label={tableLabel}>
           <thead>
             <tr>
               <th>{t('proj.colCorpus')}</th>
@@ -327,26 +314,14 @@
           </thead>
           <tbody>
             {#each shown as c (c.id)}
-              <tr>
-                <td>
-                  {#if renamingId === c.id}
-                    <input
-                      value={corpusNames[c.id] ?? c.name}
-                      maxlength="120"
-                      use:focusOnMount
-                      aria-label={t('proj.nameOf', { name: c.name })}
-                      oninput={(e) => (corpusNames = { ...corpusNames, [c.id]: e.currentTarget.value })}
-                      onkeydown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          renameCorpus(c);
-                        } else if (e.key === 'Escape') renamingId = null;
-                      }}
-                    />
-                  {:else}
-                    {c.name}
-                  {/if}
-                </td>
+              <tr
+                class:cur={c.id === corpusStore.currentId}
+                tabindex="0"
+                aria-selected={c.id === selectedCorpusId}
+                onclick={() => selectCorpus(c)}
+                onkeydown={(e) => rowKey(e, c)}
+              >
+                <td class="cn">{c.name}</td>
                 <td>{languageName(c.lang)}</td>
                 <td class="num">{fmt(c.docs)}</td>
                 <td class="num">{fmt(c.tokens)}</td>
@@ -354,25 +329,16 @@
                   {#if c.id === corpusStore.currentId}
                     <Badge kind="intb" label={t('proj.working')} />
                   {:else}
-                    <Button ariaLabel={t('proj.open') + ' ' + c.name} disabled={busy} onclick={() => open(c)}>{t('proj.open')}</Button>
+                    <!-- Open switches the working corpus; it must not also select the row. -->
+                    <Button
+                      ariaLabel={t('proj.open') + ' ' + c.name}
+                      disabled={busy}
+                      onclick={(e) => {
+                        e.stopPropagation();
+                        open(c);
+                      }}>{t('proj.open')}</Button
+                    >
                   {/if}
-                  {#if renamingId === c.id}
-                    <Button disabled={busy} onclick={() => renameCorpus(c)}>{t('common.save')}</Button>
-                  {:else}
-                    <Button ariaLabel={t('proj.renameOf', { name: c.name })} disabled={busy} onclick={() => startRename(c)}>{t('proj.rename')}</Button>
-                  {/if}
-                  <select
-                    aria-label={t('proj.moveOf', { name: c.name })}
-                    disabled={busy}
-                    value=""
-                    onchange={(e) => moveCorpus(c, e.currentTarget)}
-                  >
-                    <option value="">{t('proj.move')}…</option>
-                    {#each projectStore.list.filter((p) => p.id !== c.project_id) as p (p.id)}
-                      <option value={String(p.id)}>{p.name}</option>
-                    {/each}
-                  </select>
-                  <Button variant="danger" ariaLabel={t('proj.deleteOf', { name: c.name })} disabled={busy} onclick={() => askDeleteCorpus(c)}>{t('common.delete')}</Button>
                 </td>
               </tr>
             {/each}
@@ -510,22 +476,34 @@
     color: var(--muted);
     font-weight: 500;
   }
-  header :global(button) {
-    flex: none;
-    white-space: nowrap; /* "New corpus" keeps its one line next to a long heading */
-  }
-  .edit,
   header {
     display: flex;
     align-items: center;
     gap: var(--s-1);
   }
-  header {
-    justify-content: space-between;
+  header :global(button) {
+    flex: none;
+    white-space: nowrap; /* "New corpus" keeps its one line next to a long heading */
   }
-  .edit input {
+  .rename {
     flex: 1;
     min-width: 0;
+  }
+  .pencil {
+    padding: 0 var(--s-2);
+    color: var(--muted);
+    background: transparent;
+    border-color: transparent;
+  }
+  .pencil:hover {
+    color: var(--fg);
+    border-color: var(--line);
+  }
+  .hactions {
+    display: flex;
+    align-items: center;
+    gap: var(--s-1);
+    margin-left: auto;
   }
   .muted {
     margin: 0;
@@ -541,6 +519,26 @@
     padding: var(--s-1) var(--s-2);
     text-align: left;
     border-bottom: 1px solid var(--line);
+  }
+  tbody tr {
+    cursor: pointer;
+  }
+  tbody tr:hover {
+    background: var(--surface);
+  }
+  /* the working corpus: tinted row, normal text (accent text is not safe on --accent-soft) */
+  tr.cur {
+    background: var(--accent-soft);
+  }
+  tr.cur :global(.badge) {
+    background: var(--panel); /* the pill stays legible on the tinted row */
+  }
+  tr[aria-selected='true'] {
+    box-shadow: inset 3px 0 0 var(--accent); /* literal: the selection bar width */
+  }
+  .cn {
+    font-weight: 600;
+    overflow-wrap: anywhere;
   }
   .cards {
     display: flex;
@@ -560,21 +558,21 @@
     border: 1px solid var(--line);
     border-radius: var(--radius-lg);
   }
-  .chead {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: var(--s-1);
-    align-self: stretch;
-  }
-  .chead input {
-    flex: 1;
-    min-width: 0;
-  }
   .cname {
-    min-width: 0;
+    max-width: 100%;
+    height: auto; /* base.css gives every button a fixed control height; a long name wraps and the card grows */
+    padding: 0;
+    color: var(--fg);
     font-weight: 600;
+    text-align: left;
     overflow-wrap: anywhere;
+    background: none;
+    border: 0;
+  }
+  .cname[aria-pressed='true'] {
+    text-decoration: underline;
+    text-decoration-color: var(--accent);
+    text-decoration-thickness: 2px; /* literal: the selection underline weight */
   }
   .cmeta {
     display: flex;
