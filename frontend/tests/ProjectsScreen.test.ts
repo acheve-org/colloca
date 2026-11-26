@@ -42,6 +42,10 @@ beforeEach(() => {
     calls.push({ method, path, body });
     if (path === '/api/languages') return res(200, { es: 'Spanish', it: 'Italian' });
     if (path === '/api/projects' && method === 'GET') return res(200, projects);
+    if (path === '/api/projects' && method === 'POST') {
+      projects = [...projects, { id: 11, name: body.name, corpora: 0, trashed: 0, terms: 0 }];
+      return res(201, { id: 11 });
+    }
     if (path === '/api/corpora' && method === 'GET') return res(200, corpora);
     if (path === '/api/corpora' && method === 'POST') {
       corpora = [...corpora, corpus(4, body.name, body.project_id)];
@@ -75,9 +79,22 @@ async function show() {
 }
 const rows = () => screen.getAllByRole('row').slice(1);
 const rowOf = (name: string) => rows().find((r) => within(r).queryByText(name))!;
+// The corpus name in a row: the button that selects the corpus and opens its settings.
+const nameOf = (name: string) => within(rowOf(name)).getByRole('button', { name });
+const names = () => rows().map((r) => within(r).getAllByRole('button')[0]);
+const openProjectMenu = async () => {
+  await fireEvent.click(screen.getByRole('button', { name: 'Project actions' }));
+  await tick();
+  return screen.getByRole('menu', { name: 'Project actions' });
+};
+// The project's ⋯ menu: Delete project… opens the existing delete-project dialog.
+const askDeleteProject = async () => {
+  await fireEvent.click(within(await openProjectMenu()).getByRole('menuitem', { name: 'Delete project…' }));
+  await tick();
+};
 
 describe('Projects screen empty states', () => {
-  it('no projects: first-project prompt with a single field and Create project', async () => {
+  it('no projects: the first-run hint, and + New opens the dialog with the first-run placeholder', async () => {
     projects = [];
     corpora = [];
     corpusStore.list = [];
@@ -86,9 +103,12 @@ describe('Projects screen empty states', () => {
     await waitFor(() => expect(projectStore.loaded).toBe(true));
     await tick();
     expect(screen.getByText('Start your first project')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('Contracts 2024')).toBeInTheDocument();
-    await fireEvent.input(screen.getByLabelText('New project'), { target: { value: 'Acme' } });
-    await fireEvent.click(screen.getByRole('button', { name: 'Create project' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'New project' }));
+    await tick();
+    const dlg = screen.getByRole('dialog', { name: 'New project' });
+    expect(within(dlg).getByPlaceholderText('Contracts 2024')).toBeInTheDocument();
+    await fireEvent.input(within(dlg).getByRole('textbox'), { target: { value: 'Acme' } });
+    await fireEvent.click(within(dlg).getByRole('button', { name: 'Create project' }));
     await waitFor(() => expect(calls.some((c) => c.method === 'POST' && c.path === '/api/projects')).toBe(true));
   });
 
@@ -116,13 +136,52 @@ describe('Projects screen', () => {
     expect(screen.queryByText('A1')).toBeNull();
   });
 
-  it('Open selects the corpus and the row then shows Working', async () => {
+  it('the list is a navigation landmark with the Projects heading, corpus counts and aria-pressed', async () => {
     await show();
-    expect(within(rowOf('A1')).getByText('Working')).toBeInTheDocument();
+    const nav = screen.getByRole('navigation', { name: 'Projects' });
+    expect(within(nav).getByText('Projects')).toBeInTheDocument();
+    const acme = within(nav).getByRole('button', { name: /^Acme/ });
+    expect(acme).toHaveAttribute('aria-pressed', 'true');
+    expect(acme).toHaveTextContent('2');
+    expect(within(nav).getByRole('button', { name: /^Bolt/ })).toHaveAttribute('aria-pressed', 'false');
+    expect(within(nav).queryByRole('button', { name: /No project/ })).toBeNull();
+    expect(within(nav).queryByRole('textbox')).toBeNull();
+  });
+
+  it('"No project" comes last in the list when it has corpora', async () => {
+    corpora = [...corpora, corpus(5, 'Loose', null)];
+    corpusStore.list = [...corpora];
+    await show();
+    const names = within(screen.getByRole('navigation', { name: 'Projects' })).getAllByRole('button')
+      .filter((b) => b.hasAttribute('aria-pressed'))
+      .map((b) => b.textContent?.trim());
+    expect(names).toHaveLength(4);
+    expect(names.at(-1)).toMatch(/^No project/);
+  });
+
+  it('+ New opens the New project dialog; Create posts the name and selects the new project', async () => {
+    await show();
+    await fireEvent.click(screen.getByRole('button', { name: 'New project' }));
+    await tick();
+    const dlg = screen.getByRole('dialog', { name: 'New project' });
+    const input = within(dlg).getByRole('textbox');
+    expect(input).toHaveAttribute('maxlength', '120');
+    expect(within(dlg).getByRole('button', { name: 'Create project' })).toBeDisabled();
+    await fireEvent.input(input, { target: { value: ' Zed ' } });
+    await fireEvent.click(within(dlg).getByRole('button', { name: 'Create project' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Zed/ })).toHaveAttribute('aria-pressed', 'true'));
+    expect(calls.find((c) => c.method === 'POST' && c.path === '/api/projects')?.body).toEqual({ name: 'Zed' });
+    expect(messages.current).toEqual({ text: 'Project created.', kind: 'ok' });
+    expect(screen.getByRole('button', { name: /^Acme/ })).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('Open selects the corpus and the row then shows Current', async () => {
+    await show();
+    expect(within(rowOf('A1')).getByText('Current')).toBeInTheDocument();
     expect(within(rowOf('A1')).queryByRole('button', { name: /^Open/ })).toBeNull();
     await fireEvent.click(within(rowOf('A2')).getByRole('button', { name: /^Open/ }));
     await waitFor(() => expect(corpusStore.currentId).toBe(2));
-    expect(within(rowOf('A2')).getByText('Working')).toBeInTheDocument();
+    expect(within(rowOf('A2')).getByText('Current')).toBeInTheDocument();
     expect(within(rowOf('A1')).getByRole('button', { name: /^Open/ })).toBeInTheDocument();
   });
 
@@ -141,38 +200,142 @@ describe('Projects screen', () => {
       .toEqual({ name: 'Neu', lang: 'es', project_id: 8 });
   });
 
-  it('Move patches the corpus with the new project_id', async () => {
+  it('the panel heading is the project name, with ✎ and the project menu', async () => {
     await show();
-    const row = rowOf('A2');
-    await fireEvent.change(within(row).getByLabelText(/^Move /), { target: { value: '8' } });
-    await waitFor(() => expect(calls.some((c) => c.method === 'PATCH' && c.path === '/api/corpora/2')).toBe(true));
-    expect(calls.find((c) => c.path === '/api/corpora/2' && c.method === 'PATCH')?.body).toEqual({ project_id: 8 });
-    await waitFor(() => expect(screen.queryByText('A2')).toBeNull());
+    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent(/^Acme$/);
+    expect(screen.getByRole('table', { name: 'Corpora in Acme' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Rename project' })).toBeInTheDocument();
+    const menu = await openProjectMenu();
+    expect(within(menu).getAllByRole('menuitem').map((i) => i.textContent?.trim())).toEqual(['Delete project…']);
   });
 
-  it('deletes a corpus only after confirmation', async () => {
+  it('✎ swaps the heading for an input; Enter renames the project with PATCH', async () => {
     await show();
-    await fireEvent.click(within(rowOf('A2')).getByRole('button', { name: 'Delete A2' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Rename project' }));
     await tick();
-    expect(calls.some((c) => c.method === 'DELETE')).toBe(false);
-    const dlg = screen.getByRole('dialog', { name: 'Delete corpus' });
-    await fireEvent.click(within(dlg).getByRole('button', { name: 'Delete' }));
-    await waitFor(() => expect(calls.some((c) => c.method === 'DELETE' && c.path === '/api/corpora/2')).toBe(true));
+    expect(screen.queryByRole('heading', { level: 2 })).toBeNull();
+    const input = screen.getByLabelText('Name of project Acme');
+    expect(input).toHaveFocus();
+    expect(input).toHaveValue('Acme');
+    expect(input).toHaveAttribute('maxlength', '120');
+    await fireEvent.input(input, { target: { value: ' Acme 2 ' } });
+    await fireEvent.keyDown(input, { key: 'Enter' });
+    await waitFor(() => expect(calls.find((c) => c.method === 'PATCH' && c.path === '/api/projects/7')?.body).toEqual({ name: 'Acme 2' }));
+    expect(messages.current).toEqual({ text: 'Project renamed.', kind: 'ok' });
+    await waitFor(() => expect(screen.getByRole('heading', { level: 2 })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Rename project' })).toHaveFocus());
   });
 
-  it('renames a project with PATCH', async () => {
+  it('Escape cancels the rename, sends nothing and refocuses ✎', async () => {
     await show();
+    await fireEvent.click(screen.getByRole('button', { name: 'Rename project' }));
+    await tick();
     const input = screen.getByLabelText('Name of project Acme');
-    await fireEvent.input(input, { target: { value: 'Acme 2' } });
-    await fireEvent.click(screen.getByRole('button', { name: 'Rename Acme' }));
-    await waitFor(() => expect(calls.some((c) => c.method === 'PATCH' && c.path === '/api/projects/7')).toBe(true));
-    expect(calls.find((c) => c.path === '/api/projects/7')?.body).toEqual({ name: 'Acme 2' });
+    await fireEvent.input(input, { target: { value: 'Draft' } });
+    await fireEvent.keyDown(input, { key: 'Escape' });
+    await tick();
+    expect(screen.queryByLabelText('Name of project Acme')).toBeNull();
+    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent(/^Acme$/);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Rename project' })).toHaveFocus());
+    expect(calls.some((c) => c.method === 'PATCH')).toBe(false);
+  });
+
+  it('Enter on an unchanged name sends nothing', async () => {
+    await show();
+    await fireEvent.click(screen.getByRole('button', { name: 'Rename project' }));
+    await tick();
+    await fireEvent.keyDown(screen.getByLabelText('Name of project Acme'), { key: 'Enter' });
+    await waitFor(() => expect(screen.getByRole('heading', { level: 2 })).toBeInTheDocument());
+    expect(calls.some((c) => c.method === 'PATCH')).toBe(false);
+  });
+
+  it('rows show Current for the working corpus and Open for the others; no row has Rename, Move or Delete', async () => {
+    await show();
+    expect(within(rowOf('A1')).getByText('Current')).toBeInTheDocument();
+    expect(rowOf('A1')).toHaveClass('cur');
+    expect(within(rowOf('A2')).getByRole('button', { name: 'Open A2' })).toBeInTheDocument();
+    expect(rowOf('A2')).not.toHaveClass('cur');
+    for (const r of rows()) {
+      expect(within(r).queryByRole('button', { name: /Rename|Delete/ })).toBeNull();
+      expect(within(r).queryByRole('combobox')).toBeNull();
+      expect(within(r).queryByRole('textbox')).toBeNull();
+    }
+    const src = import.meta.glob('../src/screens/Projects.svelte', { query: '?raw', import: 'default', eager: true });
+    expect(Object.values(src)[0] as string).toMatch(/tr\.cur[^}]*background:\s*var\(--accent-soft\)/s);
+  });
+
+  it('clicking a row expands it; clicking Open does not', async () => {
+    await show();
+    for (const b of names()) expect(b).toHaveAttribute('aria-expanded', 'false');
+    await fireEvent.click(rowOf('A2'));
+    expect(nameOf('A2')).toHaveAttribute('aria-expanded', 'true');
+    expect(nameOf('A1')).toHaveAttribute('aria-expanded', 'false');
+    await fireEvent.click(rowOf('A1'));
+    expect(nameOf('A1')).toHaveAttribute('aria-expanded', 'true');
+    expect(nameOf('A2')).toHaveAttribute('aria-expanded', 'false');
+    await fireEvent.click(within(rowOf('A2')).getByRole('button', { name: 'Open A2' }));
+    await waitFor(() => expect(corpusStore.currentId).toBe(2));
+    expect(nameOf('A2')).toHaveAttribute('aria-expanded', 'false');
+    expect(nameOf('A1')).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('the corpus name is the keyboard control: a button that expands the row, and the row is not focusable', async () => {
+    await show();
+    for (const r of rows()) {
+      expect(r).not.toHaveAttribute('tabindex');
+      expect(r).not.toHaveAttribute('aria-expanded');
+      expect(r).not.toHaveAttribute('aria-controls');
+    }
+    await fireEvent.click(nameOf('A2'));
+    expect(nameOf('A2')).toHaveAttribute('aria-expanded', 'true');
+    await fireEvent.click(nameOf('A1'));
+    expect(nameOf('A1')).toHaveAttribute('aria-expanded', 'true');
+    expect(nameOf('A2')).toHaveAttribute('aria-expanded', 'false');
+    const src = import.meta.glob('../src/screens/Projects.svelte', { query: '?raw', import: 'default', eager: true });
+    expect(Object.values(src)[0] as string).toMatch(/tr:has\(\.cname\[aria-expanded='true'\]\)/);
+  });
+
+  it('deleting the project while renaming it leaves no rename input and sends no PATCH', async () => {
+    await show();
+    await fireEvent.click(screen.getByRole('button', { name: /^Empty/ }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Rename project' }));
+    await tick();
+    expect(screen.getByLabelText('Name of project Empty')).toBeInTheDocument();
+    await askDeleteProject();
+    const dlg = screen.getByRole('dialog', { name: 'Delete this project?' });
+    projects = projects.filter((p) => p.id !== 9); // the server no longer lists it after the DELETE
+    await fireEvent.click(within(dlg).getByRole('button', { name: 'Delete' }));
+    await waitFor(() => expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent(/^Acme$/));
+    expect(screen.queryByRole('textbox', { name: /^Name of project/ })).toBeNull();
+    expect(calls.some((c) => c.method === 'DELETE' && c.path === '/api/projects/9')).toBe(true);
+    expect(calls.some((c) => c.method === 'PATCH')).toBe(false);
+  });
+
+  it('switching the working corpus to another project (nothing picked) clears the corpus selection', async () => {
+    await show();
+    await fireEvent.click(rowOf('A2'));
+    expect(nameOf('A2')).toHaveAttribute('aria-expanded', 'true');
+    corpusStore.currentId = 3; // B1, in Bolt: the panel follows the working corpus
+    await tick();
+    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent(/^Bolt$/);
+    for (const b of names()) expect(b).toHaveAttribute('aria-expanded', 'false');
+    corpusStore.currentId = 1; // back to Acme: the old selection does not come back
+    await tick();
+    for (const b of names()) expect(b).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('choosing another project clears the corpus selection', async () => {
+    await show();
+    await fireEvent.click(rowOf('A2'));
+    await fireEvent.click(screen.getByRole('button', { name: /^Bolt/ }));
+    await fireEvent.click(screen.getByRole('button', { name: /^Acme/ }));
+    await tick();
+    for (const b of names()) expect(b).toHaveAttribute('aria-expanded', 'false');
   });
 
   it('deleting a project with corpora needs a target, moves them, then deletes', async () => {
     await show();
-    await fireEvent.click(screen.getByRole('button', { name: 'Delete Acme' }));
-    await tick();
+    await askDeleteProject();
     const dlg = screen.getByRole('dialog', { name: 'Delete this project?' });
     expect(dlg).toHaveTextContent('Acme still has 2 corpora');
     const del = within(dlg).getByRole('button', { name: 'Delete' });
@@ -189,20 +352,22 @@ describe('Projects screen', () => {
   it('deleting an empty project only asks for confirmation', async () => {
     await show();
     await fireEvent.click(screen.getByRole('button', { name: /Empty/ }));
-    await fireEvent.click(screen.getByRole('button', { name: 'Delete Empty' }));
-    await tick();
+    await askDeleteProject();
     const dlg = screen.getByRole('dialog', { name: 'Delete this project?' });
     await fireEvent.click(within(dlg).getByRole('button', { name: 'Delete' }));
     await waitFor(() => expect(calls.some((c) => c.method === 'DELETE' && c.path === '/api/projects/9')).toBe(true));
   });
 
-  it('lists project-less corpora under "No project" and offers Move', async () => {
+  it('lists project-less corpora under "No project", without ✎ or the project menu', async () => {
     corpora = [...corpora, corpus(5, 'Loose', null)];
     corpusStore.list = [...corpora];
     await show();
     await fireEvent.click(screen.getByRole('button', { name: /No project/ }));
     expect(screen.getByText('Loose')).toBeInTheDocument();
-    expect(within(rowOf('Loose')).getByLabelText(/^Move /)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent(/^No project$/);
+    expect(screen.queryByRole('button', { name: 'Rename project' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Project actions' })).toBeNull();
+    expect(within(rowOf('Loose')).queryByRole('combobox')).toBeNull();
   });
 
   it.each([
@@ -212,8 +377,7 @@ describe('Projects screen', () => {
     projects = projects.map((p) => (p.id === proj.id ? proj : p));
     await show();
     await fireEvent.click(screen.getByRole('button', { name: new RegExp('^' + name) }));
-    await fireEvent.click(screen.getByRole('button', { name: `Delete ${name}` }));
-    await tick();
+    await askDeleteProject();
     const dlg = screen.getByRole('dialog', { name: 'Delete this project?' });
     expect(dlg).toHaveTextContent(`${name} still has corpora in the Trash`);
     expect(within(dlg).getByRole('link')).toHaveAttribute('href', '#/trash');
@@ -226,16 +390,14 @@ describe('Projects screen', () => {
     projects = projects.map((p) => (p.id === 8 ? { ...p, corpora: 1 } : p));
     await show();
     await fireEvent.click(screen.getByRole('button', { name: /Bolt/ }));
-    await fireEvent.click(screen.getByRole('button', { name: 'Delete Bolt' }));
-    await tick();
+    await askDeleteProject();
     expect(screen.getByRole('dialog', { name: 'Delete this project?' })).toHaveTextContent('Bolt still has 1 corpus.');
   });
 
   it('after a failed move it shows the error, skips DELETE and reloads the lists', async () => {
     failPatch = 2;
     await show();
-    await fireEvent.click(screen.getByRole('button', { name: 'Delete Acme' }));
-    await tick();
+    await askDeleteProject();
     const dlg = screen.getByRole('dialog', { name: 'Delete this project?' });
     await fireEvent.change(within(dlg).getByLabelText('Move corpora to…'), { target: { value: '8' } });
     const before = calls.filter((c) => c.method === 'GET' && c.path === '/api/projects').length;
@@ -247,15 +409,6 @@ describe('Projects screen', () => {
     await waitFor(() => expect(corpusStore.list.find((c) => c.id === 1)?.project_id).toBe(8));
   });
 
-  it('after a failed Move the select goes back to its placeholder', async () => {
-    failPatch = 2;
-    await show();
-    const sel = within(rowOf('A2')).getByLabelText(/^Move /) as HTMLSelectElement;
-    await fireEvent.change(sel, { target: { value: '8' } });
-    await waitFor(() => expect(messages.current).toEqual({ text: 'patch failed', kind: 'err' }));
-    await waitFor(() => expect(sel.value).toBe(''));
-  });
-
   it('the Language column shows the language name, the code when unknown', async () => {
     await loadLanguageNames();
     corpora = [...corpora, { ...corpus(6, 'Odd', 7), lang: 'xx' }];
@@ -265,13 +418,6 @@ describe('Projects screen', () => {
     expect(within(rowOf('Odd')).getByText('xx')).toBeInTheDocument();
   });
 
-  it('starting a corpus rename focuses the field', async () => {
-    await show();
-    await fireEvent.click(within(rowOf('A2')).getByRole('button', { name: 'Rename A2' }));
-    await tick();
-    expect(screen.getByLabelText('Name of project A2')).toHaveFocus();
-  });
-
   it.each([
     ['empty project', 9, 'Empty'],
     ['project with corpora', 7, 'Acme'],
@@ -279,16 +425,14 @@ describe('Projects screen', () => {
     projects = projects.map((p) => (p.id === id ? { ...p, terms: 5 } : p));
     await show();
     await fireEvent.click(screen.getByRole('button', { name: new RegExp('^' + name) }));
-    await fireEvent.click(screen.getByRole('button', { name: `Delete ${name}` }));
-    await tick();
+    await askDeleteProject();
     const dlg = screen.getByRole('dialog', { name: 'Delete this project?' });
     expect(dlg).toHaveTextContent(`Deleting ${name} also permanently deletes its 5 termbase entries.`);
   });
 
   it('shows no termbase warning when the project has no terms', async () => {
     await show();
-    await fireEvent.click(screen.getByRole('button', { name: 'Delete Acme' }));
-    await tick();
+    await askDeleteProject();
     expect(screen.getByRole('dialog', { name: 'Delete this project?' })).not.toHaveTextContent('termbase entries');
   });
 });
@@ -296,54 +440,51 @@ describe('Projects screen', () => {
 describe('Projects screen stacked below 900px', () => {
   beforeEach(() => __setViewportForTests({ stacked: true }));
 
-  it('shows only the selected project with a Change button', async () => {
+  it('arriving shows the list only', async () => {
     await show();
-    expect(screen.getByRole('button', { name: 'Change' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Acme/ })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /^Bolt/ })).toBeNull();
-    expect(screen.queryByRole('button', { name: /^Empty/ })).toBeNull();
-    expect(rows()).toHaveLength(2);
-  });
-
-  it('Change reveals the list; choosing a project selects it and collapses the list', async () => {
-    await show();
-    await fireEvent.click(screen.getByRole('button', { name: 'Change' }));
     expect(screen.getByRole('button', { name: /^Bolt/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Empty/ })).toBeInTheDocument();
+    expect(screen.queryByRole('table')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Change' })).toBeNull();
+  });
+
+  it('choosing a project shows its panel and Back, without the list', async () => {
+    await show();
     await fireEvent.click(screen.getByRole('button', { name: /^Bolt/ }));
     await tick();
-    expect(screen.queryByRole('button', { name: /^Acme/ })).toBeNull();
-    expect(screen.queryByRole('button', { name: /^Empty/ })).toBeNull();
-    expect(screen.getByRole('button', { name: /^Bolt/ })).toBeInTheDocument();
     expect(screen.getByText('B1')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Change' })).toBeInTheDocument();
+    expect(screen.queryByText('A1')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Projects' })).toBeNull();
   });
 
-  it('Change is a toggle: aria-expanded, stays mounted, closes the list without picking', async () => {
+  it('Back shows the list and focuses the chosen project', async () => {
     await show();
-    const change = screen.getByRole('button', { name: 'Change' });
-    expect(change).toHaveAttribute('aria-expanded', 'false');
-    expect(change).toHaveAttribute('aria-controls', 'proj-list');
-    await fireEvent.click(change);
-    expect(screen.getByRole('button', { name: 'Change' })).toBe(change);
-    expect(change).toHaveAttribute('aria-expanded', 'true');
-    expect(screen.getByRole('button', { name: /^Bolt/ })).toBeInTheDocument();
-    await fireEvent.click(change);
-    expect(change).toHaveAttribute('aria-expanded', 'false');
-    expect(screen.queryByRole('button', { name: /^Bolt/ })).toBeNull();
-    expect(screen.getByRole('button', { name: /^Acme/ })).toBeInTheDocument();
-  });
-
-  it('returns focus to Change after choosing a project', async () => {
-    await show();
-    await fireEvent.click(screen.getByRole('button', { name: 'Change' }));
     await fireEvent.click(screen.getByRole('button', { name: /^Bolt/ }));
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Change' })));
+    await tick();
+    await fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+    await tick();
+    expect(screen.queryByRole('table')).toBeNull();
+    const bolt = screen.getByRole('button', { name: /^Bolt/ });
+    expect(bolt).toHaveAttribute('aria-pressed', 'true');
+    await waitFor(() => expect(document.activeElement).toBe(bolt));
+  });
+
+  it('Back from "No project" focuses the No project item', async () => {
+    corpora = [...corpora, corpus(5, 'Loose', null)];
+    corpusStore.list = [...corpora];
+    await show();
+    await fireEvent.click(screen.getByRole('button', { name: /No project/ }));
+    await tick();
+    expect(screen.getByText('Loose')).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: /No project/ })));
   });
 
   it('keeps the chosen project and its corpora when stacked is toggled', async () => {
     await show();
-    await fireEvent.click(screen.getByRole('button', { name: 'Change' }));
     await fireEvent.click(screen.getByRole('button', { name: /^Bolt/ }));
     __setViewportForTests({ stacked: false });
     await tick();
@@ -354,35 +495,60 @@ describe('Projects screen stacked below 900px', () => {
     await tick();
     expect(screen.getByText('B1')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^Acme/ })).toBeNull();
-    expect(screen.getByRole('button', { name: /^Bolt/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument();
   });
 
   it('New corpus and New project still work', async () => {
     await show();
+    await fireEvent.click(screen.getByRole('button', { name: /^Acme/ }));
+    await tick();
     await fireEvent.click(screen.getByRole('button', { name: 'New corpus' }));
     await tick();
     const dlg = screen.getByRole('dialog', { name: 'New corpus' });
     expect(within(dlg).getByLabelText('Project')).toHaveValue('7');
     await fireEvent.click(within(dlg).getByRole('button', { name: 'Cancel' }));
-    await fireEvent.input(screen.getByLabelText('New project'), { target: { value: 'Zed' } });
-    await fireEvent.click(screen.getByRole('button', { name: 'Add' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+    await tick();
+    await fireEvent.click(screen.getByRole('button', { name: 'New project' }));
+    await tick();
+    const pdlg = screen.getByRole('dialog', { name: 'New project' });
+    await fireEvent.input(within(pdlg).getByRole('textbox'), { target: { value: 'Zed' } });
+    await fireEvent.click(within(pdlg).getByRole('button', { name: 'Create project' }));
     await waitFor(() => expect(calls.some((c) => c.method === 'POST' && c.path === '/api/projects')).toBe(true));
   });
 
-  it('wide layout has no Change button', async () => {
-    __setViewportForTests({ stacked: false });
+  it('deleting the shown project goes back to the list, focused on the project now chosen', async () => {
     await show();
-    expect(screen.queryByRole('button', { name: 'Change' })).toBeNull();
-    expect(screen.getByRole('button', { name: /^Bolt/ })).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole('button', { name: /^Empty/ }));
+    await tick();
+    expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument();
+    await askDeleteProject();
+    projects = projects.filter((p) => p.id !== 9);
+    await fireEvent.click(within(screen.getByRole('dialog', { name: 'Delete this project?' })).getByRole('button', { name: 'Delete' }));
+    await waitFor(() => expect(screen.getByRole('navigation', { name: 'Projects' })).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
+    const acme = screen.getByRole('button', { name: /^Acme/ });
+    expect(acme).toHaveAttribute('aria-pressed', 'true');
+    await waitFor(() => expect(acme).toHaveFocus());
   });
 
-  it('Change is translated', async () => {
+  it('wide layout has no Back button and shows list and panel together', async () => {
+    __setViewportForTests({ stacked: false });
+    await show();
+    expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
+    expect(screen.getByRole('button', { name: /^Bolt/ })).toBeInTheDocument();
+    expect(rows()).toHaveLength(2);
+  });
+
+  it('Back is translated', async () => {
     setLang('es');
     await show();
-    expect(screen.getByRole('button', { name: 'Cambiar' })).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole('button', { name: /^Bolt/ }));
+    await tick();
+    expect(screen.getByRole('button', { name: 'Volver' })).toBeInTheDocument();
     setLang('it');
     await tick();
-    expect(screen.getByRole('button', { name: 'Cambia' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Indietro' })).toBeInTheDocument();
   });
 });
 
@@ -392,12 +558,6 @@ describe('Projects screen corpora as cards below 640px', () => {
 
   const cards = () => screen.getAllByRole('listitem').filter((li) => li.classList.contains('ccard'));
   const cardOf = (name: string) => cards().find((c) => within(c).queryByText(name))!;
-  const more = (name: string) => within(cardOf(name)).getByRole('button', { name: /^More actions/ });
-  const openMenu = async (name: string) => {
-    await fireEvent.click(more(name));
-    await tick();
-    return screen.getByRole('menu');
-  };
 
   it('renders a card per corpus and no table', async () => {
     await show();
@@ -410,111 +570,11 @@ describe('Projects screen corpora as cards below 640px', () => {
 
   it('Open uses the same handler; the working corpus shows the badge instead', async () => {
     await show();
-    expect(within(cardOf('A1')).getByText('Working')).toBeInTheDocument();
+    expect(within(cardOf('A1')).getByText('Current')).toBeInTheDocument();
     expect(within(cardOf('A1')).queryByRole('button', { name: /^Open/ })).toBeNull();
     await fireEvent.click(within(cardOf('A2')).getByRole('button', { name: /^Open/ }));
     await waitFor(() => expect(corpusStore.currentId).toBe(2));
-    expect(within(cardOf('A2')).getByText('Working')).toBeInTheDocument();
-  });
-
-  it('the ⋯ button opens a menu: Rename, a Move item per other project, Delete', async () => {
-    await show();
-    const btn = more('A2');
-    expect(btn).toHaveAttribute('aria-haspopup', 'menu');
-    expect(btn).toHaveAttribute('aria-expanded', 'false');
-    const menu = await openMenu('A2');
-    expect(btn).toHaveAttribute('aria-expanded', 'true');
-    const items = within(menu).getAllByRole('menuitem').map((i) => i.textContent?.trim());
-    expect(items).toEqual(['Rename', 'Move: Bolt', 'Move: Empty', 'Delete']);
-  });
-
-  it('Rename swaps the card to the input; Enter saves, Escape cancels', async () => {
-    await show();
-    const menu = await openMenu('A2');
-    await fireEvent.click(within(menu).getByRole('menuitem', { name: 'Rename' }));
-    await tick();
-    const input = screen.getByLabelText('Name of project A2');
-    expect(input).toHaveFocus();
-    await fireEvent.keyDown(input, { key: 'Escape' });
-    await tick();
-    expect(screen.queryByLabelText('Name of project A2')).toBeNull();
-    expect(calls.some((c) => c.method === 'PATCH')).toBe(false);
-
-    const menu2 = await openMenu('A2');
-    await fireEvent.click(within(menu2).getByRole('menuitem', { name: 'Rename' }));
-    await tick();
-    const input2 = screen.getByLabelText('Name of project A2');
-    await fireEvent.input(input2, { target: { value: 'A2 new' } });
-    await fireEvent.keyDown(input2, { key: 'Enter' });
-    await waitFor(() => expect(calls.find((c) => c.method === 'PATCH' && c.path === '/api/corpora/2')?.body).toEqual({ name: 'A2 new' }));
-  });
-
-  it('while renaming the menu offers Save', async () => {
-    await show();
-    let menu = await openMenu('A2');
-    await fireEvent.click(within(menu).getByRole('menuitem', { name: 'Rename' }));
-    await tick();
-    await fireEvent.input(screen.getByLabelText('Name of project A2'), { target: { value: 'Zed' } });
-    // the name is an input now: reach the card through it
-    await fireEvent.click(within(screen.getByLabelText('Name of project A2').closest('li')!).getByRole('button', { name: /^More actions/ }));
-    await tick();
-    menu = screen.getByRole('menu');
-    expect(within(menu).queryByRole('menuitem', { name: 'Rename' })).toBeNull();
-    await fireEvent.click(within(menu).getByRole('menuitem', { name: 'Save' }));
-    await waitFor(() => expect(calls.find((c) => c.method === 'PATCH' && c.path === '/api/corpora/2')?.body).toEqual({ name: 'Zed' }));
-  });
-
-  it('Move patches the corpus with the chosen project', async () => {
-    await show();
-    const menu = await openMenu('A2');
-    await fireEvent.click(within(menu).getByRole('menuitem', { name: 'Move: Bolt' }));
-    await waitFor(() => expect(calls.find((c) => c.method === 'PATCH' && c.path === '/api/corpora/2')?.body).toEqual({ project_id: 8 }));
-    await waitFor(() => expect(screen.queryByText('A2')).toBeNull());
-  });
-
-  it('Delete opens the confirmation; nothing is deleted before confirming', async () => {
-    await show();
-    const menu = await openMenu('A2');
-    await fireEvent.click(within(menu).getByRole('menuitem', { name: 'Delete' }));
-    await tick();
-    expect(calls.some((c) => c.method === 'DELETE')).toBe(false);
-    const dlg = screen.getByRole('dialog', { name: 'Delete corpus' });
-    await fireEvent.click(within(dlg).getByRole('button', { name: 'Delete' }));
-    await waitFor(() => expect(calls.some((c) => c.method === 'DELETE' && c.path === '/api/corpora/2')).toBe(true));
-  });
-
-  it('Delete then Cancel returns focus to the ⋯ trigger', async () => {
-    await show();
-    const btn = more('A2');
-    const menu = await openMenu('A2');
-    await fireEvent.click(within(menu).getByRole('menuitem', { name: 'Delete' }));
-    await tick();
-    const dlg = screen.getByRole('dialog', { name: 'Delete corpus' });
-    await fireEvent.click(within(dlg).getByRole('button', { name: 'Cancel' }));
-    await waitFor(() => expect(document.activeElement).toBe(btn));
-  });
-
-  it('keyboard: Enter opens on the first item, arrows move, Escape closes and refocuses ⋯', async () => {
-    await show();
-    const btn = more('A2');
-    btn.focus();
-    await fireEvent.click(btn); // Enter and Space on a button arrive as click
-    await tick();
-    const items = within(screen.getByRole('menu')).getAllByRole('menuitem');
-    expect(items[0]).toHaveFocus();
-    await fireEvent.keyDown(items[0], { key: 'ArrowDown' });
-    expect(items[1]).toHaveFocus();
-    await fireEvent.keyDown(items[1], { key: 'ArrowUp' });
-    expect(items[0]).toHaveFocus();
-    await fireEvent.keyDown(items[0], { key: 'ArrowUp' });
-    expect(items[items.length - 1]).toHaveFocus();
-    await fireEvent.keyDown(items[items.length - 1], { key: 'ArrowDown' });
-    expect(items[0]).toHaveFocus();
-    await fireEvent.keyDown(items[0], { key: 'Escape' });
-    await tick();
-    expect(screen.queryByRole('menu')).toBeNull();
-    expect(btn).toHaveFocus();
-    expect(btn).toHaveAttribute('aria-expanded', 'false');
+    expect(within(cardOf('A2')).getByText('Current')).toBeInTheDocument();
   });
 
   it('a 200-character unbroken name wraps', async () => {
@@ -527,14 +587,35 @@ describe('Projects screen corpora as cards below 640px', () => {
     expect(Object.values(src)[0] as string).toMatch(/\.cname[^}]*overflow-wrap:\s*anywhere/s);
   });
 
-  it('the trigger names its corpus and duplicate project names do not break the menu', async () => {
-    projects = [...projects, { id: 10, name: 'Bolt', corpora: 0, trashed: 0, terms: 0 }];
-    render(Projects);
-    await waitFor(() => expect(projectStore.list).toHaveLength(4));
+  it('cards have no ⋯ menu; the name is a button that expands the corpus', async () => {
+    await show();
+    for (const c of cards()) expect(within(c).queryByRole('button', { name: /actions/i })).toBeNull();
+    const name = within(cardOf('A2')).getByRole('button', { name: 'A2' });
+    expect(name).toHaveAttribute('aria-expanded', 'false');
+    await fireEvent.click(name);
+    expect(name).toHaveAttribute('aria-expanded', 'true');
+    expect(name).toHaveAttribute('aria-controls', screen.getByRole('complementary', { name: 'Corpus settings' }).id);
+    expect(within(cardOf('A1')).getByRole('button', { name: 'A1' })).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('Open on a card does not select it', async () => {
+    await show();
+    await fireEvent.click(within(cardOf('A2')).getByRole('button', { name: 'Open A2' }));
+    await waitFor(() => expect(corpusStore.currentId).toBe(2));
+    expect(within(cardOf('A2')).getByRole('button', { name: 'A2' })).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('the project menu is still there, and its label is translated', async () => {
+    await show();
+    expect(screen.getByRole('button', { name: 'Project actions' })).toBeInTheDocument();
+    setLang('es');
     await tick();
-    expect(more('A2')).toHaveAccessibleName('More actions: A2');
-    const menu = await openMenu('A2');
-    expect(within(menu).getAllByRole('menuitem', { name: 'Move: Bolt' })).toHaveLength(2);
+    expect(screen.getByRole('button', { name: 'Acciones del proyecto' })).toBeInTheDocument();
+    expect(within(cardOf('A1')).getByText('Actual')).toBeInTheDocument();
+    setLang('it');
+    await tick();
+    expect(screen.getByRole('button', { name: 'Azioni del progetto' })).toBeInTheDocument();
+    expect(within(cardOf('A1')).getByText('Corrente')).toBeInTheDocument();
   });
 
   it('the pane overflow is visible so the menu overlays the page', async () => {
@@ -554,28 +635,176 @@ describe('Projects screen corpora as cards below 640px', () => {
     expect(screen.queryAllByRole('listitem').filter((li) => li.classList.contains('ccard'))).toHaveLength(0);
   });
 
-  it('crossing 640px keeps a rename in progress', async () => {
+});
+
+describe('Projects screen corpus settings panel', () => {
+  const panel = () => screen.getByRole('complementary', { name: 'Corpus settings' });
+  const nameField = () => within(panel()).getByLabelText('Corpus name');
+  const projectField = () => within(panel()).getByLabelText('Project');
+  const save = () => within(panel()).getByRole('button', { name: 'Save' });
+  const patches = () => calls.filter((c) => c.method === 'PATCH');
+
+  it('selecting a row opens the panel with the corpus name, project and summary', async () => {
+    await loadLanguageNames();
     await show();
-    const menu = await openMenu('A2');
-    await fireEvent.click(within(menu).getByRole('menuitem', { name: 'Rename' }));
+    expect(screen.queryByRole('complementary')).toBeNull();
+    await fireEvent.click(rowOf('A2'));
     await tick();
-    await fireEvent.input(screen.getByLabelText('Name of project A2'), { target: { value: 'Draft' } });
-    __setViewportForTests({ narrow: false });
-    await tick();
-    expect(document.querySelector('table')).not.toBeNull();
-    expect(screen.getByLabelText('Name of project A2')).toHaveValue('Draft');
-    __setViewportForTests({ narrow: true });
-    await tick();
-    expect(document.querySelector('table')).toBeNull();
-    expect(screen.getByLabelText('Name of project A2')).toHaveValue('Draft');
+    expect(nameField()).toHaveValue('A2');
+    expect(nameField()).toBeRequired();
+    expect(nameField()).toHaveAttribute('maxlength', '120');
+    expect(projectField()).toHaveValue('7');
+    expect(within(projectField()).getAllByRole('option').map((o) => o.textContent)).toEqual(['Acme', 'Bolt', 'Empty']);
+    expect(panel()).toHaveTextContent('Spanish · 3 documents · 1,002 words');
+    expect(nameOf('A2')).toHaveAttribute('aria-expanded', 'true');
+    expect(nameOf('A2')).toHaveAttribute('aria-controls', panel().id);
+    expect(nameOf('A1')).not.toHaveAttribute('aria-controls');
   });
 
-  it('the menu label is translated', async () => {
-    setLang('es');
+  it('Save sends one PATCH with name and project_id and says Corpus saved.', async () => {
     await show();
-    expect(within(cardOf('A2')).getByRole('button', { name: /^Más acciones/ })).toBeInTheDocument();
-    setLang('it');
+    await fireEvent.click(rowOf('A2'));
     await tick();
-    expect(within(cardOf('A2')).getByRole('button', { name: /^Altre azioni/ })).toBeInTheDocument();
+    await fireEvent.input(nameField(), { target: { value: ' A2 renamed ' } });
+    await fireEvent.click(save());
+    await waitFor(() => expect(messages.current).toEqual({ text: 'Corpus saved.', kind: 'ok' }));
+    expect(patches()).toEqual([{ method: 'PATCH', path: '/api/corpora/2', body: { name: 'A2 renamed', project_id: 7 } }]);
+    await waitFor(() => expect(within(rowOf('A2 renamed')).getByText('A2 renamed')).toBeInTheDocument());
+  });
+
+  it('Save is disabled when nothing changed and when the name is blank', async () => {
+    await show();
+    await fireEvent.click(rowOf('A2'));
+    await tick();
+    expect(save()).toBeDisabled();
+    await fireEvent.input(nameField(), { target: { value: 'Other' } });
+    expect(save()).toBeEnabled();
+    await fireEvent.input(nameField(), { target: { value: '   ' } });
+    expect(save()).toBeDisabled();
+    await fireEvent.input(nameField(), { target: { value: 'A2' } });
+    expect(save()).toBeDisabled();
+    await fireEvent.change(projectField(), { target: { value: '8' } });
+    expect(save()).toBeEnabled();
+  });
+
+  it('moving the corpus to another project selects that project and keeps the panel on the corpus', async () => {
+    await show();
+    await fireEvent.click(rowOf('A2'));
+    await tick();
+    await fireEvent.change(projectField(), { target: { value: '8' } });
+    await fireEvent.click(save());
+    await waitFor(() => expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent(/^Bolt$/));
+    expect(patches()).toEqual([{ method: 'PATCH', path: '/api/corpora/2', body: { name: 'A2', project_id: 8 } }]);
+    await waitFor(() => expect(nameOf('A2')).toHaveAttribute('aria-expanded', 'true'));
+    expect(screen.getByRole('button', { name: /^Bolt/ })).toHaveAttribute('aria-pressed', 'true');
+    expect(nameField()).toHaveValue('A2');
+    expect(projectField()).toHaveValue('8');
+    expect(save()).toBeDisabled();
+  });
+
+  it('selecting another row resets the form to that corpus', async () => {
+    await show();
+    await fireEvent.click(rowOf('A2'));
+    await tick();
+    await fireEvent.input(nameField(), { target: { value: 'Half typed' } });
+    await fireEvent.click(rowOf('A1'));
+    await tick();
+    expect(nameField()).toHaveValue('A1');
+    expect(save()).toBeDisabled();
+  });
+
+  it('Delete corpus… confirms, then DELETEs and closes the panel', async () => {
+    await show();
+    await fireEvent.click(rowOf('A2'));
+    await tick();
+    await fireEvent.click(within(panel()).getByRole('button', { name: 'Delete corpus…' }));
+    await tick();
+    const dlg = screen.getByRole('dialog', { name: 'Delete corpus' });
+    expect(dlg).toHaveTextContent('Move corpus "A2"');
+    expect(calls.some((c) => c.method === 'DELETE')).toBe(false);
+    corpora = corpora.filter((c) => c.id !== 2); // the server no longer lists it after the DELETE
+    await fireEvent.click(within(dlg).getByRole('button', { name: 'Delete' }));
+    await waitFor(() => expect(calls.some((c) => c.method === 'DELETE' && c.path === '/api/corpora/2')).toBe(true));
+    await waitFor(() => expect(screen.queryByRole('complementary')).toBeNull());
+    // A2 was last: focus goes to the previous corpus, not to the page.
+    await waitFor(() => expect(nameOf('A1')).toHaveFocus());
+  });
+
+  it('deleting a corpus focuses the next corpus name; deleting the only one focuses the heading', async () => {
+    await show();
+    // Picked, so the screen stays on Acme when its working corpus goes.
+    await fireEvent.click(screen.getByRole('button', { name: /^Acme/ }));
+    await fireEvent.click(rowOf('A1'));
+    await tick();
+    await fireEvent.click(within(panel()).getByRole('button', { name: 'Delete corpus…' }));
+    await tick();
+    corpora = corpora.filter((c) => c.id !== 1);
+    await fireEvent.click(within(screen.getByRole('dialog', { name: 'Delete corpus' })).getByRole('button', { name: 'Delete' }));
+    await waitFor(() => expect(nameOf('A2')).toHaveFocus());
+    await fireEvent.click(rowOf('A2'));
+    await tick();
+    await fireEvent.click(within(panel()).getByRole('button', { name: 'Delete corpus…' }));
+    await tick();
+    corpora = corpora.filter((c) => c.id !== 2);
+    await fireEvent.click(within(screen.getByRole('dialog', { name: 'Delete corpus' })).getByRole('button', { name: 'Delete' }));
+    await waitFor(() => expect(screen.getByRole('heading', { level: 2, name: 'Acme' })).toHaveFocus());
+  });
+
+  it('Esc closes the panel and focuses the corpus name', async () => {
+    await show();
+    // A click on the row, not the button: Safari-like, nothing was focused when the panel opened.
+    await fireEvent.click(rowOf('A2'));
+    await tick();
+    expect(nameField()).toHaveFocus();
+    await fireEvent.keyDown(nameField(), { key: 'Escape' });
+    await tick();
+    expect(screen.queryByRole('complementary')).toBeNull();
+    expect(nameOf('A2')).toHaveFocus();
+    expect(nameOf('A2')).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('switching rows while the panel is open, then Esc, focuses the newly selected corpus name', async () => {
+    await show();
+    nameOf('A2').focus();
+    await fireEvent.click(nameOf('A2'));
+    await tick();
+    await fireEvent.click(rowOf('A1'));
+    await tick();
+    expect(nameField()).toHaveValue('A1');
+    await fireEvent.keyDown(nameField(), { key: 'Escape' });
+    await tick();
+    expect(nameOf('A1')).toHaveFocus();
+  });
+
+  it('the draft survives a switch to the narrow card layout while the panel is open', async () => {
+    try {
+      await show();
+      await fireEvent.click(rowOf('A2'));
+      await tick();
+      await fireEvent.input(nameField(), { target: { value: 'Half typed' } });
+      __setViewportForTests({ narrow: true });
+      await tick();
+      expect(document.querySelector('table')).toBeNull();
+      expect(nameField()).toHaveValue('Half typed');
+      // The card's name button carries the same id, so closing still lands on the corpus.
+      await fireEvent.keyDown(nameField(), { key: 'Escape' });
+      await tick();
+      expect(screen.getByRole('button', { name: 'A2' })).toHaveFocus();
+    } finally {
+      __setViewportForTests({ narrow: false });
+    }
+  });
+
+  it('narrow: tapping the card name opens the panel', async () => {
+    __setViewportForTests({ narrow: true });
+    try {
+      await show();
+      const card = screen.getAllByRole('listitem').find((li) => li.classList.contains('ccard') && within(li).queryByText('A2'))!;
+      await fireEvent.click(within(card).getByRole('button', { name: 'A2' }));
+      await tick();
+      expect(nameField()).toHaveValue('A2');
+    } finally {
+      __setViewportForTests({ narrow: false });
+    }
   });
 });

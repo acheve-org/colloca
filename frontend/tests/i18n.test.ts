@@ -16,7 +16,7 @@ const SAME = new Set([
   'app.name', 'theme.auto', 'nav.menu', 'nav.group.corpus', 'trash.corpus', 'shortcuts.global', 'filter.docs',
   'ex.col.docs', 'ex.col.logdice', 'ex.col.tscore', 'ex.col.logRatio', 'ex.col.dice', 'term.langs', 'imp.langs',
   'cand.measure', 'cc.csv', 'tb.csv', 'tb.tbx', 'tb.xlsx', 'job.csv', 'job.csvOf', 'job.glossary.csv', 'job.glossary.tbx',
-  'job.glossary.xlsx', 'base.leipzig', 'proj.corpora1', 'bk.k.corpora', 'trash.corpora', 'proj.corpora', 'cc.unit.lemma',
+  'job.glossary.xlsx', 'base.leipzig', 'bk.k.corpora', 'trash.corpora', 'cc.unit.lemma',
   'ex.unit.lemma', 'ex.col.lemma', 'job.col.lemma', 'ex.col.basePerMillion', 'job.col.baseM', 'ex.col.perM', 'imp.file', 'job.excel', 'term.number.plural', 'term.number.singular', 'term.number.dual',
   'lang.modelLine', 'proj.colCorpus', 'add.tile.up', 'add.what.file1',
 ]);

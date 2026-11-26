@@ -19,7 +19,7 @@ docker compose up
 
 ## Workflow
 
-1. **Project and corpus** (*Projects*): create a **project** for the client or job, then *New corpus* (name + language, e.g. es, it) inside it. Every working corpus belongs to a project. On first run, every screen shows a three-step checklist (add a language, start a project, create a corpus) with a button for the current step, until all three exist.
+1. **Project and corpus** (*Projects*): create a **project** for the client or job (*+ New project* above the list), then, with the project chosen, *New corpus* (name + language, e.g. es, it) inside it. Every working corpus belongs to a project. On first run, every screen shows a three-step checklist (add a language, start a project, create a corpus) with a button for the current step, until all three exist.
 2. **Add documents** (*Sources* > *+ Add documents*). *Sources* lists the corpus's documents; *+ Add documents* (also the four tiles on an empty corpus) opens the *Add documents* page. Choose a method in its tabs:
 
    | Method | Behaviour |
@@ -46,8 +46,8 @@ Screen details: [analysis.md](analysis.md).
 ## Projects, document details and filters
 
 - **Project**: groups a client's corpora.
-  - Every working corpus belongs to exactly one project (`POST /api/corpora` needs `project_id`). Move a corpus to another project from the *Move* menu on the *Projects* screen; it cannot be taken out of a project.
-  - A project can be deleted only when it has no corpora, trashed ones included. *Projects* offers to move its live corpora elsewhere first; for corpora in the Trash, restore or empty them in *Backup and Trash*.
+  - Every working corpus belongs to exactly one project (`POST /api/corpora` needs `project_id`). Move a corpus to another project in its *Corpus settings* on the *Projects* screen (click its row, choose the project, *Save*); it cannot be taken out of a project.
+  - A project can be deleted only when it has no corpora, trashed ones included. *Delete project…* (in the project's *⋯* menu on *Projects*) offers to move its live corpora elsewhere first; for corpora in the Trash, restore or empty them in *Backup and Trash*.
   - Base corpora have no project.
   - The first start of a version with mandatory projects creates a project named `General` for corpora that had none ([operations.md](operations.md#database-upgrades)).
 - **Document details**:
