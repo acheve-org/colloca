@@ -18,6 +18,7 @@ const repoRoot = resolve(import.meta.dirname, '..');
 export default defineConfig({
   testDir: './e2e',
   outputDir: './test-results',
+  globalSetup: './e2e/setup.ts',
   globalTeardown: './e2e/teardown.ts',
   fullyParallel: false,
   workers: 1,

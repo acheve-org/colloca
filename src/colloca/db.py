@@ -231,7 +231,8 @@ CREATE INDEX idx_terms_concept ON terms (concept_id);
 
 # --- v14: the languages the user works with (replaces the fixed Spanish/Italian pair). `model_size` NULL = follow
 # SPACY_SIZE. `tesseract` is the OCR language code ('' = no OCR). Codes must come from langcatalog; corpora.lang keeps
-# being a plain code so trashed and imported rows never break.
+# being a plain code so trashed and imported rows never break. A database that already holds work (corpora, terms
+# or rejections, all made under the old fixed pair) gets Spanish and Italian set up; a fresh install starts with none.
 _V14 = """
 CREATE TABLE languages (
     code TEXT PRIMARY KEY,
@@ -240,9 +241,12 @@ CREATE TABLE languages (
     tesseract TEXT NOT NULL DEFAULT '',
     added TEXT DEFAULT CURRENT_TIMESTAMP
 );
-INSERT INTO languages (code, name, model_size, tesseract, added) VALUES
-    ('es', 'Spanish', NULL, 'spa', '2000-01-01 00:00:00'),
-    ('it', 'Italian', NULL, 'ita', '2000-01-01 00:00:01');
+WITH seed (code, name, tesseract, added) AS (VALUES
+    ('es', 'Spanish', 'spa', '2000-01-01 00:00:00'),
+    ('it', 'Italian', 'ita', '2000-01-01 00:00:01'))
+INSERT INTO languages (code, name, model_size, tesseract, added)
+SELECT code, name, NULL, tesseract, added FROM seed
+WHERE EXISTS (SELECT 1 FROM corpora) OR EXISTS (SELECT 1 FROM terms) OR EXISTS (SELECT 1 FROM term_rejections);
 """
 
 # --- v15: every working corpus belongs to a project. Project-less working corpora left by earlier versions (v5

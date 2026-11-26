@@ -1,7 +1,7 @@
 #!/bin/sh
 # Optionally prefetch spaCy models into /models (a mounted volume), then run the command. Models are normally
 # installed from the app (Languages screen); this is for prefetching or offline installs.
-#   docker compose run --rm colloca download-models [CODE...]   # default: es it; sizes: SPACY_SIZE (sm|md|lg)
+#   docker compose run --rm colloca download-models CODE...   # e.g. es it; sizes: SPACY_SIZE (sm|md|lg)
 set -eu
 
 size="${SPACY_SIZE:-lg}"
@@ -10,7 +10,10 @@ base=https://github.com/explosion/spacy-models/releases/download
 
 download_models() {
   langs="$*"
-  [ -z "$langs" ] && langs="es it"
+  if [ -z "$langs" ]; then
+    echo "colloca: name the languages to download, e.g. download-models es it" >&2
+    exit 2
+  fi
   urls=""
   names=""
   for lang in $langs; do

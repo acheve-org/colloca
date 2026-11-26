@@ -33,6 +33,8 @@ export const en: Messages = {
   'nav.sources': 'Sources',
   'nav.languages': 'Languages',
   'lang.introShort': 'Models, OCR data and base corpora for the languages you work with.',
+  'lang.empty': 'No languages set up yet.',
+  'lang.emptyHint': 'Add the languages you work with: each one gets its spaCy model, OCR data and base corpus.',
   'lang.status.model': 'Model',
   'lang.status.ocr': 'OCR',
   'lang.status.base': 'Base corpus',

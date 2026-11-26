@@ -1,6 +1,6 @@
 # Languages
 
-**Settings** > **Languages** is a list and a panel, like *Projects*. The list names each language you work with (Spanish and Italian at first) with its code and three status dots: **Model**, **OCR** and **Base corpus**. Each dot has its label beside it and a shape per state, so colour is never the only signal: a filled disc when it is installed (or the base corpus exists), a half disc while installing, a disc with a cross when an install failed, an empty ring when it is missing. *+ Add language* opens the catalog; the language you add becomes the chosen one. The first language is chosen when you open the screen.
+**Settings** > **Languages** is a list and a panel, like *Projects*. The list names each language you work with (a new install has none) with its code and three status dots: **Model**, **OCR** and **Base corpus**. Each dot has its label beside it and a shape per state, so colour is never the only signal: a filled disc when it is installed (or the base corpus exists), a half disc while installing, a disc with a cross when an install failed, an empty ring when it is missing. *+ Add language* opens the catalog; the language you add becomes the chosen one. The first language is chosen when you open the screen.
 
 The panel shows the chosen language: its name, its code, *Used by N corpora*, *Edit* (model size, OCR code) and a *⋯* menu (*Language actions*) with *Remove*. While corpora use the language *Remove* is shown but unavailable, and a line under the header says why. Below come three sections:
 
@@ -10,7 +10,7 @@ The panel shows the chosen language: its name, its code, *Used by N corpora*, *E
 
 Below 900 px the list shows first; choosing a language shows its panel in its place with a *Back* button, which returns to the list with focus on that language.
 
-*Add language* offers spaCy's official pipelines: Catalan, Croatian, Danish, Dutch, English, Finnish, French, German, Greek, Italian, Lithuanian, Macedonian, Norwegian Bokmål, Polish, Portuguese, Romanian, Slovenian, Spanish and Swedish. Languages written without spaces (Chinese, Japanese, Korean), Russian and Ukrainian are not offered yet.
+*Add language* offers spaCy's official pipelines (model size `lg` by default): Catalan, Croatian, Danish, Dutch, English, Finnish, French, German, Greek, Italian, Lithuanian, Macedonian, Norwegian Bokmål, Polish, Portuguese, Romanian, Slovenian, Spanish and Swedish. Languages written without spaces (Chinese, Japanese, Korean), Russian and Ukrainian are not offered yet.
 
 ## Rules
 

@@ -12,6 +12,7 @@
   import BaseCorpusCard from '../lib/ui/BaseCorpusCard.svelte';
   import Button from '../lib/ui/Button.svelte';
   import Dialog from '../lib/ui/Dialog.svelte';
+  import EmptyCard from '../lib/ui/EmptyCard.svelte';
   import ListPanel from '../lib/ui/ListPanel.svelte';
   import Toggle from '../lib/ui/Toggle.svelte';
   import AddLanguageDialog from './AddLanguageDialog.svelte';
@@ -149,7 +150,7 @@
     }
   }
 
-  const currentSize = (r: LanguageSetting) => chosen[r.code] ?? r.model_size ?? r.model.size ?? 'md';
+  const currentSize = (r: LanguageSetting) => chosen[r.code] ?? r.model_size ?? r.model.size ?? 'lg';
   const sizeChanged = (r: LanguageSetting) => chosen[r.code] !== undefined && chosen[r.code] !== (r.model.size ?? r.model_size);
 
   const installModel = (r: LanguageSetting) =>
@@ -349,6 +350,12 @@
           <Toggle bind:checked={force} label={t('src.force')} />
         </section>
       </section>
+    {:else if loaded}
+      <EmptyCard icon="list" title={t('lang.empty')} hint={t('lang.emptyHint')}>
+        {#snippet actions()}
+          <Button variant="primary" onclick={() => (addOpen = true)}>{t('lang.add')}</Button>
+        {/snippet}
+      </EmptyCard>
     {/if}
   {/snippet}
 </ListPanel>
