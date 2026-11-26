@@ -10,7 +10,7 @@ A base corpus is a general-language reference, one per language. It answers: is 
 
 ## Importing
 
-*Languages* screen: choose the language, then its *Base corpus* section. *Import even if the language looks wrong* (at the end of that section) skips the language check for those uploads. Input: sentence files (one sentence per line, or Leipzig `<id><TAB><sentence>`), split into documents of 5000 sentences.
+*Languages* screen: choose the language, then its *Base corpus* section. The section lists the tools that use the base corpus; before one exists it shows the recipe's main rules with links to the Leipzig Corpora Collection and to this page; afterwards it lists the files the base corpus was built from (parts and words per file), with the rules folded under *How to build a good base corpus*. *Import even if the language looks wrong* (at the end of that section) skips the language check for those uploads. Input: sentence files (one sentence per line, or Leipzig `<id><TAB><sentence>`), split into documents of 5000 sentences.
 
 | Route | Limit |
 |---|---|
