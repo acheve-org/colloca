@@ -1,4 +1,9 @@
-# Corpora
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/wordmark-dark.svg">
+    <img src="docs/assets/wordmark-light.svg" alt="Corpora" height="56">
+  </picture>
+</h1>
 
 Self-hosted tool for translators: build **monolingual reference corpora** (in the languages you set up) from chosen URLs and client documents, then explore them.
 
