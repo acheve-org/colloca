@@ -1,9 +1,10 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { tick } from 'svelte';
 import { fireEvent, render, screen } from '@testing-library/svelte';
 import Host from './DataTableHost.svelte';
 import DataTable from '../src/lib/ui/DataTable.svelte';
 import { rowMatchesFilter, type Column } from '../src/lib/ui/DataTable.types';
+import { __setViewportForTests } from '../src/lib/viewport.svelte';
 
 type R = { id: number; word: string; n: number };
 const columns: Column<R>[] = [
@@ -240,6 +241,54 @@ describe('DataTable', () => {
     expect(onselect).not.toHaveBeenCalled();
     await fireEvent.keyDown(grid(), { key: 'ArrowDown', ctrlKey: true });
     expect(onselect).not.toHaveBeenCalled();
+  });
+});
+
+describe('DataTable fit mode', () => {
+  const sized: Column<R>[] = [
+    { key: 'word', label: 'Word', width: 'minmax(12rem, 2fr)', value: (r) => r.word },
+    { key: 'n', label: 'Count', num: true, width: '6rem', value: (r) => r.n },
+    { key: 'id', label: 'Id', width: '1.5fr', value: (r) => r.id },
+    { key: 'x', label: 'X', value: () => 'x' },
+  ];
+  const dt = () => document.querySelector('.dt') as HTMLElement;
+  const templates = () => screen.getAllByRole('row').slice(0, 2).map((r) => r.style.gridTemplateColumns);
+
+  afterEach(() => __setViewportForTests({ narrow: false }));
+
+  it('fits the width: every column may shrink to 0 and plain cells carry their text as a title', () => {
+    render(DataTable<R>, { columns: sized, rows: mk(['alpha'], [7]), rowKey, fit: true });
+    expect(dt()).toHaveClass('fit');
+    for (const tpl of templates()) {
+      // the DOM serialises the 0 minimum as `0px`
+      expect(tpl.replace(/minmax\(0px,/g, 'minmax(0,')).toBe('minmax(0, 2fr) minmax(0, 6rem) minmax(0, 1.5fr) minmax(0, 1fr)');
+      expect(tpl.match(/minmax\(0(px)?,/g)).toHaveLength(sized.length);
+    }
+    const cells = bodyRows()[0].querySelectorAll('[role="gridcell"]');
+    expect(cells[0]).toHaveAttribute('title', 'alpha');
+    expect(cells[1]).toHaveAttribute('title', '7');
+  });
+
+  it('without fit the columns and cells are unchanged', () => {
+    render(DataTable<R>, { columns: sized, rows: mk(['alpha'], [7]), rowKey });
+    expect(dt()).not.toHaveClass('fit');
+    for (const tpl of templates()) expect(tpl).toBe('minmax(12rem, 2fr) 6rem 1.5fr 1fr');
+    expect(bodyRows()[0].querySelector('[role="gridcell"]')).not.toHaveAttribute('title');
+  });
+
+  it('is ignored below 640px: the table scrolls sideways as before', () => {
+    __setViewportForTests({ narrow: true });
+    render(DataTable<R>, { columns: sized, rows: mk(['alpha'], [7]), rowKey, fit: true });
+    expect(dt()).not.toHaveClass('fit');
+    for (const tpl of templates()) expect(tpl).toBe('minmax(12rem, 2fr) 6rem 1.5fr 1fr');
+    expect(bodyRows()[0].querySelector('[role="gridcell"]')).not.toHaveAttribute('title');
+  });
+
+  it('cells drawn by a cell snippet get no title', () => {
+    const probe = { selected: null, set: () => {}, setFilter: () => {}, setRows: () => {} };
+    render(Host, { rows: mk(['alpha']), columns: sized, probe, fit: true });
+    expect(dt()).toHaveClass('fit');
+    expect(bodyRows()[0].querySelector('[role="gridcell"]')).not.toHaveAttribute('title');
   });
 });
 
