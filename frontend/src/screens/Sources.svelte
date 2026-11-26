@@ -1,6 +1,4 @@
 <script module lang="ts">
-  type EditForm = Meta & { title: string };
-
   const LANG_BADGE: Record<string, string> = { mismatch: 'src.check.mismatch', uncertain: 'src.check.uncertain' };
 
   const emptyFacets = () => ({ tags: [], text_types: [], date_min: '', date_max: '' });
@@ -8,28 +6,29 @@
 
 <script lang="ts">
   import { onMount, tick, untrack } from 'svelte';
-  import { del, get, patch, post } from '../lib/api';
-  import { act, still, watch, work, type Meta } from '../lib/addDocuments.svelte';
+  import { del, get, post } from '../lib/api';
+  import { act, still, watch, work } from '../lib/addDocuments.svelte';
   import { CORPUS_CHANGED, corpusStore } from '../lib/corpus.svelte';
   import { hrefFor } from '../lib/router.svelte';
   import { t, fmt } from '../lib/i18n';
   import { JOBS_DONE, jobLogs } from '../lib/jobs.svelte';
   import { messages } from '../lib/messages.svelte';
+  import { viewport } from '../lib/viewport.svelte';
   import type { Doc, Facets, Job, NearDupMatch, NearDupReport } from '../lib/types';
+  import EditDocumentDialog from './EditDocumentDialog.svelte';
   import TmxExport from './TmxExport.svelte';
   import ActionMenu from '../lib/ui/ActionMenu.svelte';
   import Badge from '../lib/ui/Badge.svelte';
   import Button from '../lib/ui/Button.svelte';
   import DataTable from '../lib/ui/DataTable.svelte';
   import { cellValue, type Column } from '../lib/ui/DataTable.types';
-  import DetailStrip from '../lib/ui/DetailStrip.svelte';
   import Dialog from '../lib/ui/Dialog.svelte';
   import NoCorpus from '../lib/ui/NoCorpus.svelte';
   import ReadyHint from '../lib/ui/ReadyHint.svelte';
   import Field from '../lib/ui/Field.svelte';
+  import SidePanel from '../lib/ui/SidePanel.svelte';
   import MethodTiles from '../lib/ui/add/MethodTiles.svelte';
 
-  const uid = $props.id();
   const errMsg = (err: unknown) => (err instanceof Error ? err.message : String(err));
   const hasCorpus = $derived(corpusStore.currentId !== null);
 
@@ -52,7 +51,6 @@
   // Dialogs
   let editOpen = $state(false);
   let editing = $state.raw<Doc | null>(null);
-  let form = $state<EditForm>({ title: '', tags: '', text_type: '', doc_date: '', author: '' });
   let delOpen = $state(false);
   let toDelete = $state.raw<Doc | null>(null);
 
@@ -217,29 +215,13 @@
 
   function openEdit(d: Doc): void {
     editing = d;
-    form = { title: d.title, tags: d.tags.join(', '), text_type: d.text_type, doc_date: d.doc_date, author: d.author };
     editOpen = true;
   }
 
-  async function saveEdit(e: SubmitEvent): Promise<void> {
+  function closeOnEscape(e: KeyboardEvent): void {
+    if (e.key !== 'Escape' || selected === null) return;
     e.preventDefault();
-    const d = editing;
-    if (!d || !form.title.trim()) return;
-    const before: EditForm = { title: d.title, tags: d.tags.join(', '), text_type: d.text_type, doc_date: d.doc_date, author: d.author };
-    const changed = Object.fromEntries(
-      (Object.keys(before) as (keyof EditForm)[]).filter((k) => form[k] !== before[k]).map((k) => [k, form[k]]),
-    );
-    if (!Object.keys(changed).length) {
-      editOpen = false;
-      return;
-    }
-    await act('edit', async (id) => {
-      await patch(`/api/documents/${d.id}`, changed);
-      if (!still(id)) return;
-      editOpen = false;
-      messages.say(t('src.docUpdated'), 'ok');
-      refresh();
-    });
+    selected = null;
   }
 
   function askDelete(d: Doc): void {
@@ -359,7 +341,7 @@
         <Button disabled={work.busy !== null || !docs.length} onclick={openDuplicates}>{t('dup.find')}</Button>
         <TmxExport mode="button" />
         <ActionMenu label={t('src.more')} items={[{ label: t('src.reload'), onclick: refresh }]} />
-        <a class="addlink" href={hrefFor('sources-add')}>{t('add.add')}</a>
+        <a class="linkbtn" href={hrefFor('sources-add')}>{t('add.add')}</a>
       </span>
     </div>
 
@@ -369,44 +351,34 @@
       </ul>
     {/if}
 
-    <datalist id="{uid}-tags">
-      {#each facets.tags as x (x.tag)}<option value={x.tag}>{t('filter.docs', { docs: x.docs })}</option>{/each}
-    </datalist>
-    <datalist id="{uid}-types">
-      {#each facets.text_types as x (x.text_type)}<option value={x.text_type}></option>{/each}
-    </datalist>
+    <!-- The table scrolls on its own; the selected document's panel sits beside it (over it when narrower). -->
+    <div class="split">
+      <!-- svelte-ignore a11y_no_static_element_interactions (Esc in the documents grid closes the panel) -->
+      <div class="table" bind:this={tableEl} onkeydown={closeOnEscape}>
+        {#if loadedOnce && !docs.length && !loading}
+          <ReadyHint title={t('src.empty')} hint={t('src.emptyHint')} />
+          <MethodTiles />
+        {:else}
+          <DataTable
+            fit
+            {columns}
+            rows={docs}
+            rowKey={(d) => d.id}
+            bind:selected
+            bind:filter
+            {loading}
+            {cell}
+            onactivate={openEdit}
+            emptyText={t('src.noFilterMatch')}
+          />
+        {/if}
+      </div>
 
-    <div class="table" bind:this={tableEl}>
-      {#if loadedOnce && !docs.length && !loading}
-        <ReadyHint title={t('src.empty')} hint={t('src.emptyHint')} />
-        <MethodTiles />
-      {:else}
-        <DataTable
-          fit
-          {columns}
-          rows={docs}
-          rowKey={(d) => d.id}
-          bind:selected
-          bind:filter
-          {loading}
-          {cell}
-          onactivate={openEdit}
-          emptyText={t('src.noFilterMatch')}
-        />
-      {/if}
-    </div>
-
-    {#if selected}
-      {@const d = selected}
-      <div class="detail">
-        <DetailStrip title={t('src.detail')}>
-          {#snippet actions()}
-            <Button disabled={work.busy !== null} onclick={() => openEdit(d)}>{t('src.edit')}</Button>
-            {#if d.stale}
-              <Button disabled={work.busy !== null} title={t('src.reann.hint')} onclick={reannotate}>{t('src.reann.short')}</Button>
-            {/if}
-            <Button variant="danger" disabled={work.busy !== null} onclick={() => askDelete(d)}>{t('src.remove')}</Button>
-          {/snippet}
+      <!-- Selecting with the arrow keys opens the panel but leaves focus in the table, so Enter still edits.
+           Below 640px the panel covers the page, so it takes focus there. -->
+      <SidePanel open={selected !== null} title={selected?.title ?? ''} focusOnOpen={viewport.narrow} onclose={() => (selected = null)}>
+        {#if selected}
+          {@const d = selected}
           <dl>
             <dt>{t('src.col.title')}</dt>
             <dd>{d.title}</dd>
@@ -427,34 +399,26 @@
             <dt>{t('src.added')}</dt>
             <dd>{d.added}</dd>
           </dl>
-        </DetailStrip>
-      </div>
-    {/if}
-
+          <div class="panel-actions">
+            <!-- Task 6 adds the reader route (sources-read); then this becomes hrefFor('sources-read', { doc: String(d.id) }). -->
+            <a class="linkbtn" href="#/sources/read?doc={d.id}">{t('src.read')}</a>
+            <Button disabled={work.busy !== null} onclick={() => openEdit(d)}>{t('src.edit')}</Button>
+            <ActionMenu
+              label={t('src.moreFor', { title: d.title })}
+              disabled={work.busy !== null}
+              items={[
+                ...(d.stale ? [{ label: t('src.reann.short'), onclick: reannotate }] : []),
+                { label: t('src.remove'), onclick: () => askDelete(d), danger: true },
+              ]}
+            />
+          </div>
+        {/if}
+      </SidePanel>
+    </div>
   {/if}
 </div>
 
-<Dialog bind:open={editOpen} title={t('src.editTitle')}>
-  {#if editOpen}
-    <form id="{uid}-edit" class="dlg-form" onsubmit={saveEdit}>
-      <Field label={t('src.col.title')}><input bind:value={form.title} required maxlength="300" /></Field>
-      <Field label={t('src.meta.tags')}>
-        <input bind:value={form.tags} list="{uid}-tags" placeholder={t('src.edit.tagsPlaceholder')} />
-      </Field>
-      <Field label={t('src.edit.type')}>
-        <input bind:value={form.text_type} list="{uid}-types" placeholder={t('src.edit.typePlaceholder')} />
-      </Field>
-      <Field label={t('src.col.date')}>
-        <input bind:value={form.doc_date} placeholder={t('src.edit.datePlaceholder')} size="12" />
-      </Field>
-      <Field label={t('src.meta.author')}><input bind:value={form.author} /></Field>
-    </form>
-  {/if}
-  {#snippet footer()}
-    <Button onclick={() => (editOpen = false)}>{t('common.cancel')}</Button>
-    <button type="submit" form="{uid}-edit" class="primary" disabled={!form.title.trim() || work.busy !== null}>{t('common.save')}</button>
-  {/snippet}
-</Dialog>
+<EditDocumentDialog bind:open={editOpen} doc={editing} {facets} onsaved={refresh} />
 
 <Dialog bind:open={dupOpen} title={t('dup.title')} wide>
   <form
@@ -594,7 +558,7 @@
     border-bottom: 1px solid var(--line);
   }
   /* A link that looks like the primary button. */
-  .addlink {
+  .linkbtn {
     display: inline-flex;
     align-items: center;
     height: calc(var(--row-h) - var(--s-1));
@@ -623,11 +587,18 @@
     gap: var(--s-2);
     margin-left: auto;
   }
+  .split {
+    position: relative;
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 18rem;
+  }
   .table {
     display: flex;
     flex-direction: column;
-    flex: 1 1 auto;
-    min-height: 18rem;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden; /* DataTable scrolls itself */
   }
   .table :global(.dt) {
     border-width: 0;
@@ -650,11 +621,11 @@
     flex-wrap: wrap;
     gap: var(--s-1);
   }
-  .detail {
-    flex: none;
-  }
-  .detail :global(.strip) {
-    max-height: none;
+  .panel-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--s-2);
   }
   dl {
     display: grid;
@@ -674,14 +645,6 @@
   .mono {
     font-family: var(--font-mono);
     font-size: var(--fs-small);
-  }
-  .dlg-form {
-    display: flex;
-    flex-direction: column;
-    gap: var(--s-2);
-  }
-  .dlg-form :global(.field) {
-    display: flex;
   }
   .confirm {
     margin: 0;

@@ -4,6 +4,7 @@ import Sources from '../src/screens/Sources.svelte';
 import { CORPUS_CHANGED, corpusStore } from '../src/lib/corpus.svelte';
 import { JOBS_DONE, jobs, stopAllJobs, trackJobs } from '../src/lib/jobs.svelte';
 import { messages } from '../src/lib/messages.svelte';
+import { __setViewportForTests } from '../src/lib/viewport.svelte';
 import type { Doc, Job } from '../src/lib/types';
 
 const doc = (id: number, over: Partial<Doc> = {}): Doc => ({
@@ -235,49 +236,173 @@ describe('Sources', () => {
     expect(within(dlg).getByRole('link', { name: 'Download TMX' })).toBeInTheDocument();
   });
 
-  it('deleting a document asks for confirmation', async () => {
-    await ready();
-    await fireEvent.click(bodyRows()[0]);
-    await fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
-    expect(calls.some((c) => c.method === 'DELETE')).toBe(false);
-    const dlg = screen.getByRole('dialog', { name: 'Remove this document?' });
-    expect(dlg).toHaveTextContent('Doc 1');
-    await fireEvent.click(within(dlg).getByRole('button', { name: 'Remove' }));
-    await waitFor(() => expect(calls.some((c) => c.method === 'DELETE' && c.path === '/api/documents/1')).toBe(true));
-    await waitFor(() => expect(bodyRows().length).toBe(1));
-  });
+  describe('document side panel', () => {
+    const panel = () => screen.getByRole('complementary', { name: 'Doc 1' });
 
-  it('cancelling the delete confirmation removes nothing', async () => {
-    await ready();
-    await fireEvent.click(bodyRows()[0]);
-    await fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
-    await fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }));
-    expect(calls.some((c) => c.method === 'DELETE')).toBe(false);
-  });
+    async function more(name = 'Doc 1') {
+      await fireEvent.click(within(panel()).getByRole('button', { name: `More actions for ${name}` }));
+    }
 
-  it('editing metadata PATCHes only the changed fields', async () => {
-    await ready();
-    await fireEvent.click(bodyRows()[0]);
-    await fireEvent.click(screen.getByRole('button', { name: 'Edit details' }));
-    const dlg = screen.getByRole('dialog', { name: 'Document details' });
-    expect((within(dlg).getByLabelText('Title') as HTMLInputElement).value).toBe('Doc 1');
-    await fireEvent.input(within(dlg).getByLabelText('Tags'), { target: { value: 'legal, 2023' } });
-    await fireEvent.input(within(dlg).getByLabelText('Author'), { target: { value: 'Ana' } });
-    await fireEvent.click(within(dlg).getByRole('button', { name: 'Save' }));
-    await waitFor(() => expect(calls.some((c) => c.method === 'PATCH')).toBe(true));
-    const c = calls.find((x) => x.method === 'PATCH')!;
-    expect(c.path).toBe('/api/documents/1');
-    expect(c.body).toEqual({ tags: 'legal, 2023', author: 'Ana' });
-  });
+    it('opens beside the table when a row is selected, with the document fields', async () => {
+      await ready();
+      expect(screen.queryByRole('complementary')).toBeNull();
+      await fireEvent.click(bodyRows()[0]);
+      const p = panel();
+      expect(within(p).getByText('Type')).toBeInTheDocument();
+      expect(within(p).getByText('contract')).toBeInTheDocument();
+      expect(within(p).getByText('Size')).toBeInTheDocument();
+      expect(within(p).getByText('1,000 words · 5,000 characters')).toBeInTheDocument();
+      expect(p.closest('.split')).not.toBeNull(); // a flex row beside the table, not a strip below it
+    });
 
-  it('saving unchanged metadata sends nothing', async () => {
-    await ready();
-    await fireEvent.click(bodyRows()[0]);
-    await fireEvent.click(screen.getByRole('button', { name: 'Edit details' }));
-    const dlg = screen.getByRole('dialog', { name: 'Document details' });
-    await fireEvent.click(within(dlg).getByRole('button', { name: 'Save' }));
-    expect(calls.some((c) => c.method === 'PATCH')).toBe(false);
-    expect(dlg).not.toHaveAttribute('open');
+    it('Read links to the reader page of the document', async () => {
+      await ready();
+      await fireEvent.click(bodyRows()[1]);
+      const p = screen.getByRole('complementary', { name: 'Doc 2' });
+      expect(within(p).getByRole('link', { name: 'Read' })).toHaveAttribute('href', '#/sources/read?doc=2');
+    });
+
+    it('Esc closes the panel and clears the selection', async () => {
+      await ready();
+      await fireEvent.click(bodyRows()[0]);
+      await fireEvent.keyDown(within(panel()).getByRole('link', { name: 'Read' }), { key: 'Escape' });
+      expect(screen.queryByRole('complementary')).toBeNull();
+      expect(bodyRows().some((r) => r.getAttribute('aria-selected') === 'true')).toBe(false);
+    });
+
+    it('the close button closes the panel', async () => {
+      await ready();
+      await fireEvent.click(bodyRows()[0]);
+      await fireEvent.click(within(panel()).getByRole('button', { name: 'Close' }));
+      expect(screen.queryByRole('complementary')).toBeNull();
+    });
+
+    it('a corpus change closes the panel', async () => {
+      await ready();
+      await fireEvent.click(bodyRows()[0]);
+      expect(panel()).toBeInTheDocument();
+      corpusStore.currentId = 2;
+      window.dispatchEvent(new CustomEvent(CORPUS_CHANGED, { detail: { id: 2 } }));
+      await waitFor(() => expect(screen.queryByRole('complementary')).toBeNull());
+    });
+
+    it('More → Remove asks for confirmation, DELETEs and closes the panel', async () => {
+      await ready();
+      await fireEvent.click(bodyRows()[0]);
+      await more();
+      await fireEvent.click(screen.getByRole('menuitem', { name: 'Remove' }));
+      expect(calls.some((c) => c.method === 'DELETE')).toBe(false);
+      const dlg = screen.getByRole('dialog', { name: 'Remove this document?' });
+      expect(dlg).toHaveTextContent('Doc 1');
+      await fireEvent.click(within(dlg).getByRole('button', { name: 'Remove' }));
+      await waitFor(() => expect(calls.some((c) => c.method === 'DELETE' && c.path === '/api/documents/1')).toBe(true));
+      await waitFor(() => expect(bodyRows().length).toBe(1));
+      expect(screen.queryByRole('complementary')).toBeNull();
+    });
+
+    it('cancelling the delete confirmation removes nothing and keeps the panel', async () => {
+      await ready();
+      await fireEvent.click(bodyRows()[0]);
+      await more();
+      await fireEvent.click(screen.getByRole('menuitem', { name: 'Remove' }));
+      await fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }));
+      expect(calls.some((c) => c.method === 'DELETE')).toBe(false);
+      expect(panel()).toBeInTheDocument();
+    });
+
+    it('offers Re-annotate in More only for an outdated document', async () => {
+      docs.body = [doc(1, { stale: true }), doc(2)];
+      await ready();
+      await fireEvent.click(bodyRows()[1]);
+      await fireEvent.click(screen.getByRole('button', { name: 'More actions for Doc 2' }));
+      expect(screen.queryByRole('menuitem', { name: 'Re-annotate all outdated' })).toBeNull();
+      expect(screen.getByRole('menuitem', { name: 'Remove' })).toBeInTheDocument();
+      await fireEvent.keyDown(document.body, { key: 'Escape' });
+      await fireEvent.click(bodyRows()[0]);
+      await more();
+      await fireEvent.click(screen.getByRole('menuitem', { name: 'Re-annotate all outdated' }));
+      await waitFor(() => expect(calls.some((c) => c.path === '/api/corpora/1/reannotate')).toBe(true));
+      expect(calls.find((c) => c.path === '/api/corpora/1/reannotate')!.params.get('only_stale')).toBe('true');
+    });
+
+    it('editing metadata PATCHes only the changed fields', async () => {
+      await ready();
+      await fireEvent.click(bodyRows()[0]);
+      await fireEvent.click(within(panel()).getByRole('button', { name: 'Edit details' }));
+      const dlg = screen.getByRole('dialog', { name: 'Document details' });
+      expect((within(dlg).getByLabelText('Title') as HTMLInputElement).value).toBe('Doc 1');
+      await fireEvent.input(within(dlg).getByLabelText('Tags'), { target: { value: 'legal, 2023' } });
+      await fireEvent.input(within(dlg).getByLabelText('Author'), { target: { value: 'Ana' } });
+      await fireEvent.click(within(dlg).getByRole('button', { name: 'Save' }));
+      await waitFor(() => expect(calls.some((c) => c.method === 'PATCH')).toBe(true));
+      const c = calls.find((x) => x.method === 'PATCH')!;
+      expect(c.path).toBe('/api/documents/1');
+      expect(c.body).toEqual({ tags: 'legal, 2023', author: 'Ana' });
+      await waitFor(() => expect(messages.current).toEqual({ text: 'Document updated.', kind: 'ok' }));
+    });
+
+    it('saving unchanged metadata sends nothing', async () => {
+      await ready();
+      await fireEvent.click(bodyRows()[0]);
+      await fireEvent.click(within(panel()).getByRole('button', { name: 'Edit details' }));
+      const dlg = screen.getByRole('dialog', { name: 'Document details' });
+      await fireEvent.click(within(dlg).getByRole('button', { name: 'Save' }));
+      expect(calls.some((c) => c.method === 'PATCH')).toBe(false);
+      expect(dlg).not.toHaveAttribute('open');
+    });
+
+    it('the edit dialog suggests the corpus tags and text types', async () => {
+      await ready();
+      await fireEvent.click(bodyRows()[0]);
+      await fireEvent.click(within(panel()).getByRole('button', { name: 'Edit details' }));
+      const dlg = screen.getByRole('dialog', { name: 'Document details' });
+      const tags = within(dlg).getByLabelText('Tags');
+      const types = within(dlg).getByLabelText('Text type');
+      await waitFor(() => expect(document.getElementById(tags.getAttribute('list')!)?.querySelector('option[value="legal"]')).not.toBeNull());
+      expect(document.getElementById(types.getAttribute('list')!)?.querySelector('option[value="contract"]')).not.toBeNull();
+    });
+
+    it('from 640px, selecting with the keyboard opens the panel but keeps focus in the table, so Enter edits', async () => {
+      await ready();
+      const grid = screen.getByRole('grid');
+      grid.focus();
+      await fireEvent.keyDown(grid, { key: 'ArrowDown' });
+      expect(panel()).toBeInTheDocument();
+      expect(document.activeElement).toBe(grid);
+      await fireEvent.keyDown(grid, { key: 'Enter' });
+      const dlg = screen.getByRole('dialog', { name: 'Document details' });
+      expect((within(dlg).getByLabelText('Title') as HTMLInputElement).value).toBe('Doc 1');
+    });
+
+    it('Esc in the documents grid clears the selection and closes the panel', async () => {
+      await ready();
+      const grid = screen.getByRole('grid');
+      grid.focus();
+      await fireEvent.keyDown(grid, { key: 'ArrowDown' });
+      expect(panel()).toBeInTheDocument();
+      await fireEvent.keyDown(grid, { key: 'Escape' });
+      expect(screen.queryByRole('complementary')).toBeNull();
+      expect(bodyRows().some((r) => r.getAttribute('aria-selected') === 'true')).toBe(false);
+      expect(document.activeElement).toBe(grid);
+    });
+
+    it('below 640px the panel covers the page and takes focus', async () => {
+      __setViewportForTests({ narrow: true });
+      try {
+        await ready();
+        await fireEvent.click(bodyRows()[0]);
+        expect(document.activeElement).toBe(within(panel()).getByRole('link', { name: 'Read' }));
+      } finally {
+        __setViewportForTests({ narrow: false });
+      }
+    });
+
+    it('double-clicking a row still opens the edit dialog', async () => {
+      await ready();
+      await fireEvent.dblClick(bodyRows()[1]);
+      const dlg = screen.getByRole('dialog', { name: 'Document details' });
+      expect((within(dlg).getByLabelText('Title') as HTMLInputElement).value).toBe('Doc 2');
+    });
   });
 
   it('document titles with HTML render as text', async () => {
@@ -294,8 +419,6 @@ describe('Sources', () => {
     docs.body = [doc(1, { stale: true }), doc(2)];
     await ready();
     expect(screen.getByText('1 document annotated with an older NLP model.')).toBeInTheDocument();
-    await fireEvent.click(bodyRows()[0]);
-    expect(screen.getByRole('button', { name: 'Re-annotate all outdated' })).toBeInTheDocument();
     await fireEvent.click(screen.getByRole('button', { name: 'Re-annotate with current model' }));
     await waitFor(() => expect(calls.some((c) => c.path === '/api/corpora/1/reannotate')).toBe(true));
     expect(calls.find((c) => c.path === '/api/corpora/1/reannotate')!.params.get('only_stale')).toBe('true');
