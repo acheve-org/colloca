@@ -6,7 +6,7 @@ import type { Job } from './types';
 
 const POLL_MS = 1000;
 
-/** Background jobs across every active watcher, for the progress strip in StatusLine. */
+/** Background jobs across every active watcher, for the progress strip in StatusBar. */
 export const jobs = $state<{ running: number; progress: number }>({ running: 0, progress: 0 });
 
 // Active jobs per live watcher; `jobs` is recomputed from it (plain map: not read reactively).
@@ -104,7 +104,7 @@ export const jobLogs = $state<{ by: Record<number, Job[]> }>({ by: {} });
 const tracked = new Map<number, () => void>();
 
 /**
- * Follows the jobs of a corpus independently of any screen: the StatusLine strip keeps
+ * Follows the jobs of a corpus independently of any screen: the StatusBar strip keeps
  * counting them and, when they finish, `corpusStore` reloads (doc counts, aligned flag) and
  * JOBS_DONE is fired. A corpus already being followed is not polled twice; pass
  * `started` right after submitting a job so a job that finished before the first poll counts.

@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import StatusLine from '../src/lib/ui/StatusLine.svelte';
+import StatusBar from '../src/lib/ui/StatusBar.svelte';
 import { JOBS_DONE, jobLogs, jobs, startJobTracking, stopAllJobs, trackJobs, watchJobs } from '../src/lib/jobs.svelte';
 import { corpusStore } from '../src/lib/corpus.svelte';
 import { messages } from '../src/lib/messages.svelte';
@@ -150,9 +150,9 @@ describe('watchJobs', () => {
     expect(messages.current).toBeNull();
   });
 
-  it('StatusLine shows a progress strip while jobs run', async () => {
+  it('StatusBar shows a progress strip while jobs run', async () => {
     responses = [[job(1, 'running', 0.25)], [job(1, 'done', 1)]];
-    render(StatusLine);
+    render(StatusBar);
     expect(screen.queryByText(/job running/)).not.toBeInTheDocument();
     watchJobs(4, () => {});
     await vi.advanceTimersByTimeAsync(0);

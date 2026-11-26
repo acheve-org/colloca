@@ -190,6 +190,7 @@ export const it: Messages = {
   'corpus.confirmDelete': 'Spostare il corpus «{name}» e tutti i suoi documenti nel cestino? Potrai ripristinarlo da Backup e cestino.',
   'common.close': 'Chiudi',
   'status.label': 'Stato',
+  'status.dismiss': 'Chiudi messaggio',
   'shortcuts.title': 'Scorciatoie da tastiera',
   'shortcuts.search': 'Vai alle concordanze e attiva la ricerca',
   'shortcuts.change': 'Cambia',
