@@ -84,7 +84,7 @@ A tab in Explore, shown only when the corpus has aligned texts.
 
 ## Export as TMX
 
-*Sources* > *Export aligned texts (TMX)* (collapsed section below the document list; shown for an aligned corpus with partners): `GET /api/corpora/{id}/export-tmx`.
+*Sources* > *Export TMX* (toolbar button, shown for an aligned corpus with partners; opens the *Export aligned texts (TMX)* dialog with *Download TMX*): `GET /api/corpora/{id}/export-tmx`.
 
 - TMX 1.4b. This corpus's language is the source.
 - Each unit carries document title, source, text type, date, author, tags as `prop`s. Project name in the header.

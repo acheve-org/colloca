@@ -1268,6 +1268,18 @@ def get_document(doc_id: int):
         return {**doc, "tags": tags}
 
 
+@app.get("/api/documents/{doc_id}/blocks")
+def document_blocks(doc_id: int, start: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=docview.MAX_BLOCKS)):
+    """A page of the whole document to read: `limit` blocks from block `start` (paragraphs of the original
+    text, or aligned segments with their translations), the total number of blocks, and the document's
+    metadata. For reading a long document page by page without downloading it all at once."""
+    with db.session() as conn:
+        try:
+            return docview.blocks(conn, doc_id, start, limit)
+        except LookupError as exc:
+            raise HTTPException(404, str(exc)) from exc
+
+
 @app.get("/api/documents/{doc_id}/context")
 def document_context(doc_id: int, pos: int = Query(ge=0), span: int = Query(1, ge=1, le=200),
                      radius: int = Query(3, ge=0, le=docview.MAX_RADIUS)):

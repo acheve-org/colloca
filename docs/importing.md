@@ -77,4 +77,5 @@ Check low-confidence OCR text before trusting lemmas.
   | `MAX_DOWNLOAD_MB` | 15 per URL |
 
 - **Background imports**: uploads, URLs and pasted texts are queued, processed one at a time. After *Add documents* returns to *Sources*, its job log shows progress and per-file errors, whatever screen is open.
+- **Check an import by reading it**: on *Sources*, select the document and choose *Read* in its side panel. The reader shows the stored text paragraph by paragraph (aligned documents as numbered pairs), so you can spot a page header repeated in every paragraph, OCR noise, broken lines or a misaligned pair. *Find in document* jumps to a word. Fix the metadata with *Edit details*; to fix the text, correct the source and import it again.
 - **Re-annotate**: after changing `SPACY_SIZE` or updating spaCy, documents annotated with another model are flagged *older model*. *Re-annotate with current model* (`POST /api/corpora/{id}/reannotate`) redoes them from stored text.

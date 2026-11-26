@@ -34,6 +34,8 @@ docker compose up
    The *About these documents* card (Tags, Text type, Date, Author, *Import even if the language looks wrong*) applies to everything added in that step, including a translation-memory import. *Align two documents* is the exception: it has its own buttons and does not use these details or the bar below. For the other methods, the bar at the foot of the page shows what will be added and where, with *Cancel* and the action of the current method. *Cancel* returns to the document list and discards the form. After a successful add the app also returns to the list, where the job log shows progress, and the *About* values are kept for the next add; they are cleared on *Cancel* and when the corpus changes.
 
    Index imports flag in the job report: very short texts, cookie/JavaScript/paywall boilerplate, landing-page titles, repeated titles. Flagged documents are still added.
+
+   To check what was stored, select the document on *Sources* and choose *Read* in its side panel: the whole text opens in a reader, with *Find in document*. See [importing.md](importing.md).
 3. **Explore**: pick Explore in the rail, then a tab.
    - Click any word in a table to open its concordance.
    - Every table: sort by header, *Filter in results*, CSV export.
@@ -60,6 +62,16 @@ Screen details: [analysis.md](analysis.md).
   | Author | free |
 
   Set before adding (*About these documents* on the *Add documents* page; applies to URL, upload, pasted text and translation-memory imports, not to *Align two documents*) or later with *Edit details* on *Sources*.
+- **Corpus size**: the pill after the document count on *Sources* shows the total words of the corpus (all its documents) and a band. Guidance only: nothing is blocked.
+
+  | Band | Total words | Fair to use |
+  |---|---|---|
+  | small | under 50,000 | concordance and frequency; collocations on frequent terms only; keyness, n-grams and related terms are rough |
+  | workable | 50,000–249,999 | most analyses on core terms; related terms are rough below 200,000 |
+  | solid | 250,000–999,999 | every analysis |
+  | large | 1,000,000 or more | every analysis |
+
+  Click the pill for the readiness list and the words left to the next band. It turns amber in the small band, or when one document holds more than 40% of the words (with at least 2 documents): its wording will dominate the lists. *Esc* or a click outside closes it.
 - **Document filter**: the *All documents* pill at the right of the context header on every analysis screen, *Segment lookup* (aligned corpora) and the Job screen. It reads *N of M documents* when active; each active part also shows as a chip with a remove button. The pill opens a panel with *Tags*, *Type*, *From*, *To*, the summary, *Clear* (when a filter is active) and *Done* (*Esc* or a click outside closes it).
   - It persists when you move between screens and resets when you switch corpus. Changing it does not re-run a search: search again.
   - Criteria: all given tags, a text type, a date range.

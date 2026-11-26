@@ -11,6 +11,7 @@
 <script lang="ts" generics="Row">
   import { tick, untrack, type Snippet } from 'svelte';
   import { t, locale } from '../i18n';
+  import { viewport } from '../viewport.svelte';
   import { cellValue, foldText, rowHaystack, type Column, type SortState } from './DataTable.types';
 
   interface Props {
@@ -30,6 +31,12 @@
     onselect?: (r: Row | null) => void;
     cell?: Snippet<[Row, Column<Row>]>;
     rowClass?: (r: Row) => string;
+    /**
+     * Fit the table to its container instead of scrolling sideways: every column may shrink
+     * (its minimum becomes 0) and every cell and header shows its text (the cell value) as a tooltip.
+     * Ignored below 640px, where the table scrolls sideways as usual.
+     */
+    fit?: boolean;
   }
 
   let {
@@ -45,9 +52,21 @@
     onselect,
     cell,
     rowClass,
+    fit = false,
   }: Props = $props();
 
   const PAGE = 10;
+
+  /** A column width that may shrink to 0: `minmax(a, b)` keeps only its maximum, anything else becomes the maximum. */
+  function shrinkable(width: string): string {
+    const m = /^minmax\(\s*[^,]+,\s*(.+)\)$/.exec(width.trim());
+    return `minmax(0, ${m ? m[1].trim() : width.trim()})`;
+  }
+
+  const fitting = $derived(fit && !viewport.narrow);
+  const template = $derived(
+    columns.map((c) => (fitting ? shrinkable(c.width ?? '1fr') : (c.width ?? '1fr'))).join(' '),
+  );
   let wrap: HTMLElement | undefined = $state();
   let headEl: HTMLElement | undefined = $state();
 
@@ -279,6 +298,7 @@
 
 <div
   class="dt"
+  class:fit={fitting}
   bind:this={wrap}
   onscroll={() => {
     if (virtual && wrap) scrollTop = wrap.scrollTop;
@@ -293,13 +313,14 @@
     data-virtual={virtual || undefined}
     {onkeydown}
   >
-    <div class="row head" role="row" aria-rowindex={1} bind:this={headEl} style:grid-template-columns={columns.map((c) => c.width ?? '1fr').join(' ')}>
+    <div class="row head" role="row" aria-rowindex={1} bind:this={headEl} style:grid-template-columns={template}>
       {#each columns as col (col.key)}
         <div
           class="th"
           class:num={col.num}
           class:sortable={col.sortable !== false}
           role="columnheader"
+          title={fitting ? col.label : undefined}
           aria-sort={ariaSort(col)}
           tabindex={col.sortable === false ? undefined : 0}
           onclick={() => toggleSort(col)}
@@ -329,12 +350,12 @@
         data-ek={v.ek}
         aria-rowindex={i + 2}
         aria-selected={v.ek === selectedKey}
-        style:grid-template-columns={columns.map((c) => c.width ?? '1fr').join(' ')}
+        style:grid-template-columns={template}
         onclick={() => select(v.row, v.key)}
         ondblclick={() => onactivate?.(v.row)}
       >
         {#each columns as col (col.key)}
-          <div class="td" class:num={col.num} role="gridcell">
+          <div class="td" class:num={col.num} role="gridcell" title={fitting ? String(cellValue(v.row, col)) : undefined}>
             {#if cell}{@render cell(v.row, col)}{:else}{cellValue(v.row, col)}{/if}
           </div>
         {/each}
@@ -358,6 +379,9 @@
   .grid {
     min-width: max-content;
     outline: none;
+  }
+  .fit .grid {
+    min-width: 0;
   }
   .grid:focus-visible {
     outline: 2px solid var(--accent);

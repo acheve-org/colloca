@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Snippet } from 'svelte';
+  import { untrack, type Snippet } from 'svelte';
   import { t } from '../i18n';
   import Button from './Button.svelte';
 
@@ -11,10 +11,12 @@
     onclose?: () => void;
     /** Id of the element to focus on close; when absent, the element that had focus when the panel opened. */
     returnFocus?: string;
+    /** Move focus into the panel when it opens (default). Off when selecting in a grid opens it, so focus stays there. */
+    focusOnOpen?: boolean;
     children: Snippet;
     footer?: Snippet;
   }
-  let { open = $bindable(), id, title, onclose, returnFocus, children, footer }: Props = $props();
+  let { open = $bindable(), id, title, onclose, returnFocus, focusOnOpen = true, children, footer }: Props = $props();
 
   const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
@@ -27,6 +29,7 @@
   $effect(() => {
     if (!body) return;
     opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    if (!untrack(() => focusOnOpen)) return;
     const first = body.querySelector<HTMLElement>(FOCUSABLE);
     (first ?? heading)?.focus();
   });

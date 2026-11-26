@@ -4,6 +4,7 @@ import Sources from '../src/screens/Sources.svelte';
 import { CORPUS_CHANGED, corpusStore } from '../src/lib/corpus.svelte';
 import { JOBS_DONE, jobs, stopAllJobs, trackJobs } from '../src/lib/jobs.svelte';
 import { messages } from '../src/lib/messages.svelte';
+import { __setViewportForTests } from '../src/lib/viewport.svelte';
 import type { Doc, Job } from '../src/lib/types';
 
 const doc = (id: number, over: Partial<Doc> = {}): Doc => ({
@@ -109,7 +110,10 @@ const bodyRows = () => screen.queryAllByRole('row').filter((r) => r.classList.co
 const docCalls = () => calls.filter((c) => c.path === '/api/corpora/1/documents' && c.method === 'GET');
 const jobCalls = () => calls.filter((c) => c.path === '/api/corpora/1/jobs');
 
-const openSettings = () => fireEvent.click(screen.getByText('Corpus settings'));
+async function reload() {
+  await fireEvent.click(screen.getByRole('button', { name: 'More' }));
+  await fireEvent.click(screen.getByRole('menuitem', { name: 'Reload' }));
+}
 
 async function ready() {
   const r = render(Sources);
@@ -168,6 +172,24 @@ describe('Sources', () => {
     expect(screen.queryAllByRole('link', { name: /From the web/ }).length).toBe(0);
   });
 
+  it('has a one-line toolbar: count, filter and More → Reload', async () => {
+    await ready();
+    expect(screen.getByRole('heading', { level: 2, name: 'Documents' })).toHaveClass('sr-only');
+    expect(screen.getByText('2 documents')).toBeInTheDocument();
+    expect(screen.getByRole('searchbox', { name: 'Filter in results' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Reload' })).toBeNull(); // only in the More menu
+    const before = docCalls().length;
+    await reload();
+    await waitFor(() => expect(docCalls().length).toBe(before + 1));
+  });
+
+  it('has no corpus settings: they live in Projects', async () => {
+    await ready();
+    expect(screen.queryByText('Corpus settings')).toBeNull();
+    expect(screen.queryByLabelText('Corpus name')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Save corpus' })).toBeNull();
+  });
+
   it('reloads the documents when the jobs of this corpus finish', async () => {
     await ready();
     const before = docCalls().length;
@@ -189,82 +211,198 @@ describe('Sources', () => {
     expect(screen.getByRole('button', { name: 'Find near-duplicates' })).toBeDisabled();
   });
 
-  it('keeps the corpus settings collapsed until opened', async () => {
+  it('shows no Export TMX button for a corpus without aligned documents', async () => {
     await ready();
-    const d = screen.getByText('Corpus settings').closest('details')!;
-    expect(d).not.toHaveAttribute('open');
-    await openSettings();
-    expect(d).toHaveAttribute('open');
-  });
-
-  it('shows the TMX export disclosure only for aligned corpora', async () => {
-    await ready();
+    expect(screen.queryByRole('button', { name: 'Export TMX' })).toBeNull();
     expect(screen.queryByText('Export aligned texts (TMX)')).toBeNull();
-    expect(document.querySelector('details.tmx')).toBeNull();
   });
 
-  it('shows no TMX disclosure for an aligned corpus without partners', async () => {
+  it('shows no Export TMX button for an aligned corpus without partners', async () => {
     corpusStore.aligned = true;
     partners = [];
     await ready();
     await waitFor(() => expect(calls.some((c) => c.path === '/api/corpora/1/aligned-partners')).toBe(true));
     await new Promise((r) => setTimeout(r, 10));
-    expect(document.querySelector('details.tmx')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Export TMX' })).toBeNull();
   });
 
-  it('shows the TMX export in a collapsed disclosure for an aligned corpus', async () => {
+  it('opens the TMX export in a dialog from the toolbar for an aligned corpus', async () => {
     corpusStore.aligned = true;
     await ready();
-    await waitFor(() => expect(document.querySelector('details.tmx')).not.toBeNull());
-    const d = document.querySelector('details.tmx')!;
-    expect(d).not.toHaveAttribute('open');
-    expect(within(d as HTMLElement).getByRole('heading', { name: 'Export aligned texts (TMX)', hidden: true })).toBeInTheDocument();
-    expect(within(d as HTMLElement).getByRole('link', { name: 'Download TMX', hidden: true })).toBeInTheDocument();
+    const btn = await screen.findByRole('button', { name: 'Export TMX' });
+    expect(screen.queryByRole('link', { name: 'Download TMX' })).toBeNull();
+    await fireEvent.click(btn);
+    const dlg = screen.getByRole('dialog', { name: 'Export aligned texts (TMX)' });
+    expect(within(dlg).getByRole('link', { name: 'Download TMX' })).toBeInTheDocument();
   });
 
-  it('deleting a document asks for confirmation', async () => {
-    await ready();
-    await fireEvent.click(bodyRows()[0]);
-    await fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
-    expect(calls.some((c) => c.method === 'DELETE')).toBe(false);
-    const dlg = screen.getByRole('dialog', { name: 'Remove this document?' });
-    expect(dlg).toHaveTextContent('Doc 1');
-    await fireEvent.click(within(dlg).getByRole('button', { name: 'Remove' }));
-    await waitFor(() => expect(calls.some((c) => c.method === 'DELETE' && c.path === '/api/documents/1')).toBe(true));
-    await waitFor(() => expect(bodyRows().length).toBe(1));
-  });
+  describe('document side panel', () => {
+    const panel = () => screen.getByRole('complementary', { name: 'Doc 1' });
 
-  it('cancelling the delete confirmation removes nothing', async () => {
-    await ready();
-    await fireEvent.click(bodyRows()[0]);
-    await fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
-    await fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }));
-    expect(calls.some((c) => c.method === 'DELETE')).toBe(false);
-  });
+    async function more(name = 'Doc 1') {
+      await fireEvent.click(within(panel()).getByRole('button', { name: `More actions for ${name}` }));
+    }
 
-  it('editing metadata PATCHes only the changed fields', async () => {
-    await ready();
-    await fireEvent.click(bodyRows()[0]);
-    await fireEvent.click(screen.getByRole('button', { name: 'Edit details' }));
-    const dlg = screen.getByRole('dialog', { name: 'Document details' });
-    expect((within(dlg).getByLabelText('Title') as HTMLInputElement).value).toBe('Doc 1');
-    await fireEvent.input(within(dlg).getByLabelText('Tags'), { target: { value: 'legal, 2023' } });
-    await fireEvent.input(within(dlg).getByLabelText('Author'), { target: { value: 'Ana' } });
-    await fireEvent.click(within(dlg).getByRole('button', { name: 'Save' }));
-    await waitFor(() => expect(calls.some((c) => c.method === 'PATCH')).toBe(true));
-    const c = calls.find((x) => x.method === 'PATCH')!;
-    expect(c.path).toBe('/api/documents/1');
-    expect(c.body).toEqual({ tags: 'legal, 2023', author: 'Ana' });
-  });
+    it('opens beside the table when a row is selected, with the document fields', async () => {
+      await ready();
+      expect(screen.queryByRole('complementary')).toBeNull();
+      await fireEvent.click(bodyRows()[0]);
+      const p = panel();
+      expect(within(p).getByText('Type')).toBeInTheDocument();
+      expect(within(p).getByText('contract')).toBeInTheDocument();
+      expect(within(p).getByText('Size')).toBeInTheDocument();
+      expect(within(p).getByText('1,000 words · 5,000 characters')).toBeInTheDocument();
+      expect(p.closest('.split')).not.toBeNull(); // a flex row beside the table, not a strip below it
+    });
 
-  it('saving unchanged metadata sends nothing', async () => {
-    await ready();
-    await fireEvent.click(bodyRows()[0]);
-    await fireEvent.click(screen.getByRole('button', { name: 'Edit details' }));
-    const dlg = screen.getByRole('dialog', { name: 'Document details' });
-    await fireEvent.click(within(dlg).getByRole('button', { name: 'Save' }));
-    expect(calls.some((c) => c.method === 'PATCH')).toBe(false);
-    expect(dlg).not.toHaveAttribute('open');
+    it('Read links to the reader page of the document', async () => {
+      await ready();
+      await fireEvent.click(bodyRows()[1]);
+      const p = screen.getByRole('complementary', { name: 'Doc 2' });
+      expect(within(p).getByRole('link', { name: 'Read' })).toHaveAttribute('href', '#/sources/read?doc=2');
+    });
+
+    it('Esc closes the panel and clears the selection', async () => {
+      await ready();
+      await fireEvent.click(bodyRows()[0]);
+      await fireEvent.keyDown(within(panel()).getByRole('link', { name: 'Read' }), { key: 'Escape' });
+      expect(screen.queryByRole('complementary')).toBeNull();
+      expect(bodyRows().some((r) => r.getAttribute('aria-selected') === 'true')).toBe(false);
+    });
+
+    it('the close button closes the panel', async () => {
+      await ready();
+      await fireEvent.click(bodyRows()[0]);
+      await fireEvent.click(within(panel()).getByRole('button', { name: 'Close' }));
+      expect(screen.queryByRole('complementary')).toBeNull();
+    });
+
+    it('a corpus change closes the panel', async () => {
+      await ready();
+      await fireEvent.click(bodyRows()[0]);
+      expect(panel()).toBeInTheDocument();
+      corpusStore.currentId = 2;
+      window.dispatchEvent(new CustomEvent(CORPUS_CHANGED, { detail: { id: 2 } }));
+      await waitFor(() => expect(screen.queryByRole('complementary')).toBeNull());
+    });
+
+    it('More → Remove asks for confirmation, DELETEs and closes the panel', async () => {
+      await ready();
+      await fireEvent.click(bodyRows()[0]);
+      await more();
+      await fireEvent.click(screen.getByRole('menuitem', { name: 'Remove' }));
+      expect(calls.some((c) => c.method === 'DELETE')).toBe(false);
+      const dlg = screen.getByRole('dialog', { name: 'Remove this document?' });
+      expect(dlg).toHaveTextContent('Doc 1');
+      await fireEvent.click(within(dlg).getByRole('button', { name: 'Remove' }));
+      await waitFor(() => expect(calls.some((c) => c.method === 'DELETE' && c.path === '/api/documents/1')).toBe(true));
+      await waitFor(() => expect(bodyRows().length).toBe(1));
+      expect(screen.queryByRole('complementary')).toBeNull();
+    });
+
+    it('cancelling the delete confirmation removes nothing and keeps the panel', async () => {
+      await ready();
+      await fireEvent.click(bodyRows()[0]);
+      await more();
+      await fireEvent.click(screen.getByRole('menuitem', { name: 'Remove' }));
+      await fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }));
+      expect(calls.some((c) => c.method === 'DELETE')).toBe(false);
+      expect(panel()).toBeInTheDocument();
+    });
+
+    it('offers Re-annotate in More only for an outdated document', async () => {
+      docs.body = [doc(1, { stale: true }), doc(2)];
+      await ready();
+      await fireEvent.click(bodyRows()[1]);
+      await fireEvent.click(screen.getByRole('button', { name: 'More actions for Doc 2' }));
+      expect(screen.queryByRole('menuitem', { name: 'Re-annotate all outdated' })).toBeNull();
+      expect(screen.getByRole('menuitem', { name: 'Remove' })).toBeInTheDocument();
+      await fireEvent.keyDown(document.body, { key: 'Escape' });
+      await fireEvent.click(bodyRows()[0]);
+      await more();
+      await fireEvent.click(screen.getByRole('menuitem', { name: 'Re-annotate all outdated' }));
+      await waitFor(() => expect(calls.some((c) => c.path === '/api/corpora/1/reannotate')).toBe(true));
+      expect(calls.find((c) => c.path === '/api/corpora/1/reannotate')!.params.get('only_stale')).toBe('true');
+    });
+
+    it('editing metadata PATCHes only the changed fields', async () => {
+      await ready();
+      await fireEvent.click(bodyRows()[0]);
+      await fireEvent.click(within(panel()).getByRole('button', { name: 'Edit details' }));
+      const dlg = screen.getByRole('dialog', { name: 'Document details' });
+      expect((within(dlg).getByLabelText('Title') as HTMLInputElement).value).toBe('Doc 1');
+      await fireEvent.input(within(dlg).getByLabelText('Tags'), { target: { value: 'legal, 2023' } });
+      await fireEvent.input(within(dlg).getByLabelText('Author'), { target: { value: 'Ana' } });
+      await fireEvent.click(within(dlg).getByRole('button', { name: 'Save' }));
+      await waitFor(() => expect(calls.some((c) => c.method === 'PATCH')).toBe(true));
+      const c = calls.find((x) => x.method === 'PATCH')!;
+      expect(c.path).toBe('/api/documents/1');
+      expect(c.body).toEqual({ tags: 'legal, 2023', author: 'Ana' });
+      await waitFor(() => expect(messages.current).toEqual({ text: 'Document updated.', kind: 'ok' }));
+    });
+
+    it('saving unchanged metadata sends nothing', async () => {
+      await ready();
+      await fireEvent.click(bodyRows()[0]);
+      await fireEvent.click(within(panel()).getByRole('button', { name: 'Edit details' }));
+      const dlg = screen.getByRole('dialog', { name: 'Document details' });
+      await fireEvent.click(within(dlg).getByRole('button', { name: 'Save' }));
+      expect(calls.some((c) => c.method === 'PATCH')).toBe(false);
+      expect(dlg).not.toHaveAttribute('open');
+    });
+
+    it('the edit dialog suggests the corpus tags and text types', async () => {
+      await ready();
+      await fireEvent.click(bodyRows()[0]);
+      await fireEvent.click(within(panel()).getByRole('button', { name: 'Edit details' }));
+      const dlg = screen.getByRole('dialog', { name: 'Document details' });
+      const tags = within(dlg).getByLabelText('Tags');
+      const types = within(dlg).getByLabelText('Text type');
+      await waitFor(() => expect(document.getElementById(tags.getAttribute('list')!)?.querySelector('option[value="legal"]')).not.toBeNull());
+      expect(document.getElementById(types.getAttribute('list')!)?.querySelector('option[value="contract"]')).not.toBeNull();
+    });
+
+    it('from 640px, selecting with the keyboard opens the panel but keeps focus in the table, so Enter edits', async () => {
+      await ready();
+      const grid = screen.getByRole('grid');
+      grid.focus();
+      await fireEvent.keyDown(grid, { key: 'ArrowDown' });
+      expect(panel()).toBeInTheDocument();
+      expect(document.activeElement).toBe(grid);
+      await fireEvent.keyDown(grid, { key: 'Enter' });
+      const dlg = screen.getByRole('dialog', { name: 'Document details' });
+      expect((within(dlg).getByLabelText('Title') as HTMLInputElement).value).toBe('Doc 1');
+    });
+
+    it('Esc in the documents grid clears the selection and closes the panel', async () => {
+      await ready();
+      const grid = screen.getByRole('grid');
+      grid.focus();
+      await fireEvent.keyDown(grid, { key: 'ArrowDown' });
+      expect(panel()).toBeInTheDocument();
+      await fireEvent.keyDown(grid, { key: 'Escape' });
+      expect(screen.queryByRole('complementary')).toBeNull();
+      expect(bodyRows().some((r) => r.getAttribute('aria-selected') === 'true')).toBe(false);
+      expect(document.activeElement).toBe(grid);
+    });
+
+    it('below 640px the panel covers the page and takes focus', async () => {
+      __setViewportForTests({ narrow: true });
+      try {
+        await ready();
+        await fireEvent.click(bodyRows()[0]);
+        expect(document.activeElement).toBe(within(panel()).getByRole('link', { name: 'Read' }));
+      } finally {
+        __setViewportForTests({ narrow: false });
+      }
+    });
+
+    it('double-clicking a row still opens the edit dialog', async () => {
+      await ready();
+      await fireEvent.dblClick(bodyRows()[1]);
+      const dlg = screen.getByRole('dialog', { name: 'Document details' });
+      expect((within(dlg).getByLabelText('Title') as HTMLInputElement).value).toBe('Doc 2');
+    });
   });
 
   it('document titles with HTML render as text', async () => {
@@ -281,40 +419,15 @@ describe('Sources', () => {
     docs.body = [doc(1, { stale: true }), doc(2)];
     await ready();
     expect(screen.getByText('1 document annotated with an older NLP model.')).toBeInTheDocument();
-    await fireEvent.click(bodyRows()[0]);
-    expect(screen.getByRole('button', { name: 'Re-annotate all outdated' })).toBeInTheDocument();
     await fireEvent.click(screen.getByRole('button', { name: 'Re-annotate with current model' }));
     await waitFor(() => expect(calls.some((c) => c.path === '/api/corpora/1/reannotate')).toBe(true));
     expect(calls.find((c) => c.path === '/api/corpora/1/reannotate')!.params.get('only_stale')).toBe('true');
   });
 
-  it('saves the corpus name and project', async () => {
-    await ready();
-    await openSettings();
-    await waitFor(() => expect(screen.getByRole('option', { name: 'Acme' })).toBeInTheDocument());
-    await fireEvent.input(screen.getByLabelText('Corpus name'), { target: { value: 'Renamed' } });
-    await fireEvent.change(screen.getByLabelText('Project'), { target: { value: '7' } });
-    await fireEvent.click(screen.getByRole('button', { name: 'Save corpus' }));
-    await waitFor(() => expect(calls.some((c) => c.path === '/api/corpora/1' && c.method === 'PATCH')).toBe(true));
-    expect(calls.find((c) => c.path === '/api/corpora/1' && c.method === 'PATCH')!.body).toEqual({ name: 'Renamed', project_id: 7 });
-  });
-
-  it('a corpus without a project shows a disabled placeholder and a rename never sends project_id', async () => {
-    await ready();
-    await openSettings();
-    await waitFor(() => expect(screen.getByRole('option', { name: 'Acme' })).toBeInTheDocument());
-    expect(screen.queryByRole('option', { name: '— none —' })).toBeNull();
-    expect(screen.getByRole('option', { name: 'Choose a project' })).toBeDisabled();
-    await fireEvent.input(screen.getByLabelText('Corpus name'), { target: { value: 'Renamed' } });
-    await fireEvent.click(screen.getByRole('button', { name: 'Save corpus' }));
-    await waitFor(() => expect(calls.some((c) => c.path === '/api/corpora/1' && c.method === 'PATCH')).toBe(true));
-    expect(calls.find((c) => c.path === '/api/corpora/1' && c.method === 'PATCH')!.body).toEqual({ name: 'Renamed' });
-  });
-
   it('keeps the previous rows and reports the error when a reload fails', async () => {
     await ready();
     docs = { status: 500, body: { detail: 'boom' } };
-    await fireEvent.click(screen.getByRole('button', { name: 'Reload' }));
+    await reload();
     await waitFor(() => expect(messages.current).toEqual({ text: 'boom', kind: 'err' }));
     expect(bodyRows().length).toBe(2);
   });
@@ -324,7 +437,7 @@ describe('Sources', () => {
     let release: () => void = () => {};
     docsGate = new Promise<void>((r) => (release = r));
     docs = { status: 200, body: [doc(5, { title: 'old corpus' })] };
-    await fireEvent.click(screen.getByRole('button', { name: 'Reload' }));
+    await reload();
     corpusStore.currentId = 2;
     window.dispatchEvent(new CustomEvent(CORPUS_CHANGED, { detail: { id: 2 } }));
     await waitFor(() => expect(bodyRows().length).toBe(0));

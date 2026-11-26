@@ -117,6 +117,15 @@ describe('PageHeader', () => {
     expect(screen.queryByRole('group', { name: 'Section screens' })).not.toBeInTheDocument();
   });
 
+  it('shows a back link and no tabs on the document reader', async () => {
+    go('sources-read', { doc: '7' });
+    render(PageHeader);
+    await tick();
+    expect(screen.getByRole('heading', { level: 1, name: 'Document' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Documents/ })).toHaveAttribute('href', '#/sources');
+    expect(screen.queryByRole('group', { name: 'Section screens' })).not.toBeInTheDocument();
+  });
+
   it('has no back link on Sources', async () => {
     go('sources');
     render(PageHeader);

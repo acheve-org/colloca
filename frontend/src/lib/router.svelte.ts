@@ -3,6 +3,7 @@ import { AREAS, areaOf, type AreaId } from './nav';
 export type ScreenId =
   | 'sources'
   | 'sources-add'
+  | 'sources-read'
   | 'languages'
   | 'projects'
   | 'concordance'
@@ -22,16 +23,23 @@ export type ScreenId =
   | 'trash';
 
 export const SCREENS: readonly ScreenId[] = [
-  'sources', 'sources-add', 'languages', 'projects', 'concordance', 'collocations', 'ngrams', 'frequency',
+  'sources', 'sources-add', 'sources-read', 'languages', 'projects', 'concordance', 'collocations', 'ngrams', 'frequency',
   'dispersion', 'keyness', 'cloud', 'equivalents', 'lookup', 'related', 'termbase', 'candidates', 'check', 'job', 'trash',
 ];
+
+/** Screens whose address is not their id. */
+const PATHS: Partial<Record<ScreenId, string>> = { 'sources-add': 'sources/add', 'sources-read': 'sources/read' };
+const BY_PATH: Record<string, ScreenId> = {
+  base: 'languages', // the old Base corpora address
+  ...Object.fromEntries(Object.entries(PATHS).map(([screen, path]) => [path, screen as ScreenId])),
+};
 
 function parse(hash: string): { screen: ScreenId; params: Record<string, string> } {
   const m = hash.replace(/^#\/?/, '');
   const q = m.indexOf('?');
   const name = q < 0 ? m : m.slice(0, q);
   const query = q < 0 ? '' : m.slice(q + 1);
-  const wanted = name === 'base' ? 'languages' : name === 'sources/add' ? 'sources-add' : name; // the old Base corpora address
+  const wanted = BY_PATH[name] ?? name;
   const screen = (SCREENS as readonly string[]).includes(wanted) ? (wanted as ScreenId) : 'sources';
   return { screen, params: Object.fromEntries(new URLSearchParams(query)) };
 }
@@ -42,7 +50,7 @@ export function hrefFor(screen: ScreenId, params: Record<string, string> = {}): 
     .filter(([, v]) => v !== '' && v != null)
     .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
     .join('&');
-  return `#/${screen === 'sources-add' ? 'sources/add' : screen}${q ? `?${q}` : ''}`;
+  return `#/${PATHS[screen] ?? screen}${q ? `?${q}` : ''}`;
 }
 
 const isTab = (screen: ScreenId): boolean => AREAS.some((a) => a.tabs.includes(screen));
