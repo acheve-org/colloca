@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { untrack } from 'svelte';
+  import { tick, untrack } from 'svelte';
   import { ApiError, get } from '../lib/api';
+  import { findText } from '../lib/findText';
   import { fmt, t } from '../lib/i18n';
   import { messages } from '../lib/messages.svelte';
   import { route } from '../lib/router.svelte';
@@ -15,6 +16,9 @@
   type Meta = DocBlocks['document'];
   type Block = DocBlocks['blocks'][number];
   type DocRow = Pick<Doc, 'id' | 'title' | 'tags' | 'text_type' | 'doc_date' | 'author'>;
+  /** A find match in one side of a block; `i` is its place among all the document's matches. */
+  type Hit = { start: number; end: number; i: number };
+  type Piece = { text: string; i: number | null };
 
   // A document of any corpus can be read: the page is read-only, so no corpus switch.
   const docId = $derived(/^\d+$/.test(route.params.doc ?? '') ? Number(route.params.doc) : null);
@@ -32,14 +36,48 @@
   let facets = $state.raw<Facets>({ tags: [], text_types: [], date_min: '', date_max: '' });
   // Answers for a document left behind (or a page asked before it) are dropped.
   let seq = 0;
+  // The page request on its way, so that loading the whole document waits for it instead of asking twice.
+  let inflight: Promise<void> | null = null;
+  let loadingAll = false;
+
+  // Find in document: the query, and which match is current.
+  let query = $state('');
+  let current = $state(0);
+  let textEl = $state<HTMLElement>();
 
   const more = $derived(doc !== null && blocks.length < total);
   const metaParts = $derived(
     doc ? [doc.text_type, doc.date, t('src.words', { n: fmt(doc.tokens) }), doc.source].filter(Boolean) : [],
   );
 
+  const finding = $derived(query.trim() !== '');
+  // Matches are counted once the whole document is loaded, in reading order (source, then translation).
+  const hits = $derived.by(() => {
+    const byBlock: Record<number, { text: Hit[]; pair: Hit[] }> = {};
+    if (!finding || more) return { byBlock, count: 0 };
+    let count = 0;
+    const mark = (s: string) => findText(s, query).map((m) => ({ ...m, i: count++ }));
+    for (const b of blocks) {
+      const text = mark(b.text);
+      const pair = mark(b.pair);
+      if (text.length || pair.length) byBlock[b.n] = { text, pair };
+    }
+    return { byBlock, count };
+  });
+  const findStatus = $derived(
+    !finding || more ? '' : hits.count ? t('reader.findCount', { n: current + 1, total: hits.count }) : t('reader.findNone'),
+  );
+
   const errMsg = (err: unknown) => (err instanceof Error ? err.message : String(err));
   const fail = (err: unknown) => messages.say(errMsg(err), 'err');
+
+  function requestPage(id: number, n: number, from: number): Promise<void> {
+    const p = fetchPage(id, n, from).finally(() => {
+      if (inflight === p) inflight = null;
+    });
+    inflight = p;
+    return p;
+  }
 
   async function fetchPage(id: number, n: number, from: number): Promise<void> {
     loading = true;
@@ -70,19 +108,69 @@
       loading = false;
       editOpen = false;
       pageError = null;
+      query = '';
+      current = 0;
+      inflight = null;
       notFound = id === null;
-      if (id !== null) void fetchPage(id, n, 0);
+      if (id !== null) void requestPage(id, n, 0);
     });
   });
 
   function loadMore(): void {
     if (loading || !more || pageError !== null || docId === null) return;
-    void fetchPage(docId, seq, blocks.length);
+    void requestPage(docId, seq, blocks.length);
   }
 
   function retryPage(): void {
     if (loading || docId === null) return;
-    void fetchPage(docId, seq, blocks.length);
+    void requestPage(docId, seq, blocks.length);
+  }
+
+  /** Every remaining page, one request at a time, so that find counts the whole document. */
+  async function loadAll(): Promise<void> {
+    if (loadingAll) return;
+    loadingAll = true;
+    const n = seq;
+    try {
+      while (n === seq && docId !== null && more && pageError === null) {
+        await (inflight ?? requestPage(docId, n, blocks.length));
+      }
+    } finally {
+      loadingAll = false;
+    }
+  }
+
+  // The first query loads the rest of the document (and again after a Retry).
+  $effect(() => {
+    if (finding && more && pageError === null) untrack(() => void loadAll());
+  });
+
+  // The current match is scrolled into view.
+  $effect(() => {
+    const i = current;
+    if (!hits.count || !textEl) return;
+    const root = textEl;
+    void tick().then(() => root.querySelector(`mark[data-hit="${i}"]`)?.scrollIntoView?.({ block: 'center' }));
+  });
+
+  function onFindKey(e: KeyboardEvent): void {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const n = hits.count;
+    if (n) current = (current + (e.shiftKey ? n - 1 : 1)) % n;
+  }
+
+  /** The text cut into plain runs and matches. */
+  function pieces(text: string, hs: Hit[]): Piece[] {
+    const out: Piece[] = [];
+    let pos = 0;
+    for (const h of hs) {
+      if (h.start > pos) out.push({ text: text.slice(pos, h.start), i: null });
+      out.push({ text: text.slice(h.start, h.end), i: h.i });
+      pos = h.end;
+    }
+    if (pos < text.length) out.push({ text: text.slice(pos), i: null });
+    return out;
   }
 
   // The sentinel after the last block asks for the next page as it comes into view. Watching again after
@@ -137,29 +225,50 @@
   }
 </script>
 
+{#snippet marked(text: string, hs: Hit[] | undefined)}
+  {#if hs?.length}{#each pieces(text, hs) as p, k (k)}{#if p.i === null}{p.text}{:else}<mark class:current={p.i === current} data-hit={p.i}>{p.text}</mark>{/if}{/each}{:else}{text}{/if}
+{/snippet}
+
 <div class="page">
   {#if notFound}
     <div class="missing"><ReadyHint title={t('reader.notFound')} /></div>
   {:else if doc}
     <div class="rhead">
       <h2>{doc.title}</h2>
-      <!-- Find in document (Task 7) goes before Edit details. -->
-      <div class="tools"><Button onclick={openEdit}>{t('src.edit')}</Button></div>
+      <div class="tools">
+        <span class="find">
+          <input
+            type="search"
+            bind:value={query}
+            oninput={() => (current = 0)}
+            onkeydown={onFindKey}
+            placeholder={t('reader.find')}
+            aria-label={t('reader.find')}
+          />
+          <span class="find-count" aria-live="polite">{findStatus}</span>
+        </span>
+        <Button onclick={openEdit}>{t('src.edit')}</Button>
+      </div>
     </div>
     <p class="meta">
       {#each metaParts as m, i (i)}<span>{m}</span>{/each}
       {#if doc.aligned}<Badge kind="approved" label={t('src.check.aligned')} />{/if}
     </p>
-    <div class="text">
+    <div class="text" bind:this={textEl}>
       {#if doc.aligned}
         <ol class="pairs">
           {#each blocks as b (b.n)}
-            <li class="row"><span class="n">{b.n + 1}</span><span class="seg">{b.text}</span><span class="seg">{b.pair}</span></li>
+            {@const h = hits.byBlock[b.n]}
+            <li class="row">
+              <span class="n">{b.n + 1}</span>
+              <span class="seg">{@render marked(b.text, h?.text)}</span>
+              <span class="seg">{@render marked(b.pair, h?.pair)}</span>
+            </li>
           {/each}
         </ol>
       {:else}
         <div class="prose">
-          {#each blocks as b (b.n)}<p>{b.text}</p>{/each}
+          {#each blocks as b (b.n)}<p>{@render marked(b.text, hits.byBlock[b.n]?.text)}</p>{/each}
         </div>
       {/if}
       {#if more && pageError === null}<div class="sentinel" bind:this={sentinel} aria-hidden="true"></div>{/if}
@@ -201,6 +310,29 @@
     display: flex;
     align-items: center;
     gap: var(--s-2);
+  }
+  .find {
+    display: flex;
+    align-items: center;
+    gap: var(--s-2);
+  }
+  .find input {
+    width: 12rem;
+  }
+  .find-count {
+    color: var(--muted);
+    font-size: var(--fs-small);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  mark {
+    background: var(--hit-query-bg);
+    color: var(--hit-query-fg);
+    border-radius: var(--radius);
+  }
+  mark.current {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
   }
   .meta {
     display: flex;

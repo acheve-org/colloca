@@ -235,4 +235,95 @@ describe('DocumentReader', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     expect(await screen.findByRole('heading', { level: 2, name: 'Renamed' })).toBeInTheDocument();
   });
+
+  describe('Find in document', () => {
+    let scrolled: Element[];
+    beforeEach(() => {
+      scrolled = [];
+      Element.prototype.scrollIntoView = vi.fn(function (this: Element) {
+        scrolled.push(this);
+      });
+      // Three pages of "D7 p<n>"; the word "Razón" is in blocks 5, 150 and 240 (one per page).
+      reply = (u) => {
+        const start = Number(u.searchParams.get('start') ?? 0);
+        const body = page(7, start, 100, 250);
+        body.blocks = body.blocks.map((b) => ([5, 150, 240].includes(b.n) ? { ...b, text: `${b.text} la Razón` } : b));
+        return { status: 200, body };
+      };
+    });
+    afterEach(() => {
+      delete (Element.prototype as Partial<Element>).scrollIntoView;
+    });
+
+    const findBox = () => screen.getByRole('searchbox', { name: 'Find in document' });
+    const count = () => document.querySelector('.find-count')!;
+    const current = () => document.querySelector('mark.current');
+
+    it('loads the remaining pages, counts the matches and moves between them', async () => {
+      open('7');
+      await screen.findByText(/D7 p99/);
+      expect(blockCalls()).toHaveLength(1);
+      await fireEvent.input(findBox(), { target: { value: 'razon' } });
+      await waitFor(() => expect(count()).toHaveTextContent('1 of 3'));
+      // One request per remaining page, in order.
+      expect(blockCalls().map((u) => u.searchParams.get('start'))).toEqual(['0', '100', '200']);
+      const marks = document.querySelectorAll('mark');
+      expect(marks).toHaveLength(3);
+      expect([...marks].map((m) => m.textContent)).toEqual(['Razón', 'Razón', 'Razón']);
+      expect(current()).toBe(marks[0]);
+      await waitFor(() => expect(scrolled.at(-1)).toBe(marks[0]));
+
+      await fireEvent.keyDown(findBox(), { key: 'Enter' });
+      expect(count()).toHaveTextContent('2 of 3');
+      expect(current()).toBe(document.querySelectorAll('mark')[1]);
+      await waitFor(() => expect(scrolled.at(-1)).toBe(document.querySelectorAll('mark')[1]));
+
+      await fireEvent.keyDown(findBox(), { key: 'Enter', shiftKey: true });
+      await fireEvent.keyDown(findBox(), { key: 'Enter', shiftKey: true });
+      expect(count()).toHaveTextContent('3 of 3');
+      expect(current()).toBe(document.querySelectorAll('mark')[2]);
+      await waitFor(() => expect(scrolled.at(-1)).toBe(document.querySelectorAll('mark')[2]));
+
+      await fireEvent.keyDown(findBox(), { key: 'Enter' });
+      expect(count()).toHaveTextContent('1 of 3');
+
+      // A new query starts again from its first match.
+      await fireEvent.keyDown(findBox(), { key: 'Enter' });
+      expect(count()).toHaveTextContent('2 of 3');
+      await fireEvent.input(findBox(), { target: { value: 'RAZÓN' } });
+      expect(count()).toHaveTextContent('1 of 3');
+      expect(current()).toBe(document.querySelectorAll('mark')[0]);
+
+      // Clearing the field removes the highlights.
+      await fireEvent.input(findBox(), { target: { value: '' } });
+      expect(document.querySelectorAll('mark')).toHaveLength(0);
+      expect(count()).toHaveTextContent('');
+      expect(blockCalls()).toHaveLength(3);
+    });
+
+    it('says No matches when nothing is found', async () => {
+      open('7');
+      await screen.findByText(/D7 p99/);
+      await fireEvent.input(findBox(), { target: { value: 'zzz' } });
+      await waitFor(() => expect(count()).toHaveTextContent('No matches'));
+      expect(blockCalls()).toHaveLength(3);
+      expect(document.querySelectorAll('mark')).toHaveLength(0);
+    });
+
+    it('highlights matches in both sides of aligned rows', async () => {
+      reply = () => ({
+        status: 200,
+        body: { ...page(9, 0, 100, 2, { aligned: true }), blocks: [
+          { n: 0, text: 'The dose', pair: 'La dosis' },
+          { n: 1, text: 'No match', pair: 'Dosis alta' },
+        ] },
+      });
+      open('9');
+      await screen.findByText('The dose');
+      await fireEvent.input(findBox(), { target: { value: 'dos' } });
+      await waitFor(() => expect(count()).toHaveTextContent('1 of 3'));
+      expect([...document.querySelectorAll('mark')].map((m) => m.textContent)).toEqual(['dos', 'dos', 'Dos']);
+      expect(blockCalls()).toHaveLength(1);
+    });
+  });
 });
