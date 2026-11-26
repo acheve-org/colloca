@@ -267,6 +267,8 @@ describe('DataTable fit mode', () => {
     const cells = bodyRows()[0].querySelectorAll('[role="gridcell"]');
     expect(cells[0]).toHaveAttribute('title', 'alpha');
     expect(cells[1]).toHaveAttribute('title', '7');
+    expect(header('Word')).toHaveAttribute('title', 'Word');
+    expect(header('Count')).toHaveAttribute('title', 'Count');
   });
 
   it('without fit the columns and cells are unchanged', () => {
@@ -274,6 +276,7 @@ describe('DataTable fit mode', () => {
     expect(dt()).not.toHaveClass('fit');
     for (const tpl of templates()) expect(tpl).toBe('minmax(12rem, 2fr) 6rem 1.5fr 1fr');
     expect(bodyRows()[0].querySelector('[role="gridcell"]')).not.toHaveAttribute('title');
+    expect(header('Word')).not.toHaveAttribute('title');
   });
 
   it('is ignored below 640px: the table scrolls sideways as before', () => {
@@ -284,11 +287,13 @@ describe('DataTable fit mode', () => {
     expect(bodyRows()[0].querySelector('[role="gridcell"]')).not.toHaveAttribute('title');
   });
 
-  it('cells drawn by a cell snippet get no title', () => {
+  it('cells drawn by a cell snippet carry their cell value as a title', () => {
     const probe = { selected: null, set: () => {}, setFilter: () => {}, setRows: () => {} };
-    render(Host, { rows: mk(['alpha']), columns: sized, probe, fit: true });
+    render(Host, { rows: mk(['alpha'], [7]), columns: sized, probe, fit: true });
     expect(dt()).toHaveClass('fit');
-    expect(bodyRows()[0].querySelector('[role="gridcell"]')).not.toHaveAttribute('title');
+    const cells = bodyRows()[0].querySelectorAll('[role="gridcell"]');
+    expect(cells[0]).toHaveAttribute('title', 'alpha');
+    expect(cells[1]).toHaveAttribute('title', '7'); // the value, not the snippet's text (the id)
   });
 });
 

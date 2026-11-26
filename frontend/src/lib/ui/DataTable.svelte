@@ -33,7 +33,7 @@
     rowClass?: (r: Row) => string;
     /**
      * Fit the table to its container instead of scrolling sideways: every column may shrink
-     * (its minimum becomes 0) and clipped plain cells show their text as a tooltip.
+     * (its minimum becomes 0) and every cell and header shows its text (the cell value) as a tooltip.
      * Ignored below 640px, where the table scrolls sideways as usual.
      */
     fit?: boolean;
@@ -320,6 +320,7 @@
           class:num={col.num}
           class:sortable={col.sortable !== false}
           role="columnheader"
+          title={fitting ? col.label : undefined}
           aria-sort={ariaSort(col)}
           tabindex={col.sortable === false ? undefined : 0}
           onclick={() => toggleSort(col)}
@@ -354,7 +355,7 @@
         ondblclick={() => onactivate?.(v.row)}
       >
         {#each columns as col (col.key)}
-          <div class="td" class:num={col.num} role="gridcell" title={fitting && !cell ? String(cellValue(v.row, col)) : undefined}>
+          <div class="td" class:num={col.num} role="gridcell" title={fitting ? String(cellValue(v.row, col)) : undefined}>
             {#if cell}{@render cell(v.row, col)}{:else}{cellValue(v.row, col)}{/if}
           </div>
         {/each}
