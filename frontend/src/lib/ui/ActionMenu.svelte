@@ -6,6 +6,8 @@
     label: string;
     onclick: () => void;
     danger?: boolean;
+    /** Shown but inert; it stays focusable so the menu keeps working from the keyboard. */
+    disabled?: boolean;
   }
   let { label, items, disabled = false }: { label: string; items: Item[]; disabled?: boolean } = $props();
 
@@ -23,6 +25,7 @@
   }
 
   function choose(item: Item): void {
+    if (item.disabled) return;
     // The focused item is about to unmount: park focus on the trigger so a dialog opened next returns here.
     trigger?.focus();
     open = false;
@@ -53,7 +56,7 @@
   {#if open}
     <div class="pop" role="menu" aria-label={label} tabindex="-1" bind:this={menu} {onkeydown} use:dismiss={{ close: () => (open = false), trigger }}>
       {#each items as item, i (i)}
-        <button type="button" role="menuitem" class="item" class:danger={item.danger} onclick={() => choose(item)}>{item.label}</button>
+        <button type="button" role="menuitem" class="item" class:danger={item.danger} aria-disabled={item.disabled || undefined} onclick={() => choose(item)}>{item.label}</button>
       {/each}
     </div>
   {/if}
@@ -99,11 +102,15 @@
     overflow-wrap: anywhere;
     cursor: pointer;
   }
-  .item:hover,
-  .item:focus-visible {
+  /* A disabled item still takes focus (the global focus ring shows it) but never looks pressable. */
+  .item:not([aria-disabled='true']):is(:hover, :active, :focus-visible) {
     background: var(--surface);
   }
   .item.danger {
     color: var(--danger);
+  }
+  .item[aria-disabled='true'] {
+    color: var(--muted);
+    cursor: default;
   }
 </style>
