@@ -10,7 +10,7 @@ A base corpus is a general-language reference, one per language. It answers: is 
 
 ## Importing
 
-*Languages* screen (the *Base corpus* block of each language). Input: sentence files (one sentence per line, or Leipzig `<id><TAB><sentence>`), split into documents of 5000 sentences.
+*Languages* screen: choose the language, then its *Base corpus* section. *Import even if the language looks wrong* (at the end of that section) skips the language check for those uploads. Input: sentence files (one sentence per line, or Leipzig `<id><TAB><sentence>`), split into documents of 5000 sentences.
 
 | Route | Limit |
 |---|---|
