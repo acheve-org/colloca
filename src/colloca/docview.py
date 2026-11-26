@@ -1,9 +1,12 @@
 """Read a document around one hit, without sending the whole text to the browser (the "open the document at
 this hit" view). A document is shown as blocks: sentences, or for an aligned document its segments with the
 aligned segment of the partner document beside them."""
+import re
+
 from . import analysis, parallel
 
 MAX_RADIUS = 50
+MAX_BLOCKS = 500
 
 
 def _meta(conn, doc_id: int) -> dict | None:
@@ -78,6 +81,48 @@ def context(conn, doc_id: int, pos: int, span: int = 1, radius: int = 3) -> dict
         before, after = first > 0, last < top
     return {"document": {k: v for k, v in doc.items() if k != "pair_doc_id"}, "blocks": blocks,
             "more_before": before, "more_after": after}
+
+
+def _paragraphs(text: str) -> list[str]:
+    """Paragraphs of a plain text: split on blank lines, or on single line breaks when it has no blank line."""
+    pieces = re.split(r"\n\s*\n", text)
+    if len(pieces) == 1 and "\n" in text:
+        pieces = text.split("\n")
+    return [p.strip() for p in pieces if p.strip()]
+
+
+def blocks(conn, doc_id: int, start: int = 0, limit: int = 100) -> dict:
+    """`limit` blocks of a whole document from block `start` on, for reading it page by page.
+
+    Blocks are the aligned segments (with the partner's segment as `pair`) of an aligned document, else the
+    paragraphs of its original text. Returns the document's metadata (as `context`), `blocks` ([{n, text,
+    pair}]) and `total`, the number of blocks in the document."""
+    doc = _meta(conn, doc_id)
+    if doc is None:
+        raise LookupError("Document not found")
+    start = max(start, 0)
+    limit = max(1, min(limit, MAX_BLOCKS))
+    if doc["aligned"]:
+        spans = conn.execute("SELECT seg, start_pos, end_pos FROM segments WHERE doc_id=? ORDER BY seg "
+                             "LIMIT ? OFFSET ?", (doc_id, limit, start)).fetchall()
+        partner = {}
+        if spans:
+            partner = {r["seg"]: r for r in conn.execute(
+                "SELECT seg, start_pos, end_pos FROM segments WHERE doc_id=? AND seg BETWEEN ? AND ?",
+                (doc["pair_doc_id"], spans[0]["seg"], spans[-1]["seg"]))}
+        out = []
+        for sp in spans:
+            other = partner.get(sp["seg"])
+            out.append({"n": sp["seg"], "text": parallel.segment_text(conn, doc_id, sp["start_pos"], sp["end_pos"]),
+                        "pair": parallel.segment_text(conn, doc["pair_doc_id"], other["start_pos"],
+                                                      other["end_pos"]) if other else ""})
+        total = conn.execute("SELECT COUNT(*) FROM segments WHERE doc_id=?", (doc_id,)).fetchone()[0]
+    else:
+        text = conn.execute("SELECT text FROM documents WHERE id=?", (doc_id,)).fetchone()["text"] or ""
+        paras = _paragraphs(text)
+        out = [{"n": n, "text": t, "pair": ""} for n, t in enumerate(paras[start:start + limit], start)]
+        total = len(paras)
+    return {"document": {k: v for k, v in doc.items() if k != "pair_doc_id"}, "blocks": out, "total": total}
 
 
 def _tokens_text(rows) -> tuple[str, list[dict]]:
