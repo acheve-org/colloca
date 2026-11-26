@@ -1,8 +1,10 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
+import { tick } from 'svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Languages from '../src/screens/Languages.svelte';
 import { stopAllJobs } from '../src/lib/jobs.svelte';
 import { messages } from '../src/lib/messages.svelte';
+import { __setViewportForTests } from '../src/lib/viewport.svelte';
 
 const row = (code: string, name: string, over: Record<string, unknown> = {}, model: Record<string, unknown> = {}, ocr: Record<string, unknown> = {}) => ({
   code, name, model_size: null, tesseract: code === 'es' ? 'spa' : code === 'it' ? 'ita' : 'fra', corpus_count: 0,
@@ -19,10 +21,12 @@ const catalog = [
 interface Call { method: string; path: string; search: string; body?: unknown }
 let calls: Call[];
 let settings: ReturnType<typeof row>[][];
+let references: Record<string, unknown>[];
 const res = (status: number, body: unknown) => ({ ok: status < 400, status, statusText: 'x', json: async () => body });
 
 beforeEach(() => {
   calls = [];
+  references = [];
   settings = [[row('es', 'Spanish', { corpus_count: 2 }), row('it', 'Italian', {}, { name: null, version: null, size: null }), row('fr', 'French', {}, { name: null, state: 'failed', message: 'no network' })]];
   messages.clear();
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
@@ -34,7 +38,7 @@ beforeEach(() => {
     if (p === '/api/language-settings') return res(200, settings.length > 1 ? settings.shift()! : settings[0]);
     if (p === '/api/language-catalog') return res(200, catalog);
     if (p === '/api/languages' && method === 'GET') return res(200, { es: 'Spanish', it: 'Italian', fr: 'French' });
-    if (p === '/api/references') return res(200, []);
+    if (p === '/api/references') return res(200, references);
     if (/^\/api\/corpora\/\d+\/jobs$/.test(p)) return res(200, []);
     if (method === 'DELETE') return res(204, null);
     return res(p === '/api/languages' ? 201 : 202, {});
@@ -42,21 +46,98 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  __setViewportForTests({ stacked: false });
   stopAllJobs();
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
+// The panel shows the selected language only, as a region named after it.
 const card = (name: string) => screen.getByRole('region', { name });
 const loaded = () => screen.findByRole('region', { name: 'Spanish' });
+const nav = () => screen.getByRole('navigation', { name: 'Languages' });
+// The list button of a language: its name starts with the language name, then the code and the dots.
+const item = (name: string) => within(nav()).getByRole('button', { name: new RegExp(`^${name} `) });
+const pick = async (name: string) => {
+  await fireEvent.click(item(name));
+  await tick();
+};
 
 describe('Languages', () => {
-  it('renders one card per language with its model state', async () => {
+  it('lists one button per language with its name, code and three status dots', async () => {
+    references = [{ id: 7, name: 'Italian base', lang: 'it', project_id: null, is_reference: 1, docs: 1, tokens: 10 }];
     render(Languages);
     await loaded();
+    const buttons = within(nav()).getAllByRole('button').filter((b) => b.hasAttribute('aria-pressed'));
+    expect(buttons).toHaveLength(3);
+    const es = item('Spanish');
+    expect(within(es).getByText('es')).toBeInTheDocument();
+    expect(within(es).getByText('Model: installed')).toBeInTheDocument();
+    expect(within(es).getByText('OCR: installed')).toBeInTheDocument();
+    expect(within(es).getByText('Base corpus: missing')).toBeInTheDocument();
+    const it_ = item('Italian');
+    expect(within(it_).getByText('it')).toBeInTheDocument();
+    expect(within(it_).getByText('Model: missing')).toBeInTheDocument();
+    expect(within(it_).getByText('Base corpus: installed')).toBeInTheDocument();
+    expect(within(item('French')).getByText('Model: failed')).toBeInTheDocument();
+    // Each dot has a visible text label, so colour is never the only signal.
+    expect(within(es).getByText('Model', { exact: true })).toBeInTheDocument();
+    expect(within(es).getByText('OCR', { exact: true })).toBeInTheDocument();
+    expect(within(es).getByText('Base corpus', { exact: true })).toBeInTheDocument();
+  });
+
+  it('shows the add button and a one-line intro above the list', async () => {
+    render(Languages);
+    await loaded();
+    expect(within(nav()).getByRole('button', { name: 'Add language' })).toBeInTheDocument();
+    expect(within(nav()).getByText('Models, OCR data and base corpora for the languages you work with.')).toBeInTheDocument();
+  });
+
+  it('selects the first language by default and shows only its panel', async () => {
+    render(Languages);
+    await loaded();
+    expect(item('Spanish')).toHaveAttribute('aria-pressed', 'true');
+    expect(item('Italian')).toHaveAttribute('aria-pressed', 'false');
     expect(within(card('Spanish')).getByText('es_core_news_lg 3.8.0 (lg)')).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Italian' })).toBeNull();
+  });
+
+  it('choosing another language selects it and shows its panel', async () => {
+    render(Languages);
+    await loaded();
+    await pick('Italian');
+    expect(item('Italian')).toHaveAttribute('aria-pressed', 'true');
+    expect(item('Spanish')).toHaveAttribute('aria-pressed', 'false');
     expect(within(card('Italian')).getByText('Model not installed')).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Spanish' })).toBeNull();
+    await pick('French');
     expect(within(card('French')).getByText('no network')).toBeInTheDocument();
+  });
+
+  it('keeps the selection when polling reloads the languages', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    settings = [
+      [row('es', 'Spanish'), row('it', 'Italian', {}, { name: null, state: 'installing' })],
+      [row('es', 'Spanish'), row('it', 'Italian', {}, { name: 'it_core_news_md', version: '3.8.0', size: 'md' })],
+    ];
+    render(Languages);
+    await loaded();
+    await pick('Italian');
+    await vi.advanceTimersByTimeAsync(2100);
+    await waitFor(() => expect(within(card('Italian')).getByText('it_core_news_md 3.8.0 (md)')).toBeInTheDocument());
+    expect(item('Italian')).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('removing the selected language selects the first remaining one', async () => {
+    settings = [settings[0], [row('es', 'Spanish', { corpus_count: 2 }), row('it', 'Italian', {}, { name: null, version: null, size: null })]];
+    render(Languages);
+    await loaded();
+    await pick('French');
+    await fireEvent.click(within(card('French')).getByRole('button', { name: 'Remove French' }));
+    await fireEvent.click(within(screen.getByRole('dialog', { name: 'Remove French?' })).getByRole('button', { name: 'Remove' }));
+    await waitFor(() => expect(within(nav()).queryByRole('button', { name: /^French / })).toBeNull());
+    expect(item('Spanish')).toHaveAttribute('aria-pressed', 'true');
+    expect(card('Spanish')).toBeInTheDocument();
   });
 
   it('install posts the model request and polls until it is done', async () => {
@@ -68,7 +149,7 @@ describe('Languages', () => {
     ];
     render(Languages);
     await screen.findByRole('region', { name: 'Italian' });
-    await fireEvent.click(screen.getByRole('button', { name: 'Install model for Italian' }));
+    await fireEvent.click(within(card('Italian')).getByRole('button', { name: 'Install model for Italian' }));
     await waitFor(() => expect(calls.some((c) => c.method === 'POST' && c.path === '/api/languages/it/model')).toBe(true));
     expect(calls.find((c) => c.path === '/api/languages/it/model')!.body).toEqual({});
     await waitFor(() => expect(within(card('Italian')).getByRole('progressbar')).toBeInTheDocument());
@@ -108,12 +189,14 @@ describe('Languages', () => {
     await loaded();
     expect(within(card('Spanish')).getByRole('button', { name: 'Remove Spanish' })).toBeDisabled();
     expect(within(card('Spanish')).getByText('2 corpora use this language')).toBeInTheDocument();
+    await pick('French');
     expect(within(card('French')).getByRole('button', { name: 'Remove French' })).toBeEnabled();
   });
 
   it('remove asks for confirmation and can uninstall the model too', async () => {
     render(Languages);
     await loaded();
+    await pick('French');
     await fireEvent.click(within(card('French')).getByRole('button', { name: 'Remove French' }));
     expect(calls.some((c) => c.method === 'DELETE')).toBe(false);
     const dlg = screen.getByRole('dialog', { name: 'Remove French?' });
@@ -126,7 +209,7 @@ describe('Languages', () => {
   it('the add dialog lists only catalog languages not yet added and posts the choice', async () => {
     render(Languages);
     await loaded();
-    await fireEvent.click(screen.getByRole('button', { name: 'Add language' }));
+    await fireEvent.click(within(nav()).getByRole('button', { name: 'Add language' }));
     const dlg = await screen.findByRole('dialog', { name: 'Add a language' });
     await waitFor(() => expect(within(dlg).getByRole('radio', { name: 'French' })).toBeInTheDocument());
     expect(within(dlg).queryByRole('radio', { name: 'Spanish' })).toBeNull();
@@ -169,5 +252,30 @@ describe('Languages', () => {
     expect(within(card('Spanish')).getByText('OCR data not installed')).toBeInTheDocument();
     await fireEvent.click(within(card('Spanish')).getByRole('button', { name: 'Install OCR data for Spanish' }));
     await waitFor(() => expect(calls.some((c) => c.method === 'POST' && c.path === '/api/languages/es/ocr')).toBe(true));
+  });
+});
+
+describe('Languages stacked below 900px', () => {
+  beforeEach(() => __setViewportForTests({ stacked: true }));
+
+  it('arriving shows the list only', async () => {
+    render(Languages);
+    await screen.findByRole('button', { name: /^Spanish / });
+    expect(item('Italian')).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Spanish' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
+  });
+
+  it('choosing a language shows its panel with Back; Back returns to the list and focuses it', async () => {
+    render(Languages);
+    await screen.findByRole('button', { name: /^Spanish / });
+    await pick('Italian');
+    expect(within(card('Italian')).getByText('Model not installed')).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Languages' })).toBeNull();
+    await fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+    await tick();
+    expect(screen.queryByRole('region', { name: 'Italian' })).toBeNull();
+    await waitFor(() => expect(item('Italian')).toHaveFocus());
+    expect(item('Italian')).toHaveAttribute('aria-pressed', 'true');
   });
 });

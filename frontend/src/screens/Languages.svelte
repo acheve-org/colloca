@@ -1,13 +1,16 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { del, get, post } from '../lib/api';
   import { t } from '../lib/i18n';
   import { loadLanguageNames } from '../lib/context.svelte';
   import { messages } from '../lib/messages.svelte';
+  import { langStatus, type Dot } from '../lib/langStatus';
   import type { CatalogEntry, Corpus, LanguageSetting } from '../lib/types';
+  import Badge from '../lib/ui/Badge.svelte';
   import BaseCorpusCard from '../lib/ui/BaseCorpusCard.svelte';
   import Button from '../lib/ui/Button.svelte';
   import Dialog from '../lib/ui/Dialog.svelte';
+  import ListPanel from '../lib/ui/ListPanel.svelte';
   import Toggle from '../lib/ui/Toggle.svelte';
   import AddLanguageDialog from './AddLanguageDialog.svelte';
   import EditLanguageDialog from './EditLanguageDialog.svelte';
@@ -34,6 +37,31 @@
   let mounted = true;
   // Last state seen per language, to announce an install that just finished or failed.
   let seen: Record<string, { model: string; ocr: string }> = {};
+
+  // The chosen language; it stays chosen across reloads while it exists, else the first one is shown.
+  let selectedCode = $state<string | null>(null);
+  // Stacked layouts only: the panel replaces the list.
+  let panelOpen = $state(false);
+  const selected = $derived(rows.find((r) => r.code === selectedCode) ?? rows[0] ?? null);
+
+  const itemId = (code: string) => `${uid}-item-${code}`;
+  const focusItem = (code: string | undefined) =>
+    tick().then(() => {
+      if (code) document.getElementById(itemId(code))?.focus();
+    });
+  const choose = (code: string) => {
+    selectedCode = code;
+    panelOpen = true;
+  };
+  // Stacked: the list comes back; put focus on the language the user had chosen.
+  const back = () => {
+    panelOpen = false;
+    focusItem(selected?.code);
+  };
+
+  const hasBase = (code: string) => refs.some((x) => x.lang === code);
+  const DOTS = ['model', 'ocr', 'base'] as const;
+  const dotText = (part: (typeof DOTS)[number], dot: Dot) => `${t(`lang.status.${part}`)}: ${t(`lang.status.${dot}`)}`;
 
   const installing = $derived(rows.some((r) => r.model.state === 'installing' || r.ocr.state === 'installing'));
   const sizesOf = (code: string) => catalog.find((e) => e.code === code)?.sizes ?? SIZES;
@@ -155,20 +183,50 @@
       messages.say(t('lang.removed', { name: r.name }), 'ok');
       delete seen[r.code];
       await load();
+      // The first remaining language is shown now; the list is where the user picks next.
+      panelOpen = false;
+      focusItem(selected?.code);
     });
   }
 </script>
 
-<div class="languages">
-  <p class="intro">{t('lang.intro')}</p>
-  <div class="bar">
-    <Button variant="primary" onclick={() => (addOpen = true)}>{t('lang.add')}</Button>
-    <Toggle bind:checked={force} label={t('src.force')} />
-  </div>
-
-  {#if loaded}
-    <div class="cards">
+<ListPanel label={t('nav.languages')} showPanel={panelOpen} onback={back}>
+  {#snippet list()}
+    <div class="lh">
+      <span class="ltitle">{t('nav.languages')}</span>
+      <Button onclick={() => (addOpen = true)}><span aria-hidden="true">+</span> {t('lang.add')}</Button>
+    </div>
+    <p class="lintro">{t('lang.introShort')}</p>
+    <ul class="llist">
       {#each rows as r (r.code)}
+        {@const st = langStatus(r, hasBase(r.code))}
+        <li>
+          <button type="button" id={itemId(r.code)} class="pick" aria-pressed={r.code === selected?.code} onclick={() => choose(r.code)}>
+            <span class="ptop">
+              <span class="pname">{r.name}</span>
+              <Badge kind="neutral" label={r.code} />
+            </span>
+            <span class="dots">
+              {#each DOTS as part (part)}
+                <span class="st">
+                  <span class="dot {st[part]}" aria-hidden="true"></span>
+                  <span aria-hidden="true">{t(`lang.status.${part}`)}</span>
+                  <span class="sr-only">{dotText(part, st[part])}</span>
+                </span>
+              {/each}
+            </span>
+          </button>
+        </li>
+      {/each}
+    </ul>
+  {/snippet}
+
+  {#snippet panel()}
+    {#if loaded && selected}
+      {@const r = selected}
+      <div class="languages">
+        <!-- Stays here until the panel is rebuilt; it applies to the base corpus import below. -->
+        <Toggle bind:checked={force} label={t('src.force')} />
         <section class="card" aria-labelledby="{uid}-{r.code}">
           <h3><span id="{uid}-{r.code}">{r.name}</span> <span class="code">{r.code}</span></h3>
 
@@ -246,10 +304,10 @@
           <h4>{t('lang.baseCorpus')}</h4>
           <BaseCorpusCard lang={r.code} name={r.name} reference={refs.find((x) => x.lang === r.code) ?? null} {force} onchange={load} />
         </section>
-      {/each}
-    </div>
-  {/if}
-</div>
+      </div>
+    {/if}
+  {/snippet}
+</ListPanel>
 
 <AddLanguageDialog bind:open={addOpen} {catalog} onadded={load} />
 <EditLanguageDialog bind:open={editOpen} lang={editing} sizes={editing ? sizesOf(editing.code) : SIZES} onsaved={load} />
@@ -278,22 +336,92 @@
     flex-direction: column;
     gap: var(--s-2);
     padding: var(--s-3);
-    overflow: auto;
   }
-  .intro {
-    max-width: 60rem;
-    margin: 0;
-    color: var(--muted);
-  }
-  .bar {
+  .lh {
     display: flex;
     align-items: center;
-    gap: var(--s-3);
+    justify-content: space-between;
+    gap: var(--s-2);
+    padding: var(--s-4) var(--s-4) var(--s-2);
   }
-  .cards {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
-    gap: var(--s-3);
+  .ltitle {
+    color: var(--muted);
+    font-size: var(--fs-small);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .lintro {
+    margin: 0;
+    padding: 0 var(--s-4) var(--s-2);
+    color: var(--muted);
+    font-size: var(--fs-small);
+  }
+  .llist {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s-1);
+    margin: 0;
+    padding: 0 var(--s-2) var(--s-2);
+    list-style: none;
+  }
+  .pick {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--s-1);
+    width: 100%;
+    height: auto; /* base.css gives every button a fixed control height; the row holds two lines */
+    min-height: var(--row-h);
+    padding: var(--s-2) var(--s-3);
+    text-align: left;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-lg);
+  }
+  .pick[aria-pressed='true'] {
+    background: var(--panel);
+    border-color: var(--accent);
+    box-shadow: inset 3px 0 0 var(--accent); /* literal: the selection bar width */
+  }
+  .ptop {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--s-2);
+  }
+  .pname {
+    min-width: 0;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+  }
+  .dots {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s-1) var(--s-2);
+    color: var(--muted);
+    font-size: var(--fs-small);
+    font-weight: 400;
+  }
+  .st {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--s-1);
+  }
+  .dot {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    background: var(--line);
+  }
+  .dot.ok {
+    background: var(--status-approved);
+  }
+  .dot.busy {
+    background: var(--status-candidate);
+  }
+  .dot.error {
+    background: var(--danger);
   }
   .card {
     display: flex;
