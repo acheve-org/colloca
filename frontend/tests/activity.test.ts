@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import StatusLine from '../src/lib/ui/StatusLine.svelte';
+import LoadBar from '../src/lib/ui/LoadBar.svelte';
 import { activity, BUSY_DELAY_MS, resetActivity } from '../src/lib/activity.svelte';
 import { get } from '../src/lib/api';
 import { messages } from '../src/lib/messages.svelte';
@@ -62,8 +62,8 @@ describe('activity', () => {
     await p;
   });
 
-  it('shows in the status line while busy', async () => {
-    render(StatusLine);
+  it('shows the loading bar while busy', async () => {
+    render(LoadBar);
     expect(screen.queryByTestId('activity')).toBeNull();
     const p = get('/api/x');
     await vi.advanceTimersByTimeAsync(BUSY_DELAY_MS + 1);

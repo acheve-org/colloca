@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../src/App.svelte';
 import Concordance from '../src/screens/Concordance.svelte';
 import TermDialog from '../src/screens/TermDialog.svelte';
-import StatusLine from '../src/lib/ui/StatusLine.svelte';
+import StatusBar from '../src/lib/ui/StatusBar.svelte';
 import { CORPUS_CHANGED, corpusStore } from '../src/lib/corpus.svelte';
 import { messages } from '../src/lib/messages.svelte';
 import { go, route } from '../src/lib/router.svelte';
@@ -295,7 +295,7 @@ describe('Concordance', () => {
   });
 
   it('on an API 400 shows the message and keeps previous results and form values', async () => {
-    render(StatusLine);
+    render(StatusBar);
     render(Concordance);
     await search('casa');
     conc = { status: 400, body: { detail: 'Bad query' } };

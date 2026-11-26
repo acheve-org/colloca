@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/svelte';
+import { render, screen, within } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import PageHeader from '../src/lib/ui/PageHeader.svelte';
@@ -35,30 +35,48 @@ afterEach(() => {
 });
 
 const tabNames = () =>
-  screen.getAllByRole('link').map((a) => a.textContent?.trim());
+  within(screen.getByRole('group', { name: 'Section screens' })).getAllByRole('link').map((a) => a.textContent?.trim());
 
 describe('PageHeader', () => {
-  it('shows picker, title and tabs on Concordance', async () => {
+  it('shows the context band, a hidden title and tabs on Concordance', async () => {
     go('concordance');
     render(PageHeader);
     await tick();
     expect(screen.getByRole('group', { name: 'Working in' })).toBeInTheDocument();
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
-    expect(screen.getByRole('heading', { level: 1, name: 'Concordance' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'Concordance' })).toHaveClass('sr-only');
     expect(screen.getByRole('group', { name: 'Section screens' })).toBeInTheDocument();
   });
 
-  it('hides the picker on Projects and Languages and keeps Settings tab order', async () => {
+  it.each([
+    ['concordance', 'Concordance', 'Explore'],
+    ['projects', 'Projects', 'Settings'],
+    ['languages', 'Languages', 'Settings'],
+    ['termbase', 'Termbase', 'Terms'],
+    ['sources', 'Sources', 'Corpus'],
+  ] as const)('on %s has one hidden h1 and no area label', async (id, title, area) => {
+    go(id);
+    render(PageHeader);
+    await tick();
+    const h1s = screen.getAllByRole('heading', { level: 1 });
+    expect(h1s).toHaveLength(1);
+    expect(h1s[0]).toHaveTextContent(title);
+    expect(h1s[0]).toHaveClass('sr-only');
+    expect(screen.getByRole('group', { name: 'Working in' })).toBeInTheDocument();
+    expect(screen.queryByText(area)).toBeNull();
+  });
+
+  it('keeps the context header on Projects and Languages and Settings tab order', async () => {
     go('projects');
     render(PageHeader);
     await tick();
-    expect(screen.queryByRole('group', { name: 'Working in' })).toBeNull();
+    expect(screen.getByRole('group', { name: 'Working in' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 1, name: 'Projects' })).toBeInTheDocument();
     expect(tabNames()).toEqual(['Languages', 'Projects', 'Backup and Trash']);
     go('languages');
     await tick();
     expect(screen.getByRole('heading', { level: 1, name: 'Languages' })).toBeInTheDocument();
-    expect(screen.queryByRole('group', { name: 'Working in' })).toBeNull();
+    expect(screen.getByRole('group', { name: 'Working in' })).toBeInTheDocument();
   });
 
   it('has a title and no tab strip on single-screen areas', async () => {
@@ -109,7 +127,7 @@ describe('PageHeader', () => {
   describe('scope control', () => {
     const pill = () => screen.queryByRole('button', { name: /All documents|of .* documents/ });
 
-    it.each(['concordance', 'frequency', 'job'] as const)('shows the pill beside the picker on %s', async (id) => {
+    it.each(['concordance', 'frequency', 'job'] as const)('shows the pill in the context band on %s', async (id) => {
       go(id);
       render(PageHeader);
       await tick();

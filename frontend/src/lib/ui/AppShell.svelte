@@ -2,7 +2,8 @@
   import type { Snippet } from 'svelte';
   import Rail from './Rail.svelte';
   import PageHeader from './PageHeader.svelte';
-  import StatusLine from './StatusLine.svelte';
+  import LoadBar from './LoadBar.svelte';
+  import StatusBar from './StatusBar.svelte';
 
   let { children }: { children: Snippet } = $props();
 </script>
@@ -10,9 +11,10 @@
 <div class="shell">
   <Rail />
   <div class="main">
-    <StatusLine />
+    <LoadBar />
     <PageHeader />
-    <main id="main">{@render children()}</main>
+    <main id="main" tabindex="-1">{@render children()}</main>
+    <StatusBar />
   </div>
 </div>
 
@@ -27,6 +29,7 @@
     flex-direction: column;
     min-width: 0;
     min-height: 0;
+    position: relative;
   }
   main {
     flex: 1;
@@ -34,5 +37,8 @@
     flex-direction: column;
     min-height: 0;
     overflow: auto;
+  }
+  main:focus {
+    outline: none;
   }
 </style>
