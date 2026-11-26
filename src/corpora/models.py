@@ -74,10 +74,19 @@ def install(code: str, size: str) -> None:
     t.start()
 
 
+def already_installed(code: str, size: str) -> bool:
+    """The package for this size is installed at the catalog's version, so there is nothing to download."""
+    return nlp.installed_version(langcatalog.package(code, size)) == langcatalog.MODEL_VERSION
+
+
 def _do_install(code: str, size: str) -> None:
     dest = models_dir()
     tmp: Path | None = None
     try:
+        if already_installed(code, size):
+            nlp.evict(code)                 # the size may have changed: load the installed one next time
+            _set(code, "idle")
+            return
         if dest is not None:
             dest.mkdir(parents=True, exist_ok=True)
             tmp = Path(tempfile.mkdtemp(prefix=".install-", dir=dest))

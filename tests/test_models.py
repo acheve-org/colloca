@@ -10,6 +10,7 @@ def mdir(tmp_path, monkeypatch):
     d = tmp_path / "models"
     monkeypatch.setattr(models, "models_dir", lambda: d)
     monkeypatch.delenv("SPACY_WHEELS", raising=False)
+    monkeypatch.setattr(nlp, "installed_version", lambda pkg: None)    # the dev environment may hold real models
     nlp._models.clear()
     yield d
     nlp._models.clear()
@@ -143,3 +144,24 @@ def test_status_sees_a_model_installed_while_the_app_runs(client, tmp_path, monk
         assert nlp.status()["fr"] == {"name": "fr_core_news_sm", "version": "3.8.0", "size": "sm", "small": True}
     finally:
         languages.remove("fr")
+
+
+def test_install_skips_download_when_same_size_and_version_is_installed(mdir, monkeypatch):
+    monkeypatch.setattr(nlp, "installed_version",
+                        lambda pkg: langcatalog.MODEL_VERSION if pkg == "es_core_news_sm" else None)
+    monkeypatch.setattr(models, "_run_installer", lambda argv: pytest.fail("must not download"))
+    nlp._models["es"] = object()
+    models.install("es", "sm")
+    wait("es")
+    assert models.state("es") == {"state": "idle", "message": ""}
+    assert "es" not in nlp._models
+
+
+@pytest.mark.parametrize("have", [{"es_core_news_md": "3.8.0"}, {"es_core_news_sm": "3.7.1"}])
+def test_install_downloads_when_other_size_or_version_is_installed(mdir, monkeypatch, have):
+    monkeypatch.setattr(nlp, "installed_version", lambda pkg: have.get(pkg))
+    calls = []
+    monkeypatch.setattr(models, "_run_installer", fake_ok(calls))
+    models.install("es", "sm")
+    wait("es")
+    assert len(calls) == 1 and models.state("es")["state"] == "idle"
