@@ -80,7 +80,7 @@ describe('language switch', () => {
   it('sets <html lang> and remembers the choice', () => {
     setLang('it');
     expect(document.documentElement.lang).toBe('it');
-    expect(localStorage.getItem('colloca.lang')).toBe('it');
+    expect(localStorage.getItem('corpora.lang')).toBe('it');
   });
 
   it('falls back to English for a key a language lacks, and returns an unknown key as is', () => {
@@ -137,7 +137,7 @@ describe('first-visit language', () => {
 
   it('a stored choice wins over the browser', async () => {
     vi.resetModules();
-    localStorage.setItem('colloca.lang', 'en');
+    localStorage.setItem('corpora.lang', 'en');
     vi.spyOn(navigator, 'languages', 'get').mockReturnValue(['es']);
     expect((await import('../src/lib/locale.svelte')).locale.code).toBe('en');
   });

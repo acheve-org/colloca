@@ -2,12 +2,12 @@
 
 A backup zip holds
 - `manifest.json`: what it is (format, version, schema, date, counts);
-- `data.json`: the portable form, readable by any Colloca version that knows `format_version` 1: projects,
+- `data.json`: the portable form, readable by any Corpora version that knows `format_version` 1: projects,
   corpora, documents (text and metadata, tags, aligned-partner links), termbase entries and the candidate stop
   list. Tokens are NOT stored (they are by far the largest part and can be rebuilt): the import starts the
   existing re-annotation job, which recreates tokens and segments from the texts;
 - `corpus.db` (whole-database backup only): a consistent SQLite copy made with the backup API, tokens included,
-  for disaster recovery (stop Colloca, put it in place of `corpus.db`).
+  for disaster recovery (stop Corpora, put it in place of `corpus.db`).
 
 Importing is safe by construction: the zip is never extracted (only `manifest.json` and `data.json` are read,
 from memory, with size limits), a member name that could escape a directory rejects the file, every field is
@@ -27,7 +27,7 @@ from typing import Any
 
 from . import dedup, ingest, metadata, nlp, termbase
 
-FORMAT = "colloca-export"
+FORMAT = "corpora-export"
 FORMAT_VERSION = 1
 MAX_BACKUP_BYTES = int(os.environ.get("MAX_BACKUP_MB", "512")) * 1024 * 1024        # uploaded file
 MAX_JSON_BYTES = 4 * MAX_BACKUP_BYTES                                               # data.json once decompressed
@@ -117,14 +117,14 @@ def _manifest(payload: dict, with_db: bool) -> dict:
 def write_zip(conn: sqlite3.Connection, project_id: int | None = None, with_db: bool = False) -> str:
     """Build the backup zip in a temporary file and return its path (the caller removes it)."""
     payload = build_payload(conn, project_id)
-    fd, path = tempfile.mkstemp(suffix=".zip", prefix="colloca-export-")
+    fd, path = tempfile.mkstemp(suffix=".zip", prefix="corpora-export-")
     os.close(fd)
     try:
         with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
             z.writestr("manifest.json", json.dumps(_manifest(payload, with_db), indent=2))
             z.writestr("data.json", json.dumps(payload, ensure_ascii=False))
             if with_db:
-                with tempfile.TemporaryDirectory(prefix="colloca-snapshot-") as tmp:
+                with tempfile.TemporaryDirectory(prefix="corpora-snapshot-") as tmp:
                     snap = os.path.join(tmp, "corpus.db")
                     dest = sqlite3.connect(snap)
                     try:
@@ -170,7 +170,7 @@ def read_backup(data: bytes) -> dict:
                     raise BackupError(f"Unsafe file name in the archive: {name!r}")
             info = next((i for i in infos if i.filename == "data.json"), None)
             if info is None:
-                raise BackupError("This zip has no data.json (is it a Colloca export?)")
+                raise BackupError("This zip has no data.json (is it a Corpora export?)")
             raw = _read_member(z, info, MAX_JSON_BYTES)
     else:
         raw = data
@@ -179,10 +179,10 @@ def read_backup(data: bytes) -> dict:
     except (ValueError, RecursionError) as exc:
         raise BackupError("data.json is not valid JSON") from exc
     if not isinstance(payload, dict) or payload.get("format") != FORMAT:
-        raise BackupError("This is not a Colloca export")
+        raise BackupError("This is not a Corpora export")
     if payload.get("format_version") != FORMAT_VERSION:
         raise BackupError(f"Unsupported export version {payload.get('format_version')!r} "
-                          f"(this Colloca reads version {FORMAT_VERSION})")
+                          f"(this Corpora reads version {FORMAT_VERSION})")
     return payload
 
 

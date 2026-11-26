@@ -11,7 +11,7 @@ Grammar (documented with examples in docs/analysis.md, "Advanced query language"
     atom   := ATTR ('=' | '!=') '"' value '"'       ATTR := lemma | form | word | pos
 
 Everything is compiled to one SELECT over `tokens`, driven by an *anchor* token that an index can look up, so a
-query can never scan the whole corpus. This module imports nothing from the rest of colloca.
+query can never scan the whole corpus. This module imports nothing from the rest of corpora.
 """
 import re
 import unicodedata
@@ -68,14 +68,14 @@ def _compiled(pattern: str, flags: int):
 
 
 def sql_regexp(text, pattern: str, flags: int) -> int:
-    """SQL function `colloca_re(text, pattern, flags)`: the pattern must match the whole text."""
+    """SQL function `corpora_re(text, pattern, flags)`: the pattern must match the whole text."""
     return 1 if _compiled(pattern, flags).fullmatch(text or "") else 0
 
 
 def register(conn) -> None:
     """Make the SQL functions the compiled queries (and the accent index) rely on available on `conn`."""
-    conn.create_function("colloca_ascii", 1, strip_accents, deterministic=True)
-    conn.create_function("colloca_re", 3, sql_regexp, deterministic=True)
+    conn.create_function("corpora_ascii", 1, strip_accents, deterministic=True)
+    conn.create_function("corpora_re", 3, sql_regexp, deterministic=True)
 
 
 def _literal_alternatives(pattern: str) -> list[str] | None:
@@ -469,7 +469,7 @@ def describe(query: Query) -> str:
 # --------------------------------------------------------------------------- compiling to SQL
 def _col(alias: str, attr: str, accent: bool) -> str:
     base = f"{alias}.{'lemma' if attr == 'lemma' else 'norm'}"
-    return f"colloca_ascii({base})" if accent else base
+    return f"corpora_ascii({base})" if accent else base
 
 
 def _fold(text: str, query: Query) -> str:
@@ -510,7 +510,7 @@ def _regex_sql(alias: str, atom: Atom, col: str, cs: bool, query: Query) -> tupl
             params += alts
         return sql, params
     flags = 0 if cs else re.I
-    sql = f"colloca_re({alias + '.form' if cs else col}, ?, ?)"
+    sql = f"corpora_re({alias + '.form' if cs else col}, ?, ?)"
     params = [pattern, flags]
     prefix = _regex_prefix(atom.value)
     if len(prefix) >= MIN_LITERALS and not atom.neg:

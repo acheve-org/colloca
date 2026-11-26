@@ -5,7 +5,7 @@ import xml.etree.ElementTree as ET
 import pytest
 from openpyxl import load_workbook
 
-from colloca import analysis, db, termbase, termexport
+from corpora import analysis, db, termbase, termexport
 
 from .test_api import ES_TEXT, make_corpus
 from .test_projects import doc, project

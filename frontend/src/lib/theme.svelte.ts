@@ -1,6 +1,6 @@
 export type ThemeMode = 'auto' | 'light' | 'dark';
 
-const KEY = 'colloca.theme';
+const KEY = 'corpora.theme';
 
 function isMode(v: unknown): v is ThemeMode {
   return v === 'auto' || v === 'light' || v === 'dark';

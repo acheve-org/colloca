@@ -1,4 +1,4 @@
-"""TMX export of aligned corpora (T20): the translation memory built or cleaned in Colloca, back to a CAT tool.
+"""TMX export of aligned corpora (T20): the translation memory built or cleaned in Corpora, back to a CAT tool.
 
 TMX 1.4b, level 1 for text; the inline markup of an imported TMX is written back when it was kept (see db v12), so a
 round trip does not lose formatting codes. Each translation unit carries the document's metadata as `prop`s."""
@@ -62,7 +62,7 @@ def to_tmx(conn: sqlite3.Connection, corpus_id: int, partner_id: int, scope: ana
                             WHERE {where} AND d.segmented=1 AND {live} AND p.corpus_id=? ORDER BY d.id""",
                         (*params, partner_id)).fetchall()
     out = ['<?xml version="1.0" encoding="UTF-8"?>\n<tmx version="1.4">\n',
-           f'<header creationtool="Colloca" creationtoolversion="0.1" segtype="sentence" o-tmf="Colloca" '
+           f'<header creationtool="Corpora" creationtoolversion="0.1" segtype="sentence" o-tmf="Corpora" '
            f'adminlang="en" srclang="{src}" datatype="plaintext" '
            f'creationdate="{datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")}">\n']
     if project:

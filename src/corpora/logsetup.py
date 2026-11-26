@@ -1,8 +1,8 @@
 """Logging: level and format from the environment, plus a timer for slow operations.
 
-COLLOCA_LOG_LEVEL   DEBUG, INFO (default), WARNING, ERROR
-COLLOCA_LOG_FORMAT  text (default) or json (one JSON object per line, for log collectors)
-COLLOCA_SLOW_MS     operations and requests slower than this are logged as warnings (default 1000; 0 = off)
+CORPORA_LOG_LEVEL   DEBUG, INFO (default), WARNING, ERROR
+CORPORA_LOG_FORMAT  text (default) or json (one JSON object per line, for log collectors)
+CORPORA_SLOW_MS     operations and requests slower than this are logged as warnings (default 1000; 0 = off)
 """
 import json
 import logging
@@ -10,7 +10,7 @@ import os
 import time
 from contextlib import contextmanager
 
-log = logging.getLogger("colloca.timing")
+log = logging.getLogger("corpora.timing")
 
 
 class JsonFormatter(logging.Formatter):
@@ -24,29 +24,29 @@ class JsonFormatter(logging.Formatter):
 
 def slow_ms() -> float:
     try:
-        return float(os.environ.get("COLLOCA_SLOW_MS", "1000"))
+        return float(os.environ.get("CORPORA_SLOW_MS", "1000"))
     except ValueError:
         return 1000.0
 
 
 def configure() -> None:
-    """Set the `colloca` loggers up from the environment (safe to call again)."""
-    level = os.environ.get("COLLOCA_LOG_LEVEL", "INFO").upper()
-    root = logging.getLogger("colloca")
+    """Set the `corpora` loggers up from the environment (safe to call again)."""
+    level = os.environ.get("CORPORA_LOG_LEVEL", "INFO").upper()
+    root = logging.getLogger("corpora")
     root.setLevel(level if level in logging._nameToLevel else "INFO")
-    if not any(getattr(h, "_colloca", False) for h in root.handlers):
+    if not any(getattr(h, "_corpora", False) for h in root.handlers):
         handler = logging.StreamHandler()
-        handler._colloca = True  # type: ignore[attr-defined]
+        handler._corpora = True  # type: ignore[attr-defined]
         root.addHandler(handler)
     for h in root.handlers:
-        if getattr(h, "_colloca", False):
-            h.setFormatter(JsonFormatter() if os.environ.get("COLLOCA_LOG_FORMAT", "").lower() == "json"
+        if getattr(h, "_corpora", False):
+            h.setFormatter(JsonFormatter() if os.environ.get("CORPORA_LOG_FORMAT", "").lower() == "json"
                            else logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
 
 
 @contextmanager
 def timer(what: str):
-    """Log `what` as a warning when the block takes longer than COLLOCA_SLOW_MS."""
+    """Log `what` as a warning when the block takes longer than CORPORA_SLOW_MS."""
     t0 = time.perf_counter()
     try:
         yield

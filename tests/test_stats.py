@@ -8,7 +8,7 @@ import sqlite3
 
 import pytest
 
-from colloca import analysis, db
+from corpora import analysis, db
 
 
 # --------------------------------------------------------------------------- pure formulas

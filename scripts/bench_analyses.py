@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from make_sample_corpus import build, words_arg  # noqa: E402
 
-from colloca import analysis, db, jobanalysis  # noqa: E402
+from corpora import analysis, db, jobanalysis  # noqa: E402
 
 
 def timed(fn, repeat: int):

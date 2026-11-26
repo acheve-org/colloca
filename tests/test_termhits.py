@@ -1,6 +1,6 @@
 import pytest
 
-from colloca import db
+from corpora import db
 
 from .test_api import add, make_corpus, wait_for_jobs
 from .test_parallel import build_pairs, import_tmx, tmx

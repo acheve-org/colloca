@@ -193,7 +193,7 @@ def test_url_preview_extracts_main_text(client, monkeypatch):
 
     srv = http.server.HTTPServer(("127.0.0.1", 0), H)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
-    monkeypatch.setattr("colloca.ingest.ALLOW_PRIVATE", True)
+    monkeypatch.setattr("corpora.ingest.ALLOW_PRIVATE", True)
     monkeypatch.setenv("NO_PROXY", "127.0.0.1")
     try:
         r = client.post("/api/preview-url", json={"url": f"http://127.0.0.1:{srv.server_port}/"})
@@ -244,7 +244,7 @@ def test_background_mismatch_reports_error_in_job(client):
 
 # --------------------------------------------------------------------------- upload limits & jobs
 def test_upload_file_too_large(client, monkeypatch):
-    monkeypatch.setattr("colloca.ingest.MAX_UPLOAD_BYTES", 100)
+    monkeypatch.setattr("corpora.ingest.MAX_UPLOAD_BYTES", 100)
     cid = make_corpus(client)
     res = client.post(f"/api/corpora/{cid}/upload",
                       files=[("files", ("big.txt", b"x" * 101, "text/plain"))]).json()
@@ -253,7 +253,7 @@ def test_upload_file_too_large(client, monkeypatch):
 
 
 def test_upload_too_many_files(client, monkeypatch):
-    monkeypatch.setattr("colloca.ingest.MAX_UPLOAD_FILES", 1)
+    monkeypatch.setattr("corpora.ingest.MAX_UPLOAD_FILES", 1)
     cid = make_corpus(client)
     files = [("files", (f"{i}.txt", b"hola", "text/plain")) for i in range(2)]
     assert client.post(f"/api/corpora/{cid}/upload", files=files).status_code == 413
@@ -262,7 +262,7 @@ def test_upload_too_many_files(client, monkeypatch):
 def test_pdf_page_limit(monkeypatch):
     from pypdf import PdfWriter
 
-    from colloca import ingest
+    from corpora import ingest
     w = PdfWriter()
     for _ in range(3):
         w.add_blank_page(200, 200)
@@ -295,7 +295,7 @@ def test_duplicate_in_background_is_a_job_error(client):
 
 # --------------------------------------------------------------------------- CSV safety
 def test_csv_neutralises_formulas():
-    from colloca.main import _reply
+    from corpora.main import _reply
     rows = [{"item": "=HYPERLINK(\"http://x\")", "a": "+1", "b": "-2", "c": "@x", "d": "ok", "n": -3}]
     text = _reply(rows, "csv", "t").body.decode("utf-8-sig")
     data = text.splitlines()[1]
@@ -305,7 +305,7 @@ def test_csv_neutralises_formulas():
 
 # --------------------------------------------------------------------------- re-annotation
 def test_reannotate_outdated_documents(client):
-    from colloca import db
+    from corpora import db
     cid = make_corpus(client)
     add(client, cid, ES_TEXT)
     doc = client.get(f"/api/corpora/{cid}/documents").json()[0]
@@ -346,6 +346,6 @@ def test_status_reports_model_per_language(client):
 
 
 def test_status_without_models(client, monkeypatch):
-    monkeypatch.setattr("colloca.nlp.installed_version", lambda package: None)
+    monkeypatch.setattr("corpora.nlp.installed_version", lambda package: None)
     m = client.get("/api/status").json()["models"]["es"]
     assert m == {"name": None, "version": None, "size": None, "small": False}

@@ -80,7 +80,7 @@ export const restoreTerms = (items: string[]) => setDropped(items, false);
 // ------------------------------------------------------------------ the Candidates table (kept in the browser)
 const storageKey = (): string => {
   const c = corpusStore.current;
-  return c ? `colloca.candidates.${c.project_id ?? 'none'}.${c.lang}` : '';
+  return c ? `corpora.candidates.${c.project_id ?? 'none'}.${c.lang}` : '';
 };
 
 function load(): Candidate[] {

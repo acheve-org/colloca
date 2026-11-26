@@ -7,7 +7,7 @@
   }
   const ACCEPT = '.txt,.csv,.tsv';
   const LEIPZIG = 'https://wortschatz.uni-leipzig.de/en/download';
-  const RECIPE = 'https://github.com/acheve-org/colloca/blob/main/docs/base-corpora.md#recipe-a-reliable-base-corpus';
+  const RECIPE = 'https://github.com/acheve-org/corpora/blob/main/docs/base-corpora.md#recipe-a-reliable-base-corpus';
   const USES = ['keyness', 'frequency', 'collocations', 'jobs'];
   const TIPS = ['size', 'files', 'variety', 'format'];
 </script>

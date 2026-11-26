@@ -4,8 +4,8 @@ import threading
 
 import pytest
 
-from colloca import langcatalog, languages, models, ocr, ocrdata
-from colloca.ingest import IngestError
+from corpora import langcatalog, languages, models, ocr, ocrdata
+from corpora.ingest import IngestError
 
 from .test_formats import scanned_pdf
 

@@ -22,7 +22,7 @@ export function setPlatform(p: 'mac' | 'other'): void {
 
 let registry = $state.raw<Shortcut[]>([]);
 
-const STORE_KEY = 'colloca.keys';
+const STORE_KEY = 'corpora.keys';
 
 function loadOverrides(): Record<string, string> {
   try {

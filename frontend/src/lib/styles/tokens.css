@@ -1,4 +1,4 @@
-/* Colloca design tokens. Light is the default; dark applies via
+/* Corpora design tokens. Light is the default; dark applies via
    data-theme="dark" or, when no data-theme is set, prefers-color-scheme. */
 :root {
   --bg: #f1f4f3;

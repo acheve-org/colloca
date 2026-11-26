@@ -17,7 +17,7 @@ run = "uv run ruff check ."
 
 [tasks.dev]
 description = "Run the dev server with auto-reload"
-run = "uv run uvicorn colloca.main:app --reload"
+run = "uv run uvicorn corpora.main:app --reload"
 
 [tasks."ui:dev"]
 description = "Run the Vite dev server (proxies /api to :8000)"

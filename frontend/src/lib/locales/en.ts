@@ -2,7 +2,7 @@ import type { Messages } from './types';
 
 /** English: the source catalogue. Every key must exist in es.ts and it.ts (a test checks). */
 export const en: Messages = {
-  'app.name': 'Colloca',
+  'app.name': 'Corpora',
   'corpus.none': 'No corpus yet',
   'corpus.working': 'Working…',
   'corpus.selectFirst': 'Create or select a corpus first.',
@@ -759,7 +759,7 @@ export const en: Messages = {
   'base.tip.size': 'About 250,000 sentences (~5M words), e.g. 100k news + 100k web + 50k Wikipedia. More adds little and slows annotation.',
   'base.tip.files': 'One year and one file per source: a 300K file already contains the 100K one.',
   'base.tip.variety': 'Use the variety and register you work with (e.g. European Spanish for Spain); never add your own documents.',
-  'base.tip.format': 'One sentence per line (Leipzig files work as they are; check their licence). Up to 25 MB per file here; larger files with colloca-import-reference.',
+  'base.tip.format': 'One sentence per line (Leipzig files work as they are; check their licence). Up to 25 MB per file here; larger files with corpora-import-reference.',
   'base.leipzig': 'Leipzig Corpora Collection',
   'base.recipe': 'Full recipe in the docs',
   'base.howTo': 'How to build a good base corpus',
@@ -999,7 +999,7 @@ export const en: Messages = {
   'lk.extraHint': 'In the stored segment, not in yours',
   'lk.missingHint': 'In your segment, not in the stored one',
   'lk.legend': 'Blue underlined: words only the stored segment has. Struck through: words only your segment has.',
-  'lk.caveat': 'A lookup aid over the aligned texts in Colloca: the percentage counts changed words and is not the match value your CAT tool would give.',
+  'lk.caveat': 'A lookup aid over the aligned texts in Corpora: the percentage counts changed words and is not the match value your CAT tool would give.',
   'job.leverage': 'estimate leverage from aligned texts',
   'job.leverageHint': 'Looks every sentence up in the aligned documents of this corpus (can take a while on long texts) and reports how much is already translated',
   'job.stat.leverage': 'in aligned texts (≥75%)',

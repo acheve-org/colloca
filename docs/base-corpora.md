@@ -18,12 +18,12 @@ A base corpus is a general-language reference, one per language. It answers: is 
 | Command line | Streams from disk; any size |
 
 ```bash
-uv run colloca-import-reference --lang es spa_news_2023_300K-sentences.txt --max-sentences 300000
+uv run corpora-import-reference --lang es spa_news_2023_300K-sentences.txt --max-sentences 300000
 # Docker
-docker compose run --rm -v "$PWD/corpora:/in" colloca colloca-import-reference --lang es /in/spa_news_2023_300K-sentences.txt
+docker compose run --rm -v "$PWD/corpora:/in" corpora corpora-import-reference --lang es /in/spa_news_2023_300K-sentences.txt
 ```
 
-- Colloca downloads nothing. Get a file and check its licence (Leipzig files: CC BY).
+- Corpora downloads nothing. Get a file and check its licence (Leipzig files: CC BY).
 - 300k sentences (~7M words) take over 30 minutes to annotate with `sm`. Start with `--max-sentences 100000`.
 - Sentences are shuffled: *Docs* columns are meaningless for base corpora.
 

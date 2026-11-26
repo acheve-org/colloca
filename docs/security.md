@@ -8,23 +8,23 @@
 ## Password
 
 ```bash
-COLLOCA_PASSWORD='a long passphrase' uv run uvicorn colloca.main:app   # or in docker-compose.yml: environment
+CORPORA_PASSWORD='a long passphrase' uv run uvicorn corpora.main:app   # or in docker-compose.yml: environment
 ```
 
 | Item | Behaviour |
 |---|---|
 | Scope | Every page and API call needs a session. |
 | Login | `/login` (en/es/it by browser language, no script) sets a cookie: `HttpOnly`, `SameSite=Strict`, signed with a key derived from the password. |
-| Lifetime | `COLLOCA_SESSION_HOURS` (12). Changing the password ends all sessions; restarting does not. |
+| Lifetime | `CORPORA_SESSION_HOURS` (12). Changing the password ends all sessions; restarting does not. |
 | Scripts | `Authorization: Bearer <password>` |
 | Log out | Menu in the rail. |
 | Open without session | `/login`, `/logout`, `/api/auth/status`, `/healthz` (health checks). |
-| Rate limit | `COLLOCA_LOGIN_ATTEMPTS` 5 per `COLLOCA_LOGIN_WINDOW` 300 s per address, then HTTP 429 with `Retry-After`. Each failure costs 0.5 s. |
+| Rate limit | `CORPORA_LOGIN_ATTEMPTS` 5 per `CORPORA_LOGIN_WINDOW` 300 s per address, then HTTP 429 with `Retry-After`. Each failure costs 0.5 s. |
 
 ## Reverse proxy
 
 - Terminate HTTPS at the proxy (nginx, Caddy, Traefik). Without HTTPS, password and cookie travel in clear text.
-- `COLLOCA_TRUST_PROXY=1` only if the proxy sets `X-Forwarded-For` / `X-Forwarded-Proto` itself. Effect: rate limit counts the real client; cookie gets `Secure`.
+- `CORPORA_TRUST_PROXY=1` only if the proxy sets `X-Forwarded-For` / `X-Forwarded-Proto` itself. Effect: rate limit counts the real client; cookie gets `Secure`.
 - The app must be reachable only through the proxy.
 
 ## Encrypted backups
@@ -36,7 +36,7 @@ COLLOCA_PASSWORD='a long passphrase' uv run uvicorn colloca.main:app   # or in d
 
 ## Encryption at rest
 
-Not provided by Colloca (no SQLCipher). Keep `COLLOCA_DATA_DIR` (the `colloca-data` volume) on an encrypted volume: FileVault, BitLocker, LUKS, or an encrypted Docker volume.
+Not provided by Corpora (no SQLCipher). Keep `CORPORA_DATA_DIR` (the `corpora-data` volume) on an encrypted volume: FileVault, BitLocker, LUKS, or an encrypted Docker volume.
 
 | Layer | Protects against |
 |---|---|

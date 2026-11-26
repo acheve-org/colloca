@@ -64,7 +64,7 @@ describe('the Candidates table', () => {
   it('keeps terms once per project and language, in the browser', () => {
     expect(sendToCandidates([entry('plazo'), entry('Plazo'), entry('fianza')])).toBe(2);
     expect(sendToCandidates([entry('plazo')])).toBe(0);
-    expect(JSON.parse(localStorage.getItem('colloca.candidates.5.es') ?? '[]')).toHaveLength(2);
+    expect(JSON.parse(localStorage.getItem('corpora.candidates.5.es') ?? '[]')).toHaveLength(2);
   });
 
   it('accept saves directly when a translation is typed', async () => {

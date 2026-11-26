@@ -5,8 +5,8 @@ import zipfile
 
 import pytest
 
-from colloca import backupcrypt as bc
-from colloca import db
+from corpora import backupcrypt as bc
+from corpora import db
 
 from .test_api import ES_TEXT, add, make_corpus
 from .test_projects import project
@@ -156,7 +156,7 @@ def test_encrypted_export_leaves_no_temporary_files(client, data, tmp_path, monk
     import tempfile
     monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
     assert export(client).status_code == 200
-    assert [p.name for p in tmp_path.iterdir() if p.name.startswith("colloca-export-")] == []
+    assert [p.name for p in tmp_path.iterdir() if p.name.startswith("corpora-export-")] == []
 
 
 def test_plain_backups_still_work(client, data):

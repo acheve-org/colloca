@@ -48,7 +48,7 @@ Applies to *Frequency*, *Collocations*, *N-grams*, *Keyness*, Job gaps, key term
 - A check run lists rows to add, skip as duplicates, reject, with reasons. Nothing is stored until you confirm.
 - Status defaults to `candidate` unless the file carries one.
 - TBX import: each entry is one concept. Sheet with a *Concept* column: same; without: source term decides.
-- Tested with Colloca's own exports and `docs/samples/`. Real CAT-tool exports not tried.
+- Tested with Corpora's own exports and `docs/samples/`. Real CAT-tool exports not tried.
 
 ## Export
 

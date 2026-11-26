@@ -2,8 +2,8 @@ import importlib
 
 import pytest
 
-from colloca import langcatalog
-from colloca.langcatalog import CATALOG
+from corpora import langcatalog
+from corpora.langcatalog import CATALOG
 
 
 @pytest.mark.parametrize("code", sorted(CATALOG))

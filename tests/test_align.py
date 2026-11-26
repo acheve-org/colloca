@@ -5,7 +5,7 @@ import time
 import pytest
 from docx import Document
 
-from colloca import align, db
+from corpora import align, db
 
 from .test_api import make_corpus, wait_for_jobs
 

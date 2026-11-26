@@ -172,7 +172,7 @@
         body: JSON.stringify({ passphrase: exportPass, ...(projectId ? { project_id: Number(projectId) } : {}) }),
       });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail ?? res.statusText);
-      const name = /filename="?([^";]+)"?/.exec(res.headers.get('content-disposition') ?? '')?.[1] ?? 'colloca-backup.zip.enc';
+      const name = /filename="?([^";]+)"?/.exec(res.headers.get('content-disposition') ?? '')?.[1] ?? 'corpora-backup.zip.enc';
       const url = URL.createObjectURL(await res.blob());
       const a = document.createElement('a');
       a.href = url;

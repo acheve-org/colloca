@@ -45,7 +45,7 @@ Colour, contrast and screen-reader notes: [accessibility.md](accessibility.md).
 | ? | List shortcuts. |
 
 - Plain-key shortcuts are off while typing in a field.
-- Remap in the **?** overlay: select a key, press the new one (Esc cancels). Stored in `localStorage` key `colloca.keys`. *Restore default keys* resets.
+- Remap in the **?** overlay: select a key, press the new one (Esc cancels). Stored in `localStorage` key `corpora.keys`. *Restore default keys* resets.
 - Buttons show their key in the tooltip.
 
 ## Interface language

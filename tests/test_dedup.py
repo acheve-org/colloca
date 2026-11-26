@@ -5,7 +5,7 @@ import sqlite3
 
 import pytest
 
-from colloca import db, dedup, importer
+from corpora import db, dedup, importer
 from tests.test_api import make_corpus, wait_for_jobs
 
 WORDS = [

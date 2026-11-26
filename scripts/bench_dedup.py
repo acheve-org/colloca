@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from make_sample_corpus import build, words_arg  # noqa: E402
 
-from colloca import db, dedup  # noqa: E402
+from corpora import db, dedup  # noqa: E402
 
 
 def main(argv=None) -> int:

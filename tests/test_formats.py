@@ -8,7 +8,7 @@ import zipfile
 import pytest
 from openpyxl import Workbook
 
-from colloca import formats, ingest, ocr, parallel
+from corpora import formats, ingest, ocr, parallel
 
 from .test_api import make_corpus, wait_for_jobs
 

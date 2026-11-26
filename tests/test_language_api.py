@@ -1,6 +1,6 @@
 import pytest
 
-from colloca import db, languages, models, ocrdata
+from corpora import db, languages, models, ocrdata
 
 from .test_api import default_project
 

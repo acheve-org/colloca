@@ -4,7 +4,7 @@ import socket
 import httpx
 import pytest
 
-from colloca import ingest
+from corpora import ingest
 
 from .test_url_fetching import PRIVATE, PUBLIC, answers
 

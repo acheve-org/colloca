@@ -25,7 +25,7 @@ class Busy(Exception):
 
 def models_dir() -> Path | None:
     """Where models live (Docker: /models); None = the active Python environment."""
-    d = os.environ.get("COLLOCA_MODELS_DIR")
+    d = os.environ.get("CORPORA_MODELS_DIR")
     return Path(d) if d else None
 
 

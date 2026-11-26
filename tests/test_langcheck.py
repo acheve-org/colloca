@@ -1,6 +1,6 @@
 import pytest
 
-from colloca import langcheck, languages
+from corpora import langcheck, languages
 
 from .test_api import ES_TEXT, IT_TEXT
 

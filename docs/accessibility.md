@@ -72,8 +72,8 @@ Thresholds: 4.5:1 = AA (normal text), 7:1 = AAA. All pairs are at least AA.
 
 ## Interface language
 
-- English, Spanish, Italian. First visit uses the first of `navigator.languages` that Colloca supports, else English.
-- The **Language** switch (`EN`, `ES`, `IT`, each named in itself) changes it at once; stored in `localStorage` key `colloca.lang`.
+- English, Spanish, Italian. First visit uses the first of `navigator.languages` that Corpora supports, else English.
+- The **Language** switch (`EN`, `ES`, `IT`, each named in itself) changes it at once; stored in `localStorage` key `corpora.lang`.
 - The page `lang` attribute follows the choice, so screen readers pick the right voice.
 - Tables sort and numbers format by that language (`1.234,5` in Spanish and Italian).
 - Not translated: server messages (errors, language-check wording, job progress), file format names, your data.

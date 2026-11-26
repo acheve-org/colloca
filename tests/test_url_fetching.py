@@ -5,7 +5,7 @@ import socket
 import httpx
 import pytest
 
-from colloca import ingest
+from corpora import ingest
 
 from .test_api import make_corpus, wait_for_jobs
 

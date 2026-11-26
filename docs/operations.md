@@ -2,7 +2,7 @@
 
 ## Backup and trash
 
-- Data lives in the `colloca-data` volume (`COLLOCA_DATA_DIR`).
+- Data lives in the `corpora-data` volume (`CORPORA_DATA_DIR`).
 - **Backup and Trash** screen:
   - Whole database: zip with a consistent copy of the database.
   - Single projects: export and import.
@@ -10,7 +10,7 @@
 - Volume-level backup:
 
 ```bash
-docker run --rm -v colloca-data:/d -v $PWD:/b alpine tar czf /b/colloca-backup.tgz -C /d .
+docker run --rm -v corpora-data:/d -v $PWD:/b alpine tar czf /b/corpora-backup.tgz -C /d .
 ```
 
 - Deleted corpora, documents and terms stay in the Trash 30 days (adjustable), then are removed.
@@ -19,7 +19,7 @@ docker run --rm -v colloca-data:/d -v $PWD:/b alpine tar czf /b/colloca-backup.t
 
 - Schema versioned with `PRAGMA user_version`; migrations in `db.py`.
 - Before migrating, a copy is written beside the database: `corpus.db.bak-v<old version>`.
-- A database from a newer Colloca is refused, not corrupted.
+- A database from a newer Corpora is refused, not corrupted.
 - Projects are mandatory for working corpora. The first start of this version (migration v15) creates a project named `General` (only if a working corpus had no project) and moves those corpora into it. Termbase entries without a project stay in the general termbase shared by all projects. An unsaved candidate basket kept in the browser for a project-less corpus is not carried over to `General`.
 - Importing a backup puts working corpora without a project into `General`.
 
@@ -27,9 +27,9 @@ docker run --rm -v colloca-data:/d -v $PWD:/b alpine tar czf /b/colloca-backup.t
 
 | Variable | Effect |
 |---|---|
-| `COLLOCA_LOG_LEVEL` | Default `INFO`. |
-| `COLLOCA_LOG_FORMAT=json` | One JSON object per line. |
-| `COLLOCA_SLOW_MS` | Default 1000; `0` = off. Slower requests and concordance queries log as warnings. |
+| `CORPORA_LOG_LEVEL` | Default `INFO`. |
+| `CORPORA_LOG_FORMAT=json` | One JSON object per line. |
+| `CORPORA_SLOW_MS` | Default 1000; `0` = off. Slower requests and concordance queries log as warnings. |
 
 - Import and analysis jobs log when queued, started, done, rejected.
 - 5xx responses and job crashes log with stack trace.
@@ -83,7 +83,7 @@ Timings in ms (synthetic Spanish corpus, one run, Apple-silicon laptop, SQLite, 
 | OCR | Optional ([importing.md](importing.md#ocr-optional)); accuracy depends on the scan. |
 | URLs | No JavaScript rendering: pages that need it fail to extract. Extraction is heuristic: review the preview. No `robots.txt` handling (you choose the URLs). |
 | URL safety | Private/internal addresses blocked (`ALLOW_PRIVATE_URLS=1` overrides). The name is resolved once per request and the connection goes to that address (certificates still verified against the host name), so DNS changes cannot reach internal addresses. |
-| Authentication | None unless `COLLOCA_PASSWORD` is set ([security.md](security.md)); otherwise bind to localhost only. |
+| Authentication | None unless `CORPORA_PASSWORD` is set ([security.md](security.md)); otherwise bind to localhost only. |
 | Models | `sm` models make lemma/POS errors; use `lg` (Docker default). |
 | Language check | Compares stop words of the languages you set up; needs at least two ([importing.md](importing.md#checks-on-import)). |
 | Jobs | Kept in memory; a restart forgets their status. Imported documents stay. |

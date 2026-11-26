@@ -1,4 +1,4 @@
-from colloca import analysis, db, samplegen
+from corpora import analysis, db, samplegen
 
 
 def _make(tmp_path, name, **kw):

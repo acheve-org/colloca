@@ -62,30 +62,30 @@ async def lifespan(_app):
     yield
 
 
-app = FastAPI(title="Colloca", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="Corpora", version="0.1.0", lifespan=lifespan)
 
 
 @app.middleware("http")
 async def log_requests(request, call_next):
-    """One warning line for every request slower than COLLOCA_SLOW_MS or ending in a server error."""
+    """One warning line for every request slower than CORPORA_SLOW_MS or ending in a server error."""
     t0 = time.perf_counter()
     try:
         response = await call_next(request)
     except Exception:
-        logging.getLogger("colloca.http").exception("%s %s failed", request.method, request.url.path)
+        logging.getLogger("corpora.http").exception("%s %s failed", request.method, request.url.path)
         raise
     ms = (time.perf_counter() - t0) * 1000
     if response.status_code >= 500:
-        logging.getLogger("colloca.http").error("%s %s -> %s (%.0f ms)", request.method, request.url.path,
+        logging.getLogger("corpora.http").error("%s %s -> %s (%.0f ms)", request.method, request.url.path,
                                                 response.status_code, ms)
     elif logsetup.slow_ms() and ms >= logsetup.slow_ms():
-        logging.getLogger("colloca.http").warning("Slow: %s %s took %.0f ms", request.method, request.url.path, ms)
+        logging.getLogger("corpora.http").warning("Slow: %s %s took %.0f ms", request.method, request.url.path, ms)
     return response
 
 
 @app.middleware("http")
 async def require_login(request, call_next):
-    """With COLLOCA_PASSWORD set, nothing but the login page answers without a session (see auth.py)."""
+    """With CORPORA_PASSWORD set, nothing but the login page answers without a session (see auth.py)."""
     path = request.url.path
     if auth.enabled() and path not in auth.PUBLIC and not auth.authenticated(request.headers, request.cookies):
         if path.startswith("/api/"):
@@ -96,8 +96,8 @@ async def require_login(request, call_next):
 
 
 def _client_address(request) -> str:
-    """The address failed logins are counted against (the first X-Forwarded-For hop only if COLLOCA_TRUST_PROXY=1)."""
-    if os.environ.get("COLLOCA_TRUST_PROXY") == "1":
+    """The address failed logins are counted against (the first X-Forwarded-For hop only if CORPORA_TRUST_PROXY=1)."""
+    if os.environ.get("CORPORA_TRUST_PROXY") == "1":
         forwarded = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
         if forwarded:
             return forwarded
@@ -105,7 +105,7 @@ def _client_address(request) -> str:
 
 
 def _secure(request) -> bool:
-    proto = request.headers.get("x-forwarded-proto", "") if os.environ.get("COLLOCA_TRUST_PROXY") == "1" else ""
+    proto = request.headers.get("x-forwarded-proto", "") if os.environ.get("CORPORA_TRUST_PROXY") == "1" else ""
     return request.url.scheme == "https" or proto == "https"
 
 
@@ -136,7 +136,7 @@ async def login(request: Request, password: str = Form(""), next: str = Form("/"
                             headers={"Retry-After": str(wait)})
     if not auth.check_password(password):
         auth.record_failure(who)
-        logging.getLogger("colloca.auth").warning("Failed login from %s", who)
+        logging.getLogger("corpora.auth").warning("Failed login from %s", who)
         await asyncio.sleep(0.5)                       # slows a guessing script a little more
         return HTMLResponse(auth.login_page(lang, target, "wrong"), status_code=401)
     auth.clear_failures(who)
@@ -159,8 +159,8 @@ def healthz():
     return {"ok": True}
 
 
-# COLLOCA_STATIC_DIR serves a UI build from elsewhere (end-to-end tests); the default is the packaged one.
-STATIC = os.environ.get("COLLOCA_STATIC_DIR") or os.path.join(os.path.dirname(__file__), "static")
+# CORPORA_STATIC_DIR serves a UI build from elsewhere (end-to-end tests); the default is the packaged one.
+STATIC = os.environ.get("CORPORA_STATIC_DIR") or os.path.join(os.path.dirname(__file__), "static")
 
 
 # --------------------------------------------------------------------------- helpers
@@ -526,7 +526,7 @@ def list_references():
 @app.post("/api/references", status_code=201)
 def create_reference(body: ReferenceIn):
     """Create the (empty) base corpus of a language; fill it through the normal upload endpoints
-    (`?sentences=true` for Leipzig-style sentence files) or with `colloca-import-reference`."""
+    (`?sentences=true` for Leipzig-style sentence files) or with `corpora-import-reference`."""
     if body.lang not in nlp.SUPPORTED:
         raise HTTPException(400, f"Language must be one of {list(nlp.SUPPORTED)}")
     with db.session() as conn:
@@ -924,7 +924,7 @@ def export_tmx(corpus_id: int, partner_corpus_id: int | None = None, markup: boo
     name = "".join(ch if ch.isalnum() or ch in "-_" else "-" for ch in corpus["name"]).strip("-") or "memory"
     return Response(body, media_type="application/x-tmx+xml; charset=utf-8", headers={
         "Content-Disposition": f'attachment; filename="{name}.tmx"',
-        "X-Colloca-Units": str(stats["units"]), "X-Colloca-Skipped-Documents": str(stats["skipped_documents"])})
+        "X-Corpora-Units": str(stats["units"]), "X-Corpora-Skipped-Documents": str(stats["skipped_documents"])})
 
 
 class AlignLink(BaseModel):
@@ -1772,7 +1772,7 @@ def check_text(corpus_id: int, body: CheckTextIn):
 
 
 _UI_MISSING = (
-    "<!doctype html><meta charset=utf-8><title>Colloca</title>"
+    "<!doctype html><meta charset=utf-8><title>Corpora</title>"
     "<h1>UI not built</h1><p>Run <code>mise run ui:build</code> and reload.</p>"
 )
 
@@ -1861,7 +1861,7 @@ def backup_database(include_sqlite: bool = True):
     """The whole database as one zip: portable data.json (+ a consistent SQLite copy with tokens). Trash excluded."""
     with db.session() as conn:
         path = backup.write_zip(conn, None, with_db=include_sqlite)
-    return _zip_response(path, f"colloca-backup-{time.strftime('%Y%m%d-%H%M%S')}.zip")
+    return _zip_response(path, f"corpora-backup-{time.strftime('%Y%m%d-%H%M%S')}.zip")
 
 
 class EncryptedBackupIn(BaseModel):
@@ -1879,7 +1879,7 @@ def backup_encrypted(body: EncryptedBackupIn):
         if body.project_id is not None:
             _project(conn, body.project_id)
         plain = backup.write_zip(conn, body.project_id, with_db=body.include_sqlite and body.project_id is None)
-    fd, path = tempfile.mkstemp(suffix=".enc", prefix="colloca-export-")
+    fd, path = tempfile.mkstemp(suffix=".enc", prefix="corpora-export-")
     os.close(fd)
     try:
         backupcrypt.encrypt_file(plain, path, body.passphrase)
@@ -1888,7 +1888,7 @@ def backup_encrypted(body: EncryptedBackupIn):
         raise
     finally:
         os.unlink(plain)
-    name = f"colloca-{'project' if body.project_id is not None else 'backup'}-{time.strftime('%Y%m%d-%H%M%S')}.zip.enc"
+    name = f"corpora-{'project' if body.project_id is not None else 'backup'}-{time.strftime('%Y%m%d-%H%M%S')}.zip.enc"
     return FileResponse(path, media_type="application/octet-stream", filename=name,
                         background=BackgroundTask(os.unlink, path))
 
@@ -1900,7 +1900,7 @@ def export_project(project_id: int):
         project = _project(conn, project_id)
         path = backup.write_zip(conn, project_id)
     safe = "".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in project["name"])[:40] or "project"
-    return _zip_response(path, f"colloca-project-{safe}-{time.strftime('%Y%m%d')}.zip")
+    return _zip_response(path, f"corpora-project-{safe}-{time.strftime('%Y%m%d')}.zip")
 
 
 @app.post("/api/import")

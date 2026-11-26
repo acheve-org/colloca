@@ -1,13 +1,13 @@
-"""Build a synthetic annotated corpus in a Colloca database (see colloca.samplegen).
+"""Build a synthetic annotated corpus in a Corpora database (see corpora.samplegen).
 
     uv run python scripts/make_sample_corpus.py --lang es --words 1m --db /tmp/sample.db
-    COLLOCA_DATA_DIR=/tmp/colloca-sample uv run python scripts/make_sample_corpus.py --lang it --words 5m
+    CORPORA_DATA_DIR=/tmp/corpora-sample uv run python scripts/make_sample_corpus.py --lang it --words 5m
 """
 import argparse
 import sys
 import time
 
-from colloca import db, samplegen
+from corpora import db, samplegen
 
 
 def words_arg(value: str) -> int:
@@ -40,7 +40,7 @@ def main(argv=None) -> int:
     ap.add_argument("--words", type=words_arg, default=samplegen.SIZES["1m"], help="100k, 1m, 5m or a number")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--docs", type=int, default=0, help="number of documents (default: about one per 10k words)")
-    ap.add_argument("--db", default=db.DB_PATH, help="SQLite file (default: COLLOCA_DATA_DIR/corpus.db)")
+    ap.add_argument("--db", default=db.DB_PATH, help="SQLite file (default: CORPORA_DATA_DIR/corpus.db)")
     ap.add_argument("--name", default="")
     ap.add_argument("--reference", action="store_true", help="make it the language's base corpus")
     args = ap.parse_args(argv)

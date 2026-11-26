@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 import spacy
 
-from colloca import related
+from corpora import related
 
 from .test_api import make_corpus
 

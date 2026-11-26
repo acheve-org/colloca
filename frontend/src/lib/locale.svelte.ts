@@ -6,7 +6,7 @@ export const LANGS: readonly Lang[] = ['en', 'es', 'it'];
 /** Endonyms: each language is named in itself, so a user can always find theirs. */
 export const LANG_NAMES: Record<Lang, string> = { en: 'English', es: 'Español', it: 'Italiano' };
 
-const KEY = 'colloca.lang';
+const KEY = 'corpora.lang';
 
 export function isLang(v: unknown): v is Lang {
   return typeof v === 'string' && (LANGS as readonly string[]).includes(v);

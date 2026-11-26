@@ -6,7 +6,7 @@ const TERM = 'parque eólico';
 
 async function seededCorpus(page: Page, name: string): Promise<void> {
   await page.goto('/');
-  await page.evaluate(() => localStorage.removeItem('colloca.keys'));
+  await page.evaluate(() => localStorage.removeItem('corpora.keys'));
   await newCorpus(page, name);
   await addDocuments(page, join(import.meta.dirname, 'seed.txt'));
 }
@@ -42,7 +42,7 @@ test('keyboard layer: slash, help overlay, rebinding, example keys', async ({ pa
   await expect(page.getByLabel('Word or phrase')).toHaveCount(0);
   await page.keyboard.press('g');
   await expect(page.getByLabel('Word or phrase')).toBeFocused();
-  await page.evaluate(() => localStorage.removeItem('colloca.keys'));
+  await page.evaluate(() => localStorage.removeItem('corpora.keys'));
 
   // Number keys pick an example sentence in the term dialog.
   await page.getByLabel('Word or phrase').fill(TERM);

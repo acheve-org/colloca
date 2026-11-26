@@ -2,7 +2,7 @@ import threading
 
 import pytest
 
-from colloca import langcatalog, languages, models, nlp
+from corpora import langcatalog, languages, models, nlp
 
 
 @pytest.fixture()

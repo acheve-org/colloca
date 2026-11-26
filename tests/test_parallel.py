@@ -5,7 +5,7 @@ from xml.sax.saxutils import escape
 import pytest
 from docx import Document
 
-from colloca import db, ingest, parallel
+from corpora import db, ingest, parallel
 
 from .test_api import make_corpus, wait_for_jobs
 from .test_projects import project

@@ -6,7 +6,7 @@ __pycache__/
 .superpowers/
 frontend/node_modules/
 # Frontend build output (Vite writes it here; `mise run ui:build`)
-src/colloca/static/
+src/corpora/static/
 frontend/test-results/
 frontend/playwright-report/
 .coverage

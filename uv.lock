@@ -413,7 +413,7 @@ wheels = [
 ]
 
 [[package]]
-name = "colloca"
+name = "corpora"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [

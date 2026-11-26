@@ -101,7 +101,7 @@ def _unique(rows: list[dict], key: str) -> list[dict]:
     return list(merged.values())
 
 
-def to_tbx(rows: list[dict], version: int = 3, title: str = "Colloca termbase") -> bytes:
+def to_tbx(rows: list[dict], version: int = 3, title: str = "Corpora termbase") -> bytes:
     if version not in (2, 3):
         raise ValueError("TBX version must be 2 or 3")
     v3 = version == 3
@@ -124,7 +124,7 @@ def to_tbx(rows: list[dict], version: int = 3, title: str = "Colloca termbase") 
         root.set("style", "dca")
     header = el(root, names["header"])
     desc = el(el(header, "fileDesc"), "sourceDesc")
-    el(desc, "p", f"{title}: {len(rows)} entries, exported from Colloca")
+    el(desc, "p", f"{title}: {len(rows)} entries, exported from Corpora")
     if not v3:
         el(el(header, "encodingDesc"), "p", "TBXBasicXCSV02.xcs", type="DCSName")
     body = el(el(root, "text"), "body")

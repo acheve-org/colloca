@@ -19,7 +19,7 @@ MAX_UPLOAD_FILES = int(os.environ.get("MAX_UPLOAD_FILES", "50"))              # 
 MAX_PDF_PAGES = int(os.environ.get("MAX_PDF_PAGES", "1000"))
 MAX_TEXT_CHARS = int(os.environ.get("MAX_TEXT_MB", "10")) * 1024 * 1024       # per document, after extraction
 ALLOW_PRIVATE =os.environ.get("ALLOW_PRIVATE_URLS", "") == "1"
-USER_AGENT = "colloca/0.1 (personal terminology research)"
+USER_AGENT = "corpora/0.1 (personal terminology research)"
 URL_DELAY = float(os.environ.get("URL_DELAY_SECONDS", "1"))                  # between two requests to one host (lists)
 MAX_URL_LIST = int(os.environ.get("MAX_URL_LIST", "50"))                      # URLs in one list
 MAX_URLS_PER_HOST = int(os.environ.get("MAX_URLS_PER_HOST", "20"))            # of them, to the same host
