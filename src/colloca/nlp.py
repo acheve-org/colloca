@@ -16,7 +16,7 @@ _lock = threading.Lock()
 def size_order(lang: str) -> list[str]:
     """Model sizes to try for a language: its own setting, then SPACY_SIZE, then any other."""
     own = languages.get(lang)
-    return list(dict.fromkeys([s for s in (own.model_size if own else None, os.environ.get("SPACY_SIZE", "md"),
+    return list(dict.fromkeys([s for s in (own.model_size if own else None, os.environ.get("SPACY_SIZE", "lg"),
                                            "md", "sm", "lg") if s]))
 
 

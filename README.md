@@ -21,7 +21,7 @@ Self-hosted tool for translators: build **monolingual reference corpora** (in th
 docker compose build            # builds the UI too
 docker compose up
 # open http://localhost:8000, then install the models in the Languages screen
-# (Spanish and Italian are set up from the start; models are downloaded into `~/.spacy` when you ask)
+# (a new install has no languages: add yours there; models are downloaded into `~/.spacy` when you ask)
 ```
 
 Docker uses the `lg` spaCy models by default; data lives in the `colloca-data` volume.
@@ -61,7 +61,7 @@ mise run dev     # uvicorn with auto-reload on http://localhost:8000
 - Python ≥ 3.12. CI tests 3.12, 3.13, 3.14; Docker and `mise.toml` use 3.14.
 - Types: `uv run mypy` (basic, in CI). Coverage: `uv run pytest --cov` (printed in CI).
 - Add dependencies with `uv add <pkg>`; `uv.lock` is committed.
-- **Models**: the loader uses the installed size nearest to `SPACY_SIZE` (default order `md`, `sm`, `lg`). `uv sync` installs `sm`: fine for tests, not for judging lemma quality. For that, install `md` or `lg` (`python -m spacy download es_core_news_lg it_core_news_lg`) and set `SPACY_SIZE`. `GET /api/status` shows what is in use.
+- **Models**: the loader uses the installed size nearest to `SPACY_SIZE` (default `lg`; then `md`, `sm`). `uv sync` installs `sm`: fine for tests, not for judging lemma quality. For that, install `md` or `lg` (`python -m spacy download es_core_news_lg it_core_news_lg`) and set `SPACY_SIZE`. `GET /api/status` shows what is in use.
 - **Logging, offline models, benchmarks**: [docs/operations.md](docs/operations.md).
 
 ### Layout

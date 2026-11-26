@@ -40,8 +40,7 @@ For installs without GitHub access at build time:
 
 ```bash
 # on a machine with internet (--dry-run lists URLs)
-uv run python scripts/fetch_model_wheels.py wheels --size lg            # es and it
-uv run python scripts/fetch_model_wheels.py wheels --size lg --langs fr de   # other catalog languages
+uv run python scripts/fetch_model_wheels.py wheels --size lg --langs es it   # any catalog languages
 # on the target
 uv pip install --no-index --find-links wheels es_core_news_lg it_core_news_lg
 ```

@@ -1,7 +1,6 @@
 """Download the spaCy model wheels once, to install them later without GitHub (offline or locked-down builds).
 
-    uv run python scripts/fetch_model_wheels.py wheels --size lg          # es and it, on a machine with internet
-    uv run python scripts/fetch_model_wheels.py wheels --size lg --langs fr de   # other catalog languages
+    uv run python scripts/fetch_model_wheels.py wheels --size lg --langs es it   # on a machine with internet
     uv pip install --no-index --find-links wheels es_core_news_lg it_core_news_lg    # on the offline machine
     SPACY_WHEELS=/wheels docker compose run --rm colloca download-models # Docker: installs from the directory
 """
@@ -13,10 +12,9 @@ from pathlib import Path
 from colloca import langcatalog
 
 BASE = "https://github.com/explosion/spacy-models/releases/download"
-LANGS = ("es", "it")
 
 
-def wheel_urls(size: str, version: str = "3.8.0", langs=LANGS) -> list[str]:
+def wheel_urls(size: str, langs, version: str = "3.8.0") -> list[str]:
     pkgs = [langcatalog.package(lang, size) for lang in langs]
     return [f"{BASE}/{pkg}-{version}/{pkg}-{version}-py3-none-any.whl" for pkg in pkgs]
 
@@ -26,11 +24,11 @@ def main(argv=None) -> int:
     ap.add_argument("directory", type=Path)
     ap.add_argument("--size", choices=("sm", "md", "lg"), default="lg")
     ap.add_argument("--version", default="3.8.0")
-    ap.add_argument("--langs", nargs="+", choices=sorted(langcatalog.CATALOG), default=list(LANGS),
-                    help="language codes from the catalog (default: es it)")
+    ap.add_argument("--langs", nargs="+", choices=sorted(langcatalog.CATALOG), required=True,
+                    help="language codes from the catalog")
     ap.add_argument("--dry-run", action="store_true", help="print the URLs only")
     args = ap.parse_args(argv)
-    urls = wheel_urls(args.size, args.version, args.langs)
+    urls = wheel_urls(args.size, args.langs, args.version)
     if args.dry_run:
         print("\n".join(urls))
         return 0

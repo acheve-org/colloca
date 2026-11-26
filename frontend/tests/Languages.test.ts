@@ -131,6 +131,15 @@ describe('Languages', () => {
     expect(dot('Italian', 'Model: missing')).toHaveAttribute('data-shape', 'ring');
   });
 
+  it('says no language is set up yet (a fresh install) and offers to add one', async () => {
+    settings = [[]];
+    render(Languages);
+    expect(await screen.findByText('No languages set up yet.')).toBeInTheDocument();
+    const buttons = screen.getAllByRole('button', { name: /Add language/ });
+    await fireEvent.click(buttons[buttons.length - 1]);
+    expect(await screen.findByRole('dialog', { name: 'Add a language' })).toBeInTheDocument();
+  });
+
   it('shows the add button and a one-line intro above the list', async () => {
     render(Languages);
     await loaded();
@@ -407,7 +416,7 @@ describe('Languages', () => {
     await fireEvent.click(within(dlg).getByRole('button', { name: 'Add' }));
     await waitFor(() => expect(calls.some((c) => c.method === 'POST' && c.path === '/api/languages')).toBe(true));
     expect(calls.find((c) => c.method === 'POST' && c.path === '/api/languages')!.body).toEqual({
-      code: 'fr', size: 'md', install_model: true, install_ocr: true,
+      code: 'fr', size: 'lg', install_model: true, install_ocr: true,
     });
   });
 

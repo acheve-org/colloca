@@ -19,7 +19,7 @@
   const uid = $props.id();
   let query = $state('');
   let code = $state('');
-  let size = $state('md');
+  let size = $state('lg');
   let installModel = $state(true);
   let installOcr = $state(true);
   let busy = $state(false);
@@ -33,7 +33,7 @@
     if (open) {
       query = '';
       code = '';
-      size = 'md';
+      size = 'lg';
       installModel = true;
       installOcr = true;
     }

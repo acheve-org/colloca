@@ -329,8 +329,8 @@ def registered_languages():
 
 # --------------------------------------------------------------------------- language management
 def _default_size() -> str:
-    size = os.environ.get("SPACY_SIZE", "md")
-    return size if size in langcatalog.SIZES else "md"
+    size = os.environ.get("SPACY_SIZE", "lg")
+    return size if size in langcatalog.SIZES else "lg"
 
 
 def _entry(code: str) -> langcatalog.Entry:

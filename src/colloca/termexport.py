@@ -118,7 +118,7 @@ def to_tbx(rows: list[dict], version: int = 3, title: str = "Colloca termbase") 
         return node
 
     src_langs = Counter(r["src_lang"] for r in rows)
-    main_lang = src_langs.most_common(1)[0][0] if src_langs else "es"
+    main_lang = src_langs.most_common(1)[0][0] if src_langs else "und"   # BCP 47: undetermined (an empty export)
     root = ET.Element(ns + names["root"], {_XML_LANG: main_lang, "type": "TBX-Basic" if v3 else "TBX"})
     if v3:
         root.set("style", "dca")

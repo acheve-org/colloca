@@ -70,8 +70,8 @@
   let header = $state(true);
   let mapping = $state<Record<string, string>>({});
   let project = $state('none');
-  let srcLang = $state('es');
-  let tgtLang = $state('it');
+  let srcLang = $state('');
+  let tgtLang = $state('');
   let defaultStatus = $state('candidate');
   let langs = $state.raw<Record<string, string>>({});
 

@@ -3,7 +3,7 @@ import sqlite3
 
 import pytest
 
-from colloca import db, languages, nlp
+from colloca import cql, db, languages, nlp
 
 
 def _add_corpus(lang, deleted=False):
@@ -20,12 +20,6 @@ def xx(client):
         conn.execute("DELETE FROM corpora WHERE lang='xx'")
     with contextlib.suppress(KeyError):
         languages.remove("xx")
-
-
-def test_seed_has_es_and_it(client):
-    assert languages.get("es") == languages.Language("es", "Spanish", None, "spa")
-    assert languages.get("it").tesseract == "ita"
-    assert [x.code for x in languages.all_languages()][:2] == ["es", "it"]
 
 
 def test_add_get_update_remove_roundtrip(xx):
@@ -77,3 +71,22 @@ def test_migration_v14_seeds_on_existing_database(tmp_path):
     db.migrate(conn)
     rows = conn.execute("SELECT code, name, model_size, tesseract FROM languages ORDER BY added, code").fetchall()
     assert [tuple(r) for r in rows] == [("es", "Spanish", None, "spa"), ("it", "Italian", None, "ita")]
+
+
+def test_migration_v14_seeds_when_only_terms_exist(tmp_path):
+    conn = sqlite3.connect(tmp_path / "t.db")
+    cql.register(conn)
+    for version, sql in db.MIGRATIONS:
+        if version < 14:
+            conn.executescript(sql)
+    conn.execute("PRAGMA user_version = 13")
+    conn.execute("INSERT INTO terms (src_lang, tgt_lang, src_term) VALUES ('es', 'it', 'casa')")
+    conn.commit()
+    db.migrate(conn)
+    assert [r[0] for r in conn.execute("SELECT code FROM languages ORDER BY code")] == ["es", "it"]
+
+
+def test_fresh_install_sets_up_no_language(tmp_path):
+    conn = sqlite3.connect(tmp_path / "fresh.db")
+    db.migrate(conn)
+    assert conn.execute("SELECT COUNT(*) FROM languages").fetchone()[0] == 0

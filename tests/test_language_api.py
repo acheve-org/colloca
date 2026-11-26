@@ -34,6 +34,12 @@ def test_add_language_starts_model_install(client, calls):
     assert languages.get("fr").tesseract == "fra"
 
 
+def test_add_without_size_installs_lg_when_spacy_size_is_unset(client, calls, monkeypatch):
+    monkeypatch.delenv("SPACY_SIZE", raising=False)
+    assert client.post("/api/languages", json={"code": "fr"}).status_code == 201
+    assert calls["model"] == [("fr", "lg")]
+
+
 def test_add_without_install(client, calls):
     r = client.post("/api/languages", json={"code": "de", "install_model": False})
     assert r.status_code == 201 and calls["model"] == [] and calls["ocr"] == []
