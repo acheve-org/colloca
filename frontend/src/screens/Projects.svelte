@@ -64,16 +64,16 @@
 
   const itemId = (id: number | null) => `proj-item-${id ?? 'none'}`;
   const focusItem = (id: number | null) => tick().then(() => document.getElementById(itemId(id))?.focus());
-  // Showing another project drops the corpus selection and any rename in progress.
-  const pick = (id: number | null) => {
-    if (id !== selectedId) {
-      selectedCorpusId = null;
-      renaming = false;
-    }
-    picked = id;
-  };
+  // Any change of the shown project (a click, a deleted project, a corpus switched from the header)
+  // drops the corpus selection and any rename in progress: both belong to the project they started in.
+  $effect(() => {
+    void selectedId;
+    selectedCorpusId = null;
+    renaming = false;
+    draft = '';
+  });
   const choose = (id: number | null) => {
-    pick(id);
+    picked = id;
     panelOpen = true;
   };
   // Stacked: the list comes back; put focus on the project the user had chosen.
@@ -109,7 +109,7 @@
       newProjectOpen = false;
       messages.say(t('proj.created'), 'ok');
       await reloadProjects();
-      pick(id);
+      picked = id;
       focusItem(id);
     });
   };
@@ -160,7 +160,7 @@
           for (const c of corpusStore.list.filter((x) => x.project_id === p.id)) {
             await patch(`/api/corpora/${c.id}`, { project_id: Number(target) });
           }
-          pick(Number(target));
+          picked = Number(target);
         }
         await del(`/api/projects/${p.id}`);
         messages.say(t('proj.deleted'), 'ok');
@@ -204,7 +204,7 @@
   }
 
   async function created(id: number, projectId: number): Promise<void> {
-    pick(projectId);
+    picked = projectId;
     await corpusStore.reload();
     await corpusStore.select(id);
     await reloadProjects();
@@ -523,7 +523,7 @@
   tbody tr {
     cursor: pointer;
   }
-  tbody tr:hover {
+  tbody tr:not(.cur):hover {
     background: var(--surface);
   }
   /* the working corpus: tinted row, normal text (accent text is not safe on --accent-soft) */

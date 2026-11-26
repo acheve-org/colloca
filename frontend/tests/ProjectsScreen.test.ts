@@ -286,6 +286,35 @@ describe('Projects screen', () => {
     expect(rowOf('A2')).toHaveAttribute('aria-selected', 'false');
   });
 
+  it('deleting the project while renaming it leaves no rename input and sends no PATCH', async () => {
+    await show();
+    await fireEvent.click(screen.getByRole('button', { name: /^Empty/ }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Rename project' }));
+    await tick();
+    expect(screen.getByLabelText('Name of project Empty')).toBeInTheDocument();
+    await askDeleteProject();
+    const dlg = screen.getByRole('dialog', { name: 'Delete this project?' });
+    projects = projects.filter((p) => p.id !== 9); // the server no longer lists it after the DELETE
+    await fireEvent.click(within(dlg).getByRole('button', { name: 'Delete' }));
+    await waitFor(() => expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent(/^Acme$/));
+    expect(screen.queryByRole('textbox', { name: /^Name of project/ })).toBeNull();
+    expect(calls.some((c) => c.method === 'DELETE' && c.path === '/api/projects/9')).toBe(true);
+    expect(calls.some((c) => c.method === 'PATCH')).toBe(false);
+  });
+
+  it('switching the working corpus to another project (nothing picked) clears the corpus selection', async () => {
+    await show();
+    await fireEvent.click(rowOf('A2'));
+    expect(rowOf('A2')).toHaveAttribute('aria-selected', 'true');
+    corpusStore.currentId = 3; // B1, in Bolt: the panel follows the working corpus
+    await tick();
+    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent(/^Bolt$/);
+    for (const r of rows()) expect(r).toHaveAttribute('aria-selected', 'false');
+    corpusStore.currentId = 1; // back to Acme: the old selection does not come back
+    await tick();
+    for (const r of rows()) expect(r).toHaveAttribute('aria-selected', 'false');
+  });
+
   it('choosing another project clears the corpus selection', async () => {
     await show();
     await fireEvent.click(rowOf('A2'));
