@@ -64,7 +64,7 @@ export const it: Messages = {
   'lang.removeBody': 'La lingua esce dall’elenco. Il suo modello resta installato a meno che tu non lo disinstalli.',
   'lang.alsoUninstall': 'Disinstalla anche il modello',
   'lang.removed': '{name} rimossa.',
-  'lang.blocked': '{n} corpora usano questa lingua',
+  'lang.blocked': 'Non si può rimuovere finché ci sono corpora che usano questa lingua.',
   'lang.usedBy': 'Usata da {n} corpora',
   'lang.usedBy1': 'Usata da 1 corpus',
   'lang.usedBy0': 'Nessun corpus la usa',

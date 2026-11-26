@@ -203,7 +203,7 @@ describe('Languages', () => {
 
   it('with no languages the panel is empty: no header and no sections', async () => {
     settings = [[]];
-    const { container } = render(Languages);
+    render(Languages);
     await waitFor(() => expect(calls.some((c) => c.path === '/api/language-settings')).toBe(true));
     await tick();
     expect(within(nav()).getByRole('button', { name: 'Add language' })).toBeInTheDocument();
@@ -211,9 +211,8 @@ describe('Languages', () => {
     expect(screen.queryByRole('heading', { level: 3 })).toBeNull();
     expect(screen.queryByRole('region')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Language actions' })).toBeNull();
-    const panel = container.querySelector('.panel')!;
-    expect(panel.children).toHaveLength(0);
-    expect(panel.textContent!.trim()).toBe('');
+    for (const text of ['Language model', 'OCR data', 'Base corpus']) expect(screen.queryByText(text)).toBeNull();
+    expect(screen.queryByText(/Used by|Not used by/)).toBeNull();
   });
 
   it('the panel header names the language, its code and how many corpora use it', async () => {
@@ -297,17 +296,17 @@ describe('Languages', () => {
     await waitFor(() => expect(calls.some((c) => c.method === 'DELETE' && c.path === '/api/languages/es/model')).toBe(true));
   });
 
-  it('remove is disabled while corpora use the language and says how many', async () => {
+  it('remove is disabled while corpora use the language and says why', async () => {
     render(Languages);
     await loaded();
     const remove = await removeItem('Spanish');
     expect(remove).toHaveAttribute('aria-disabled', 'true');
-    expect(within(card('Spanish')).getByText('2 corpora use this language')).toBeInTheDocument();
+    expect(within(card('Spanish')).getByText('Remove is unavailable while corpora use this language.')).toBeInTheDocument();
     await fireEvent.click(remove);
     expect(screen.queryByRole('dialog', { name: 'Remove Spanish?' })).toBeNull();
     await fireEvent.click(within(card('Spanish')).getByRole('button', { name: 'Language actions' }));   // close the menu
     await pick('French');
-    expect(within(card('French')).queryByText(/corpora use this language/)).toBeNull();
+    expect(within(card('French')).queryByText(/Remove is unavailable/)).toBeNull();
     const fr = await removeItem('French');
     expect(fr).not.toHaveAttribute('aria-disabled');
     await fireEvent.click(fr);

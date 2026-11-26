@@ -266,7 +266,7 @@
             />
           </div>
         </header>
-        {#if r.corpus_count > 0}<p class="muted small blocked">{t('lang.blocked', { n: r.corpus_count })}</p>{/if}
+        {#if r.corpus_count > 0}<p class="muted small blocked">{t('lang.blocked')}</p>{/if}
 
         <section class="sec" aria-labelledby="{uid}-model">
           <h3 id="{uid}-model">{t('lang.model')}</h3>

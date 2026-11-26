@@ -102,8 +102,8 @@
     overflow-wrap: anywhere;
     cursor: pointer;
   }
-  .item:hover,
-  .item:focus-visible {
+  /* A disabled item still takes focus (the global focus ring shows it) but never looks pressable. */
+  .item:not([aria-disabled='true']):is(:hover, :active, :focus-visible) {
     background: var(--surface);
   }
   .item.danger {
