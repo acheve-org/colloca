@@ -50,6 +50,8 @@ const pairs: [string, string, string][] = [
   ['--fg', '--panel', 'fg on panel'],
   ['--muted', '--panel', 'muted on panel'],
   ['--accent', '--panel', 'accent on panel'],
+  ['--status-candidate', '--panel', 'status-candidate on panel'],
+  ['--status-approved', '--panel', 'status-approved on panel'],
   ['--danger', '--panel', 'danger on panel'],
   ['--fg', '--accent-soft', 'fg on accent-soft'],
   ['--status-candidate', '--accent-soft', 'status-candidate on accent-soft'],

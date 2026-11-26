@@ -60,6 +60,16 @@ Screen details: [analysis.md](analysis.md).
   | Author | free |
 
   Set before adding (*About these documents* on the *Add documents* page; applies to URL, upload, pasted text and translation-memory imports, not to *Align two documents*) or later with *Edit details* on *Sources*.
+- **Corpus size**: the pill after the document count on *Sources* shows the total words of the corpus (all its documents) and a band. Guidance only: nothing is blocked.
+
+  | Band | Total words | Fair to use |
+  |---|---|---|
+  | small | under 50,000 | concordance and frequency; collocations on frequent terms only; keyness, n-grams and related terms are rough |
+  | workable | 50,000–249,999 | most analyses on core terms; related terms are rough below 200,000 |
+  | solid | 250,000–999,999 | every analysis |
+  | large | 1,000,000 or more | every analysis |
+
+  Click the pill for the readiness list and the words left to the next band. It turns amber in the small band, or when one document holds more than 40% of the words (with at least 2 documents): its wording will dominate the lists. *Esc* or a click outside closes it.
 - **Document filter**: the *All documents* pill at the right of the context header on every analysis screen, *Segment lookup* (aligned corpora) and the Job screen. It reads *N of M documents* when active; each active part also shows as a chip with a remove button. The pill opens a panel with *Tags*, *Type*, *From*, *To*, the summary, *Clear* (when a filter is active) and *Done* (*Esc* or a click outside closes it).
   - It persists when you move between screens and resets when you switch corpus. Changing it does not re-run a search: search again.
   - Criteria: all given tags, a text type, a date range.

@@ -20,6 +20,7 @@
   import ActionMenu from '../lib/ui/ActionMenu.svelte';
   import Badge from '../lib/ui/Badge.svelte';
   import Button from '../lib/ui/Button.svelte';
+  import CorpusSizeGauge from '../lib/ui/CorpusSizeGauge.svelte';
   import DataTable from '../lib/ui/DataTable.svelte';
   import { cellValue, type Column } from '../lib/ui/DataTable.types';
   import Dialog from '../lib/ui/Dialog.svelte';
@@ -324,10 +325,11 @@
   {#if !hasCorpus}
     {#if corpusStore.loaded}<NoCorpus />{/if}
   {:else}
-    <!-- One line (wrapping when narrow): count, filter, then the actions on the right. -->
+    <!-- One line (wrapping when narrow): count, size gauge, filter, then the actions on the right. -->
     <div class="toolbar">
       <h2 class="sr-only">{t('src.documents')}</h2>
       {#if loadedOnce}<span class="count">{count}</span>{/if}
+      <CorpusSizeGauge {docs} />
       {#if docs.length}
         <input class="filter" type="search" bind:value={filter} placeholder={t('cc.filter')} aria-label={t('cc.filter')} />
       {/if}
@@ -549,6 +551,7 @@
     color: var(--muted);
   }
   .toolbar {
+    position: relative; /* the size gauge's popover spans it on phones */
     display: flex;
     flex-wrap: wrap;
     align-items: center;

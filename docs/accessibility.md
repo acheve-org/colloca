@@ -48,6 +48,8 @@ Thresholds: 4.5:1 = AA (normal text), 7:1 = AAA. All pairs are at least AA.
 | fg on panel | `--fg` on `--panel` | 15.00 (AAA) | 11.27 (AAA) |
 | muted on panel | `--muted` on `--panel` | 5.86 (AA) | 6.45 (AA) |
 | accent on panel | `--accent` on `--panel` | 5.29 (AA) | 7.19 (AAA) |
+| status-candidate on panel | `--status-candidate` on `--panel` | 5.65 (AA) | 8.14 (AAA) |
+| status-approved on panel | `--status-approved` on `--panel` | 6.80 (AA) | 7.89 (AAA) |
 | danger on panel | `--danger` on `--panel` | 6.27 (AA) | 6.59 (AA) |
 | fg on accent-soft | `--fg` on `--accent-soft` | 13.08 (AAA) | 8.62 (AAA) |
 | status-candidate on accent-soft | `--status-candidate` on `--accent-soft` | 4.93 (AA) | 6.22 (AA) |
