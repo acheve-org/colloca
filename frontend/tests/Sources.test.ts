@@ -109,7 +109,10 @@ const bodyRows = () => screen.queryAllByRole('row').filter((r) => r.classList.co
 const docCalls = () => calls.filter((c) => c.path === '/api/corpora/1/documents' && c.method === 'GET');
 const jobCalls = () => calls.filter((c) => c.path === '/api/corpora/1/jobs');
 
-const openSettings = () => fireEvent.click(screen.getByText('Corpus settings'));
+async function reload() {
+  await fireEvent.click(screen.getByRole('button', { name: 'More' }));
+  await fireEvent.click(screen.getByRole('menuitem', { name: 'Reload' }));
+}
 
 async function ready() {
   const r = render(Sources);
@@ -168,6 +171,24 @@ describe('Sources', () => {
     expect(screen.queryAllByRole('link', { name: /From the web/ }).length).toBe(0);
   });
 
+  it('has a one-line toolbar: count, filter and More → Reload', async () => {
+    await ready();
+    expect(screen.getByRole('heading', { level: 2, name: 'Documents' })).toHaveClass('sr-only');
+    expect(screen.getByText('2 documents')).toBeInTheDocument();
+    expect(screen.getByRole('searchbox', { name: 'Filter in results' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Reload' })).toBeNull(); // only in the More menu
+    const before = docCalls().length;
+    await reload();
+    await waitFor(() => expect(docCalls().length).toBe(before + 1));
+  });
+
+  it('has no corpus settings: they live in Projects', async () => {
+    await ready();
+    expect(screen.queryByText('Corpus settings')).toBeNull();
+    expect(screen.queryByLabelText('Corpus name')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Save corpus' })).toBeNull();
+  });
+
   it('reloads the documents when the jobs of this corpus finish', async () => {
     await ready();
     const before = docCalls().length;
@@ -189,37 +210,29 @@ describe('Sources', () => {
     expect(screen.getByRole('button', { name: 'Find near-duplicates' })).toBeDisabled();
   });
 
-  it('keeps the corpus settings collapsed until opened', async () => {
+  it('shows no Export TMX button for a corpus without aligned documents', async () => {
     await ready();
-    const d = screen.getByText('Corpus settings').closest('details')!;
-    expect(d).not.toHaveAttribute('open');
-    await openSettings();
-    expect(d).toHaveAttribute('open');
-  });
-
-  it('shows the TMX export disclosure only for aligned corpora', async () => {
-    await ready();
+    expect(screen.queryByRole('button', { name: 'Export TMX' })).toBeNull();
     expect(screen.queryByText('Export aligned texts (TMX)')).toBeNull();
-    expect(document.querySelector('details.tmx')).toBeNull();
   });
 
-  it('shows no TMX disclosure for an aligned corpus without partners', async () => {
+  it('shows no Export TMX button for an aligned corpus without partners', async () => {
     corpusStore.aligned = true;
     partners = [];
     await ready();
     await waitFor(() => expect(calls.some((c) => c.path === '/api/corpora/1/aligned-partners')).toBe(true));
     await new Promise((r) => setTimeout(r, 10));
-    expect(document.querySelector('details.tmx')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Export TMX' })).toBeNull();
   });
 
-  it('shows the TMX export in a collapsed disclosure for an aligned corpus', async () => {
+  it('opens the TMX export in a dialog from the toolbar for an aligned corpus', async () => {
     corpusStore.aligned = true;
     await ready();
-    await waitFor(() => expect(document.querySelector('details.tmx')).not.toBeNull());
-    const d = document.querySelector('details.tmx')!;
-    expect(d).not.toHaveAttribute('open');
-    expect(within(d as HTMLElement).getByRole('heading', { name: 'Export aligned texts (TMX)', hidden: true })).toBeInTheDocument();
-    expect(within(d as HTMLElement).getByRole('link', { name: 'Download TMX', hidden: true })).toBeInTheDocument();
+    const btn = await screen.findByRole('button', { name: 'Export TMX' });
+    expect(screen.queryByRole('link', { name: 'Download TMX' })).toBeNull();
+    await fireEvent.click(btn);
+    const dlg = screen.getByRole('dialog', { name: 'Export aligned texts (TMX)' });
+    expect(within(dlg).getByRole('link', { name: 'Download TMX' })).toBeInTheDocument();
   });
 
   it('deleting a document asks for confirmation', async () => {
@@ -288,33 +301,10 @@ describe('Sources', () => {
     expect(calls.find((c) => c.path === '/api/corpora/1/reannotate')!.params.get('only_stale')).toBe('true');
   });
 
-  it('saves the corpus name and project', async () => {
-    await ready();
-    await openSettings();
-    await waitFor(() => expect(screen.getByRole('option', { name: 'Acme' })).toBeInTheDocument());
-    await fireEvent.input(screen.getByLabelText('Corpus name'), { target: { value: 'Renamed' } });
-    await fireEvent.change(screen.getByLabelText('Project'), { target: { value: '7' } });
-    await fireEvent.click(screen.getByRole('button', { name: 'Save corpus' }));
-    await waitFor(() => expect(calls.some((c) => c.path === '/api/corpora/1' && c.method === 'PATCH')).toBe(true));
-    expect(calls.find((c) => c.path === '/api/corpora/1' && c.method === 'PATCH')!.body).toEqual({ name: 'Renamed', project_id: 7 });
-  });
-
-  it('a corpus without a project shows a disabled placeholder and a rename never sends project_id', async () => {
-    await ready();
-    await openSettings();
-    await waitFor(() => expect(screen.getByRole('option', { name: 'Acme' })).toBeInTheDocument());
-    expect(screen.queryByRole('option', { name: '— none —' })).toBeNull();
-    expect(screen.getByRole('option', { name: 'Choose a project' })).toBeDisabled();
-    await fireEvent.input(screen.getByLabelText('Corpus name'), { target: { value: 'Renamed' } });
-    await fireEvent.click(screen.getByRole('button', { name: 'Save corpus' }));
-    await waitFor(() => expect(calls.some((c) => c.path === '/api/corpora/1' && c.method === 'PATCH')).toBe(true));
-    expect(calls.find((c) => c.path === '/api/corpora/1' && c.method === 'PATCH')!.body).toEqual({ name: 'Renamed' });
-  });
-
   it('keeps the previous rows and reports the error when a reload fails', async () => {
     await ready();
     docs = { status: 500, body: { detail: 'boom' } };
-    await fireEvent.click(screen.getByRole('button', { name: 'Reload' }));
+    await reload();
     await waitFor(() => expect(messages.current).toEqual({ text: 'boom', kind: 'err' }));
     expect(bodyRows().length).toBe(2);
   });
@@ -324,7 +314,7 @@ describe('Sources', () => {
     let release: () => void = () => {};
     docsGate = new Promise<void>((r) => (release = r));
     docs = { status: 200, body: [doc(5, { title: 'old corpus' })] };
-    await fireEvent.click(screen.getByRole('button', { name: 'Reload' }));
+    await reload();
     corpusStore.currentId = 2;
     window.dispatchEvent(new CustomEvent(CORPUS_CHANGED, { detail: { id: 2 } }));
     await waitFor(() => expect(bodyRows().length).toBe(0));

@@ -15,9 +15,9 @@
   import { t, fmt } from '../lib/i18n';
   import { JOBS_DONE, jobLogs } from '../lib/jobs.svelte';
   import { messages } from '../lib/messages.svelte';
-  import { projectStore, reloadProjects } from '../lib/projects.svelte';
   import type { Doc, Facets, Job, NearDupMatch, NearDupReport } from '../lib/types';
   import TmxExport from './TmxExport.svelte';
+  import ActionMenu from '../lib/ui/ActionMenu.svelte';
   import Badge from '../lib/ui/Badge.svelte';
   import Button from '../lib/ui/Button.svelte';
   import DataTable from '../lib/ui/DataTable.svelte';
@@ -27,9 +27,7 @@
   import NoCorpus from '../lib/ui/NoCorpus.svelte';
   import ReadyHint from '../lib/ui/ReadyHint.svelte';
   import Field from '../lib/ui/Field.svelte';
-  import Select from '../lib/ui/Select.svelte';
   import MethodTiles from '../lib/ui/add/MethodTiles.svelte';
-  import Toolbar from '../lib/ui/Toolbar.svelte';
 
   const uid = $props.id();
   const errMsg = (err: unknown) => (err instanceof Error ? err.message : String(err));
@@ -50,10 +48,6 @@
   });
   let tableEl: HTMLElement | undefined = $state();
   let seq = 0;
-
-  // Corpus settings
-  let setName = $state('');
-  let setProject = $state('');
 
   // Dialogs
   let editOpen = $state(false);
@@ -115,26 +109,6 @@
       await findDuplicates();
     });
   }
-
-  // Real projects only; a corpus without one (should not happen) shows a disabled placeholder.
-  const projectOptions = $derived([
-    ...(setProject ? [] : [{ value: '', label: t('src.chooseProject'), disabled: true }]),
-    ...projectStore.list.map((p) => ({ value: String(p.id), label: p.name })),
-  ]);
-
-  // The settings follow the current corpus (as the old tab did after every reload).
-  const settingsKey = $derived.by(() => {
-    const c = corpusStore.current;
-    return c ? `${c.id}\u0001${c.name}\u0001${c.project_id ?? ''}` : '';
-  });
-  $effect(() => {
-    void settingsKey;
-    untrack(() => {
-      const c = corpusStore.current;
-      setName = c?.name ?? '';
-      setProject = c?.project_id ? String(c.project_id) : '';
-    });
-  });
 
   const staleCount = $derived(docs.filter((d) => d.stale).length);
   const count = $derived(docs.length === 1 ? t('src.count1') : t('src.count', { n: docs.length }));
@@ -225,7 +199,6 @@
   onMount(() => {
     window.addEventListener(CORPUS_CHANGED, onCorpusChanged);
     window.addEventListener(JOBS_DONE, onJobsDone);
-    reloadProjects().catch((err) => messages.say(errMsg(err), 'err'));
     return () => {
       window.removeEventListener(CORPUS_CHANGED, onCorpusChanged);
       window.removeEventListener(JOBS_DONE, onJobsDone);
@@ -234,14 +207,6 @@
   });
 
   // ---------------------------------------------------------------- actions
-  const saveSettings = () =>
-    act('settings', async (id) => {
-      await patch(`/api/corpora/${id}`, { name: setName.trim(), ...(setProject ? { project_id: Number(setProject) } : {}) });
-      if (!still(id)) return;
-      messages.say(t('src.corpusSaved'), 'ok');
-      await Promise.all([reloadProjects(), corpusStore.reload()]);
-    });
-
   const reannotate = () =>
     act('reann', async (id) => {
       await post(`/api/corpora/${id}/reannotate`, undefined, { only_stale: true });
@@ -377,21 +342,23 @@
   {#if !hasCorpus}
     {#if corpusStore.loaded}<NoCorpus />{/if}
   {:else}
-    <div class="strip">
-      <h3>{t('src.documents')}</h3>
+    <!-- One line (wrapping when narrow): count, filter, then the actions on the right. -->
+    <div class="toolbar">
+      <h2 class="sr-only">{t('src.documents')}</h2>
       {#if loadedOnce}<span class="count">{count}</span>{/if}
       {#if docs.length}
         <input class="filter" type="search" bind:value={filter} placeholder={t('cc.filter')} aria-label={t('cc.filter')} />
       {/if}
-      <Button onclick={refresh}>{t('src.reload')}</Button>
-      {#if staleCount}
-        <span class="stale">
-          <span class="muted">{staleCount === 1 ? t('src.reann.info1') : t('src.reann.info', { n: staleCount })}</span>
-          <Button disabled={work.busy !== null} onclick={reannotate}>{t('src.reann.go')}</Button>
-        </span>
-      {/if}
       <span class="actions">
+        {#if staleCount}
+          <span class="stale">
+            <span class="muted">{staleCount === 1 ? t('src.reann.info1') : t('src.reann.info', { n: staleCount })}</span>
+            <Button disabled={work.busy !== null} onclick={reannotate}>{t('src.reann.go')}</Button>
+          </span>
+        {/if}
         <Button disabled={work.busy !== null || !docs.length} onclick={openDuplicates}>{t('dup.find')}</Button>
+        <TmxExport mode="button" />
+        <ActionMenu label={t('src.more')} items={[{ label: t('src.reload'), onclick: refresh }]} />
         <a class="addlink" href={hrefFor('sources-add')}>{t('add.add')}</a>
       </span>
     </div>
@@ -415,6 +382,7 @@
         <MethodTiles />
       {:else}
         <DataTable
+          fit
           {columns}
           rows={docs}
           rowKey={(d) => d.id}
@@ -463,27 +431,6 @@
       </div>
     {/if}
 
-    <details class="disc">
-      <summary>{t('src.settings')}</summary>
-      <form
-        onsubmit={(e) => {
-          e.preventDefault();
-          saveSettings();
-        }}
-      >
-        <Toolbar label={t('src.settings')}>
-          <Field label={t('src.corpusName')}>
-            <input bind:value={setName} required maxlength="120" size="26" />
-          </Field>
-          <Field label={t('src.project')}>
-            <Select label={t('src.project')} bind:value={setProject} options={projectOptions} />
-          </Field>
-          <Button type="submit" disabled={work.busy !== null || !setName.trim()}>{t('src.saveCorpus')}</Button>
-        </Toolbar>
-      </form>
-    </details>
-
-    <TmxExport disclosure />
   {/if}
 </div>
 
@@ -556,23 +503,13 @@
 </Dialog>
 
 <style>
-  /* One scrolling page: the toolbar, the job log, the documents table and the disclosures. */
+  /* The toolbar and the job log on top; the documents table fills the rest of the height. */
   .sources {
     display: flex;
     flex-direction: column;
     flex: 1;
     min-height: 0;
     overflow: auto;
-  }
-  .disc {
-    flex: none;
-    padding: var(--s-1) var(--s-3);
-    border-top: 1px solid var(--line);
-    font-size: var(--fs-small);
-  }
-  .disc summary {
-    cursor: pointer;
-    font-weight: 600;
   }
   .row {
     display: flex;
@@ -647,7 +584,7 @@
   .muted {
     color: var(--muted);
   }
-  .strip {
+  .toolbar {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
@@ -682,14 +619,15 @@
   .actions {
     display: inline-flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: var(--s-2);
     margin-left: auto;
   }
   .table {
     display: flex;
     flex-direction: column;
-    flex: none;
-    height: max(18rem, 55vh);
+    flex: 1 1 auto;
+    min-height: 18rem;
   }
   .table :global(.dt) {
     border-width: 0;

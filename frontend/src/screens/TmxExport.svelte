@@ -2,6 +2,8 @@
   import { get, withQuery } from '../lib/api';
   import { corpusStore } from '../lib/corpus.svelte';
   import { t } from '../lib/i18n';
+  import Button from '../lib/ui/Button.svelte';
+  import Dialog from '../lib/ui/Dialog.svelte';
   import Field from '../lib/ui/Field.svelte';
   import Select from '../lib/ui/Select.svelte';
   import Toggle from '../lib/ui/Toggle.svelte';
@@ -13,12 +15,14 @@
     docs: number;
   }
 
-  // disclosure: wrap the card in a collapsed <details> that exists only while there are partners.
-  let { disclosure = false }: { disclosure?: boolean } = $props();
+  // card: the card itself. disclosure: the card in a collapsed <details>. button: an "Export TMX" button
+  // opening the card in a dialog. Whatever the mode, it exists only while there are partners.
+  let { mode = 'card' }: { mode?: 'card' | 'disclosure' | 'button' } = $props();
   const uid = $props.id();
   let partners = $state.raw<Partner[]>([]);
   let choice = $state('');
   let markup = $state(true);
+  let open = $state(false);
 
   // The corpora that hold the translations of this corpus's aligned documents (none: the card is not shown).
   $effect(() => {
@@ -45,24 +49,37 @@
   );
 </script>
 
+{#snippet form()}
+  {#if partners.length > 1}
+    <Field label={t('tmx.partner')}>
+      <Select label={t('tmx.partner')} bind:value={choice} {options} />
+    </Field>
+  {/if}
+  <Toggle bind:checked={markup} label={t('tmx.markup')} />
+  <div class="row">
+    <span class="hint grow">{t('tmx.hint')}</span>
+    <a class="btn-link" {href} download>{t('tmx.go')}</a>
+  </div>
+{/snippet}
+
 {#snippet card()}
   <section class="card" aria-labelledby="{uid}-tmx">
     <h3 id="{uid}-tmx">{t('tmx.title')}</h3>
-    {#if partners.length > 1}
-      <Field label={t('tmx.partner')}>
-        <Select label={t('tmx.partner')} bind:value={choice} {options} />
-      </Field>
-    {/if}
-    <Toggle bind:checked={markup} label={t('tmx.markup')} />
-    <div class="row">
-      <span class="hint grow">{t('tmx.hint')}</span>
-      <a class="btn-link" {href} download>{t('tmx.go')}</a>
-    </div>
+    {@render form()}
   </section>
 {/snippet}
 
 {#if partners.length}
-  {#if disclosure}
+  {#if mode === 'button'}
+    <Button onclick={() => (open = true)}>{t('tmx.export')}</Button>
+    <!-- The dialog titles the form, so it goes in without the card's own heading. -->
+    <Dialog bind:open title={t('tmx.title')}>
+      {@render form()}
+      {#snippet footer()}
+        <Button onclick={() => (open = false)}>{t('common.close')}</Button>
+      {/snippet}
+    </Dialog>
+  {:else if mode === 'disclosure'}
     <details class="disc tmx">
       <summary>{t('tmx.title')}</summary>
       <div class="inner">{@render card()}</div>
