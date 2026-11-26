@@ -40,6 +40,7 @@ beforeEach(() => {
     if (p === '/api/languages' && method === 'GET') return res(200, { es: 'Spanish', it: 'Italian', fr: 'French' });
     if (p === '/api/references') return res(200, references);
     if (/^\/api\/corpora\/\d+\/jobs$/.test(p)) return res(200, []);
+    if (/^\/api\/corpora\/\d+\/upload$/.test(p)) return res(202, []);
     if (method === 'DELETE') return res(204, null);
     return res(p === '/api/languages' ? 201 : 202, {});
   }));
@@ -62,6 +63,12 @@ const pick = async (name: string) => {
   await fireEvent.click(item(name));
   await tick();
 };
+// The panel's ⋯ menu; Remove lives there.
+const removeItem = async (name: string) => {
+  await fireEvent.click(within(card(name)).getByRole('button', { name: 'Language actions' }));
+  return within(screen.getByRole('menu', { name: 'Language actions' })).getByRole('menuitem', { name: 'Remove' });
+};
+const section = (lang: string, name: string) => within(card(lang)).getByRole('region', { name });
 
 describe('Languages', () => {
   it('lists one button per language with its name, code and three status dots', async () => {
@@ -84,6 +91,29 @@ describe('Languages', () => {
     expect(within(es).getByText('Model', { exact: true })).toBeInTheDocument();
     expect(within(es).getByText('OCR', { exact: true })).toBeInTheDocument();
     expect(within(es).getByText('Base corpus', { exact: true })).toBeInTheDocument();
+  });
+
+  it('gives each dot state its own shape and a title, so colour is not the only signal', async () => {
+    references = [{ id: 7, name: 'Italian base', lang: 'it', project_id: null, is_reference: 1, docs: 1, tokens: 10 }];
+    settings = [[
+      row('es', 'Spanish', {}, { state: 'installing' }, { available: false, state: 'failed', message: 'x' }),
+      row('it', 'Italian', {}, { name: null }),
+    ]];
+    render(Languages);
+    await loaded();
+    const dot = (lang: string, label: string) => {
+      const group = within(item(lang)).getByTitle(label);
+      return group.querySelector('.dot')!;
+    };
+    expect(dot('Spanish', 'Model: installing')).toHaveClass('busy');
+    expect(dot('Spanish', 'Model: installing')).toHaveAttribute('data-shape', 'half');
+    expect(dot('Spanish', 'OCR: failed')).toHaveClass('error');
+    expect(dot('Spanish', 'OCR: failed')).toHaveAttribute('data-shape', 'cross');
+    expect(dot('Spanish', 'Base corpus: missing')).toHaveClass('missing');
+    expect(dot('Spanish', 'Base corpus: missing')).toHaveAttribute('data-shape', 'ring');
+    expect(dot('Italian', 'Base corpus: installed')).toHaveClass('ok');
+    expect(dot('Italian', 'Base corpus: installed')).toHaveAttribute('data-shape', 'disc');
+    expect(dot('Italian', 'Model: missing')).toHaveAttribute('data-shape', 'ring');
   });
 
   it('shows the add button and a one-line intro above the list', async () => {
@@ -133,11 +163,82 @@ describe('Languages', () => {
     render(Languages);
     await loaded();
     await pick('French');
-    await fireEvent.click(within(card('French')).getByRole('button', { name: 'Remove French' }));
+    await fireEvent.click(await removeItem('French'));
     await fireEvent.click(within(screen.getByRole('dialog', { name: 'Remove French?' })).getByRole('button', { name: 'Remove' }));
     await waitFor(() => expect(within(nav()).queryByRole('button', { name: /^French / })).toBeNull());
     expect(item('Spanish')).toHaveAttribute('aria-pressed', 'true');
     expect(card('Spanish')).toBeInTheDocument();
+  });
+
+  it('a removed language that is added again is not selected again', async () => {
+    const [es, it_, fr] = settings[0];
+    settings = [settings[0], [es, it_], [es, it_, fr]];
+    render(Languages);
+    await loaded();
+    await pick('French');
+    await fireEvent.click(await removeItem('French'));
+    await fireEvent.click(within(screen.getByRole('dialog', { name: 'Remove French?' })).getByRole('button', { name: 'Remove' }));
+    await waitFor(() => expect(within(nav()).queryByRole('button', { name: /^French / })).toBeNull());
+    await fireEvent.click(within(nav()).getByRole('button', { name: 'Add language' }));
+    const dlg = await screen.findByRole('dialog', { name: 'Add a language' });
+    await fireEvent.click(await within(dlg).findByRole('radio', { name: 'French' }));
+    await fireEvent.click(within(dlg).getByRole('button', { name: 'Add' }));
+    await waitFor(() => expect(item('French')).toBeInTheDocument());
+    expect(item('Spanish')).toHaveAttribute('aria-pressed', 'true');
+    expect(item('French')).toHaveAttribute('aria-pressed', 'false');
+    expect(card('Spanish')).toBeInTheDocument();
+  });
+
+  it('with no languages the panel is empty: no header and no sections', async () => {
+    settings = [[]];
+    const { container } = render(Languages);
+    await waitFor(() => expect(calls.some((c) => c.path === '/api/language-settings')).toBe(true));
+    await tick();
+    expect(within(nav()).getByRole('button', { name: 'Add language' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { level: 2 })).toBeNull();
+    expect(screen.queryByRole('heading', { level: 3 })).toBeNull();
+    expect(screen.queryByRole('region')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Language actions' })).toBeNull();
+    const panel = container.querySelector('.panel')!;
+    expect(panel.children).toHaveLength(0);
+    expect(panel.textContent!.trim()).toBe('');
+  });
+
+  it('the panel header names the language, its code and how many corpora use it', async () => {
+    settings = [[row('es', 'Spanish', { corpus_count: 2 }), row('it', 'Italian', { corpus_count: 1 }), row('fr', 'French')]];
+    render(Languages);
+    await loaded();
+    expect(within(card('Spanish')).getByRole('heading', { level: 2, name: 'Spanish' })).toBeInTheDocument();
+    expect(within(card('Spanish')).getByText('es')).toBeInTheDocument();
+    expect(within(card('Spanish')).getByText('Used by 2 corpora')).toBeInTheDocument();
+    await pick('Italian');
+    expect(within(card('Italian')).getByText('Used by 1 corpus')).toBeInTheDocument();
+    await pick('French');
+    expect(within(card('French')).getByText('Not used by any corpus')).toBeInTheDocument();
+  });
+
+  it('the panel has the language model, OCR data and base corpus sections', async () => {
+    render(Languages);
+    await loaded();
+    for (const name of ['Language model', 'OCR data', 'Base corpus']) {
+      expect(within(card('Spanish')).getByRole('heading', { level: 3, name })).toBeInTheDocument();
+    }
+    expect(within(section('Spanish', 'Language model')).getByText('es_core_news_lg 3.8.0 (lg)')).toBeInTheDocument();
+    expect(within(section('Spanish', 'Language model')).getByRole('button', { name: 'Uninstall model of Spanish' })).toBeInTheDocument();
+    expect(within(section('Spanish', 'OCR data')).getByRole('button', { name: 'Remove OCR data for Spanish' })).toBeInTheDocument();
+    expect(within(section('Spanish', 'Base corpus')).getByText('No base corpus yet.')).toBeInTheDocument();
+  });
+
+  it('force re-import sits in the base corpus section and applies to its uploads', async () => {
+    references = [{ id: 7, name: 'General es', lang: 'es', project_id: null, is_reference: 1, docs: 1, tokens: 10 }];
+    render(Languages);
+    await loaded();
+    const base = section('Spanish', 'Base corpus');
+    await fireEvent.click(within(base).getByRole('switch', { name: 'Import even if the language looks wrong' }));
+    await fireEvent.change(within(base).getByLabelText('Sentence files'), { target: { files: [new File(['Una frase.\n'], 'a.txt')] } });
+    await fireEvent.click(within(base).getByRole('button', { name: 'Upload sentence files' }));
+    await waitFor(() => expect(calls.some((c) => c.path === '/api/corpora/7/upload')).toBe(true));
+    expect(new URLSearchParams(calls.find((c) => c.path === '/api/corpora/7/upload')!.search).get('force_language')).toBe('true');
   });
 
   it('install posts the model request and polls until it is done', async () => {
@@ -187,17 +288,25 @@ describe('Languages', () => {
   it('remove is disabled while corpora use the language and says how many', async () => {
     render(Languages);
     await loaded();
-    expect(within(card('Spanish')).getByRole('button', { name: 'Remove Spanish' })).toBeDisabled();
+    const remove = await removeItem('Spanish');
+    expect(remove).toHaveAttribute('aria-disabled', 'true');
     expect(within(card('Spanish')).getByText('2 corpora use this language')).toBeInTheDocument();
+    await fireEvent.click(remove);
+    expect(screen.queryByRole('dialog', { name: 'Remove Spanish?' })).toBeNull();
+    await fireEvent.click(within(card('Spanish')).getByRole('button', { name: 'Language actions' }));   // close the menu
     await pick('French');
-    expect(within(card('French')).getByRole('button', { name: 'Remove French' })).toBeEnabled();
+    expect(within(card('French')).queryByText(/corpora use this language/)).toBeNull();
+    const fr = await removeItem('French');
+    expect(fr).not.toHaveAttribute('aria-disabled');
+    await fireEvent.click(fr);
+    expect(screen.getByRole('dialog', { name: 'Remove French?' })).toBeInTheDocument();
   });
 
   it('remove asks for confirmation and can uninstall the model too', async () => {
     render(Languages);
     await loaded();
     await pick('French');
-    await fireEvent.click(within(card('French')).getByRole('button', { name: 'Remove French' }));
+    await fireEvent.click(await removeItem('French'));
     expect(calls.some((c) => c.method === 'DELETE')).toBe(false);
     const dlg = screen.getByRole('dialog', { name: 'Remove French?' });
     await fireEvent.click(within(dlg).getByRole('switch', { name: 'Also uninstall the model' }));

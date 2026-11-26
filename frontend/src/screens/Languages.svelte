@@ -6,6 +6,7 @@
   import { messages } from '../lib/messages.svelte';
   import { langStatus, type Dot } from '../lib/langStatus';
   import type { CatalogEntry, Corpus, LanguageSetting } from '../lib/types';
+  import ActionMenu from '../lib/ui/ActionMenu.svelte';
   import Badge from '../lib/ui/Badge.svelte';
   import BaseCorpusCard from '../lib/ui/BaseCorpusCard.svelte';
   import Button from '../lib/ui/Button.svelte';
@@ -62,6 +63,9 @@
   const hasBase = (code: string) => refs.some((x) => x.lang === code);
   const DOTS = ['model', 'ocr', 'base'] as const;
   const dotText = (part: (typeof DOTS)[number], dot: Dot) => `${t(`lang.status.${part}`)}: ${t(`lang.status.${dot}`)}`;
+  // Each state has its own shape, so colour is never the only signal.
+  const SHAPE: Record<Dot, string> = { ok: 'disc', missing: 'ring', busy: 'half', error: 'cross' };
+  const usedBy = (n: number) => (n === 0 ? t('lang.usedBy0') : n === 1 ? t('lang.usedBy1') : t('lang.usedBy', { n }));
 
   const installing = $derived(rows.some((r) => r.model.state === 'installing' || r.ocr.state === 'installing'));
   const sizesOf = (code: string) => catalog.find((e) => e.code === code)?.sizes ?? SIZES;
@@ -183,7 +187,9 @@
       messages.say(t('lang.removed', { name: r.name }), 'ok');
       delete seen[r.code];
       await load();
-      // The first remaining language is shown now; the list is where the user picks next.
+      // The first remaining language is shown now; the list is where the user picks next. The old
+      // choice is forgotten, so adding this language back does not silently select it again.
+      selectedCode = null;
       panelOpen = false;
       focusItem(selected?.code);
     });
@@ -208,8 +214,16 @@
             </span>
             <span class="dots">
               {#each DOTS as part (part)}
-                <span class="st">
-                  <span class="dot {st[part]}" aria-hidden="true"></span>
+                <span class="st" title={dotText(part, st[part])}>
+                  <svg class="dot {st[part]}" data-shape={SHAPE[st[part]]} viewBox="0 0 10 10" aria-hidden="true">
+                    {#if st[part] === 'ok' || st[part] === 'error'}
+                      <circle cx="5" cy="5" r="5" fill="currentColor" />
+                      {#if st[part] === 'error'}<path class="x" d="M3 3 L7 7 M7 3 L3 7" />{/if}
+                    {:else}
+                      <circle cx="5" cy="5" r="4.25" fill="none" stroke="currentColor" stroke-width="1.5" />
+                      {#if st[part] === 'busy'}<path d="M5 0.75 A4.25 4.25 0 0 0 5 9.25 Z" fill="currentColor" />{/if}
+                    {/if}
+                  </svg>
                   <span aria-hidden="true">{t(`lang.status.${part}`)}</span>
                   <span class="sr-only">{dotText(part, st[part])}</span>
                 </span>
@@ -224,14 +238,31 @@
   {#snippet panel()}
     {#if loaded && selected}
       {@const r = selected}
-      <div class="languages">
-        <!-- Stays here until the panel is rebuilt; it applies to the base corpus import below. -->
-        <Toggle bind:checked={force} label={t('src.force')} />
-        <section class="card" aria-labelledby="{uid}-{r.code}">
-          <h3><span id="{uid}-{r.code}">{r.name}</span> <span class="code">{r.code}</span></h3>
+      <section class="lp" aria-labelledby="{uid}-name">
+        <header class="ph">
+          <h2 id="{uid}-name">{r.name}</h2>
+          <Badge kind="neutral" label={r.code} />
+          <span class="muted small">{usedBy(r.corpus_count)}</span>
+          <div class="hactions">
+            <Button
+              ariaLabel={t('lang.editLabel', { name: r.name })}
+              onclick={() => {
+                editing = r;
+                editOpen = true;
+              }}>{t('lang.edit')}</Button
+            >
+            <ActionMenu
+              label={t('lang.actions')}
+              disabled={busy}
+              items={[{ label: t('lang.remove'), danger: true, disabled: r.corpus_count > 0, onclick: () => askRemove(r) }]}
+            />
+          </div>
+        </header>
+        {#if r.corpus_count > 0}<p class="muted small blocked">{t('lang.blocked', { n: r.corpus_count })}</p>{/if}
 
+        <section class="sec" aria-labelledby="{uid}-model">
+          <h3 id="{uid}-model">{t('lang.model')}</h3>
           <div class="line">
-            <b>{t('lang.model')}</b>
             {#if r.model.state === 'installing'}
               <progress aria-label={t('lang.installing')}></progress>
               <span>{t('lang.installing')}</span>
@@ -267,9 +298,11 @@
               {/if}
             </div>
           {/if}
+        </section>
 
+        <section class="sec" aria-labelledby="{uid}-ocr">
+          <h3 id="{uid}-ocr">{t('lang.ocr')}</h3>
           <div class="line">
-            <b>{t('lang.ocr')}</b>
             {#if !r.ocr.engine}
               <span class="muted">{t('lang.engineMissing')}</span>
             {:else if !r.tesseract}
@@ -286,25 +319,15 @@
             {/if}
             {#if r.ocr.state === 'failed'}<span class="err" role="alert">{r.ocr.message}</span>{/if}
           </div>
-
-          <div class="row">
-            <Button
-              ariaLabel={t('lang.editLabel', { name: r.name })}
-              onclick={() => {
-                editing = r;
-                editOpen = true;
-              }}>{t('lang.edit')}</Button
-            >
-            <Button variant="danger" disabled={busy || r.corpus_count > 0} ariaLabel={t('lang.removeLabel', { name: r.name })} onclick={() => askRemove(r)}>
-              {t('lang.remove')}
-            </Button>
-            {#if r.corpus_count > 0}<span class="muted">{t('lang.blocked', { n: r.corpus_count })}</span>{/if}
-          </div>
-
-          <h4>{t('lang.baseCorpus')}</h4>
-          <BaseCorpusCard lang={r.code} name={r.name} reference={refs.find((x) => x.lang === r.code) ?? null} {force} onchange={load} />
         </section>
-      </div>
+
+        <section class="sec" aria-labelledby="{uid}-base">
+          <h3 id="{uid}-base">{t('lang.baseCorpus')}</h3>
+          <BaseCorpusCard lang={r.code} name={r.name} reference={refs.find((x) => x.lang === r.code) ?? null} {force} onchange={load} />
+          <!-- Applies to this base corpus's uploads. -->
+          <Toggle bind:checked={force} label={t('src.force')} />
+        </section>
+      </section>
     {/if}
   {/snippet}
 </ListPanel>
@@ -331,11 +354,53 @@
 </Dialog>
 
 <style>
-  .languages {
+  .lp {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s-3);
+    min-width: 0;
+    padding: var(--page-pad);
+  }
+  .ph {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--s-2);
+  }
+  .ph h2 {
+    min-width: 0;
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+  .hactions {
+    display: flex;
+    align-items: center;
+    gap: var(--s-1);
+    margin-left: auto;
+  }
+  .blocked {
+    margin: calc(-1 * var(--s-2)) 0 0;
+  }
+  .sec {
     display: flex;
     flex-direction: column;
     gap: var(--s-2);
+    min-width: 0;
     padding: var(--s-3);
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+  }
+  .sec h3 {
+    margin: 0;
+    color: var(--muted);
+    font-size: var(--fs-small);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .small {
+    font-size: var(--fs-small);
   }
   .lh {
     display: flex;
@@ -408,42 +473,26 @@
     align-items: center;
     gap: var(--s-1);
   }
+  /* Shapes per state: ok a disc, missing a ring, busy a half disc, error a disc with a cross. */
   .dot {
-    width: 0.5rem;
-    height: 0.5rem;
-    border-radius: 50%;
-    background: var(--line);
+    flex: none;
+    width: 0.625rem;
+    height: 0.625rem;
+    color: var(--muted);
   }
   .dot.ok {
-    background: var(--status-approved);
+    color: var(--status-approved);
   }
   .dot.busy {
-    background: var(--status-candidate);
+    color: var(--status-candidate);
   }
   .dot.error {
-    background: var(--danger);
+    color: var(--danger);
   }
-  .card {
-    display: flex;
-    flex-direction: column;
-    gap: var(--s-2);
-    min-width: 0;
-    padding: var(--s-2) var(--s-3);
-    border: 1px solid var(--line);
-    border-radius: var(--radius-lg);
-  }
-  h3,
-  h4 {
-    margin: 0;
-  }
-  h4 {
-    font-size: var(--fs-small);
-    color: var(--muted);
-  }
-  .code {
-    font-size: var(--fs-small);
-    font-weight: 400;
-    color: var(--muted);
+  .dot .x {
+    stroke: var(--bg);
+    stroke-width: 1.5;
+    stroke-linecap: round;
   }
   .line,
   .row {
