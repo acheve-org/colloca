@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/svelte';
+import { render, screen, within } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import PageHeader from '../src/lib/ui/PageHeader.svelte';
@@ -35,7 +35,7 @@ afterEach(() => {
 });
 
 const tabNames = () =>
-  screen.getAllByRole('link').map((a) => a.textContent?.trim());
+  within(screen.getByRole('group', { name: 'Section screens' })).getAllByRole('link').map((a) => a.textContent?.trim());
 
 describe('PageHeader', () => {
   it('shows picker, title and tabs on Concordance', async () => {
@@ -48,17 +48,17 @@ describe('PageHeader', () => {
     expect(screen.getByRole('group', { name: 'Section screens' })).toBeInTheDocument();
   });
 
-  it('hides the picker on Projects and Languages and keeps Settings tab order', async () => {
+  it('keeps the context header on Projects and Languages and Settings tab order', async () => {
     go('projects');
     render(PageHeader);
     await tick();
-    expect(screen.queryByRole('group', { name: 'Working in' })).toBeNull();
+    expect(screen.getByRole('group', { name: 'Working in' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 1, name: 'Projects' })).toBeInTheDocument();
     expect(tabNames()).toEqual(['Languages', 'Projects', 'Backup and Trash']);
     go('languages');
     await tick();
     expect(screen.getByRole('heading', { level: 1, name: 'Languages' })).toBeInTheDocument();
-    expect(screen.queryByRole('group', { name: 'Working in' })).toBeNull();
+    expect(screen.getByRole('group', { name: 'Working in' })).toBeInTheDocument();
   });
 
   it('has a title and no tab strip on single-screen areas', async () => {
