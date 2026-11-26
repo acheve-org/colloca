@@ -24,6 +24,7 @@ export const en: Messages = {
   'nav.sources-read': 'Document',
   'reader.notFound': 'Document not found',
   'reader.loadingMore': 'Loading more…',
+  'reader.retry': 'Retry',
   'src.backToDocuments': 'Documents',
   'nav.sources': 'Sources',
   'nav.languages': 'Languages',

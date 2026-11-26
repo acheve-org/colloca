@@ -132,11 +132,40 @@ describe('DocumentReader', () => {
     await screen.findByText('D9 p0');
     const rows = document.querySelectorAll('.pairs .row');
     expect(rows).toHaveLength(2);
-    expect(rows[1].textContent).toContain('1');
+    // The backend numbers segments from 0; the reader shows them from 1.
+    expect(rows[0].querySelector('.n')!.textContent).toBe('1');
+    expect(rows[1].querySelector('.n')!.textContent).toBe('2');
     expect(rows[1].textContent).toContain('D9 p1');
     expect(rows[1].textContent).toContain('T9 p1');
     expect(screen.getByText('aligned')).toBeInTheDocument();
     expect(document.querySelector('.prose')).toBeNull();
+  });
+
+  it('keeps a long unbroken string in an aligned row from widening the page', async () => {
+    reply = () => ({ status: 200, body: page(9, 0, 100, 1, { aligned: true }) });
+    open('9');
+    await screen.findByText('D9 p0');
+    const row = document.querySelector<HTMLElement>('.pairs .row')!;
+    expect(getComputedStyle(row).gridTemplateColumns).toBe('40px minmax(0px, 1fr) minmax(0px, 1fr)');
+    const spans = row.querySelectorAll<HTMLElement>('span:not(.n)');
+    expect(spans).toHaveLength(2);
+    for (const s of spans) expect(getComputedStyle(s).overflowWrap).toBe('anywhere');
+  });
+
+  it('offers Retry when a later page fails, and loads that page again', async () => {
+    open('7');
+    await screen.findByText('D7 p99');
+    reply = () => ({ status: 500, body: { detail: 'Server down' } });
+    await reachEnd();
+    expect(await screen.findByText('Server down')).toBeInTheDocument();
+    reply = (u) => ({ status: 200, body: page(7, Number(u.searchParams.get('start')), 100, 250) });
+    await fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await screen.findByText('D7 p199');
+    const calls = blockCalls();
+    expect(calls.at(-1)!.searchParams.get('start')).toBe('100');
+    expect(calls.at(-2)!.searchParams.get('start')).toBe('100');
+    expect(screen.queryByText('Server down')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
   });
 
   it('shows Document not found for a 404', async () => {

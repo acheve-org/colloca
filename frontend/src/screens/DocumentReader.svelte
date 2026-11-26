@@ -24,6 +24,8 @@
   let total = $state(0);
   let loading = $state(false);
   let notFound = $state(false);
+  // A later page that failed to load: its error, shown with Retry, and no more automatic requests until then.
+  let pageError = $state<string | null>(null);
   // Edit details: the dialog works on the document row and suggests the corpus tags and text types.
   let editOpen = $state(false);
   let editing = $state.raw<Doc | null>(null);
@@ -36,10 +38,12 @@
     doc ? [doc.text_type, doc.date, t('src.words', { n: fmt(doc.tokens) }), doc.source].filter(Boolean) : [],
   );
 
-  const fail = (err: unknown) => messages.say(err instanceof Error ? err.message : String(err), 'err');
+  const errMsg = (err: unknown) => (err instanceof Error ? err.message : String(err));
+  const fail = (err: unknown) => messages.say(errMsg(err), 'err');
 
   async function fetchPage(id: number, n: number, from: number): Promise<void> {
     loading = true;
+    pageError = null;
     try {
       const r = await get<DocBlocks>(`/api/documents/${id}/blocks`, { start: from, limit: PAGE });
       if (n !== seq) return;
@@ -49,6 +53,7 @@
     } catch (err) {
       if (n !== seq) return;
       if (err instanceof ApiError && err.status === 404) notFound = true;
+      else if (from > 0) pageError = errMsg(err);
       else fail(err);
     } finally {
       if (n === seq) loading = false;
@@ -64,13 +69,19 @@
       total = 0;
       loading = false;
       editOpen = false;
+      pageError = null;
       notFound = id === null;
       if (id !== null) void fetchPage(id, n, 0);
     });
   });
 
   function loadMore(): void {
-    if (loading || !more || docId === null) return;
+    if (loading || !more || pageError !== null || docId === null) return;
+    void fetchPage(docId, seq, blocks.length);
+  }
+
+  function retryPage(): void {
+    if (loading || docId === null) return;
     void fetchPage(docId, seq, blocks.length);
   }
 
@@ -143,7 +154,7 @@
       {#if doc.aligned}
         <ol class="pairs">
           {#each blocks as b (b.n)}
-            <li class="row"><span class="n">{b.n}</span><span>{b.text}</span><span>{b.pair}</span></li>
+            <li class="row"><span class="n">{b.n + 1}</span><span class="seg">{b.text}</span><span class="seg">{b.pair}</span></li>
           {/each}
         </ol>
       {:else}
@@ -151,7 +162,13 @@
           {#each blocks as b (b.n)}<p>{b.text}</p>{/each}
         </div>
       {/if}
-      {#if more}<div class="sentinel" bind:this={sentinel} aria-hidden="true"></div>{/if}
+      {#if more && pageError === null}<div class="sentinel" bind:this={sentinel} aria-hidden="true"></div>{/if}
+      {#if pageError !== null}
+        <p class="page-error" role="alert">
+          <span>{pageError}</span>
+          <Button onclick={retryPage}>{t('reader.retry')}</Button>
+        </p>
+      {/if}
       <p class="loading" role="status">{loading && blocks.length ? t('reader.loadingMore') : ''}</p>
     </div>
   {/if}
@@ -213,10 +230,14 @@
   }
   .row {
     display: grid;
-    grid-template-columns: 2.5rem 1fr 1fr;
+    grid-template-columns: 2.5rem minmax(0, 1fr) minmax(0, 1fr);
     gap: var(--s-3);
     padding: var(--s-2) 0;
     border-bottom: 1px solid var(--line);
+  }
+  .seg {
+    min-width: 0;
+    overflow-wrap: anywhere;
   }
   .n {
     color: var(--muted);
@@ -228,6 +249,16 @@
       grid-template-columns: 1fr;
       gap: var(--s-1);
     }
+  }
+  .page-error {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: var(--s-2);
+    margin: var(--s-3) 0 0;
+    color: var(--status-forbidden);
+    font-size: var(--fs-small);
   }
   .sentinel {
     height: 1px;
