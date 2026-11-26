@@ -160,3 +160,32 @@ describe('sources-add route', () => {
     expect(areaHref('corpus')).toBe('#/sources');
   });
 });
+
+describe('sources-read route', () => {
+  beforeEach(() => {
+    location.hash = '';
+  });
+
+  it('parses the address and its document', async () => {
+    location.hash = '#/sources/read?doc=7';
+    const { route } = await load();
+    expect(route.screen).toBe('sources-read');
+    expect(route.params).toEqual({ doc: '7' });
+  });
+
+  it('round-trips through hrefFor and go()', async () => {
+    const { go, hrefFor, route } = await load();
+    expect(hrefFor('sources-read', { doc: '7' })).toBe('#/sources/read?doc=7');
+    go('sources-read', { doc: '7' });
+    expect(location.hash).toBe('#/sources/read?doc=7');
+    expect(route.screen).toBe('sources-read');
+    expect(route.params).toEqual({ doc: '7' });
+  });
+
+  it('never becomes the last screen of the corpus area', async () => {
+    const { go, areaHref } = await load();
+    go('sources');
+    go('sources-read', { doc: '7' });
+    expect(areaHref('corpus')).toBe('#/sources');
+  });
+});

@@ -402,8 +402,7 @@
             <dd>{d.added}</dd>
           </dl>
           <div class="panel-actions">
-            <!-- Task 6 adds the reader route (sources-read); then this becomes hrefFor('sources-read', { doc: String(d.id) }). -->
-            <a class="linkbtn" href="#/sources/read?doc={d.id}">{t('src.read')}</a>
+            <a class="linkbtn" href={hrefFor('sources-read', { doc: String(d.id) })}>{t('src.read')}</a>
             <Button disabled={work.busy !== null} onclick={() => openEdit(d)}>{t('src.edit')}</Button>
             <ActionMenu
               label={t('src.moreFor', { title: d.title })}

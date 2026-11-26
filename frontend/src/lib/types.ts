@@ -489,3 +489,11 @@ export interface DocContext {
   more_before: boolean;
   more_after: boolean;
 }
+
+/** A page of a whole document to read: paragraphs, or aligned segments with their translations. */
+export interface DocBlocks {
+  document: DocContext['document'];
+  blocks: { n: number; text: string; pair: string }[];
+  /** The number of blocks in the whole document. */
+  total: number;
+}

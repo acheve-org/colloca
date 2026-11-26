@@ -14,7 +14,7 @@ export interface Area {
 }
 
 export const AREAS: readonly Area[] = [
-  { id: 'corpus', label: 'nav.group.corpus', tabs: ['sources'], extra: ['sources-add'] },
+  { id: 'corpus', label: 'nav.group.corpus', tabs: ['sources'], extra: ['sources-add', 'sources-read'] },
   {
     id: 'explore',
     label: 'nav.group.explore',
@@ -29,7 +29,10 @@ export const AREAS: readonly Area[] = [
 ];
 
 /** Extra screens with a link back to the screen they come from. */
-export const BACK_LINKS: Partial<Record<ScreenId, ScreenId>> = { 'sources-add': 'sources' };
+export const BACK_LINKS: Partial<Record<ScreenId, ScreenId>> = {
+  'sources-add': 'sources',
+  'sources-read': 'sources',
+};
 
 /** Screens shown only when the current corpus is aligned. */
 export const ALIGNED_ONLY: readonly ScreenId[] = ['equivalents', 'lookup'];

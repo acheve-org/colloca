@@ -31,12 +31,14 @@
   import TermDialog from './screens/TermDialog.svelte';
   import WordCloud from './screens/WordCloud.svelte';
   import AddDocuments from './screens/AddDocuments.svelte';
+  import DocumentReader from './screens/DocumentReader.svelte';
   import Projects from './screens/Projects.svelte';
 
   // Screen outlet: every route has its screen.
   const SCREEN_COMPONENTS: Record<ScreenId, Component> = {
     sources: Sources,
     'sources-add': AddDocuments,
+    'sources-read': DocumentReader,
     languages: Languages,
     projects: Projects,
     concordance: Concordance,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SCREENS } from '../src/lib/router.svelte';
-import { AREAS, SCOPE_SCREENS, areaOf, fitTabs, visibleTabs } from '../src/lib/nav';
+import { AREAS, BACK_LINKS, SCOPE_SCREENS, areaOf, fitTabs, visibleTabs } from '../src/lib/nav';
 
 describe('nav model', () => {
   it('SCOPE_SCREENS lists the screens the document filter applies to', () => {
@@ -19,7 +19,13 @@ describe('nav model', () => {
 
   it('extras belong to their area but are not tabs', () => {
     expect(areaOf('sources-add')).toBe('corpus');
+    expect(areaOf('sources-read')).toBe('corpus');
     expect(visibleTabs('corpus', false)).toEqual(['sources']);
+  });
+
+  it('the extras of Sources link back to it', () => {
+    expect(BACK_LINKS['sources-add']).toBe('sources');
+    expect(BACK_LINKS['sources-read']).toBe('sources');
   });
 
   it('areaOf maps screens', () => {
