@@ -64,6 +64,7 @@ export const es: Messages = {
   'lang.remove': 'Quitar',
   'lang.removeTitle': '¿Quitar {name}?',
   'lang.removeBody': 'El idioma sale de la lista. Su modelo sigue instalado salvo que también lo desinstales.',
+  'lang.removeBase': 'Su corpus base, {name}, se borra definitivamente con él.',
   'lang.alsoUninstall': 'Desinstalar también el modelo',
   'lang.removed': '{name} quitado.',
   'lang.blocked': 'No se puede quitar mientras haya corpus que usen este idioma.',

@@ -401,6 +401,20 @@ describe('Languages', () => {
     expect(calls.find((c) => c.method === 'DELETE')!.search).toBe('?uninstall_model=true');
   });
 
+  it('the remove dialog says the base corpus is deleted too, only when the language has one', async () => {
+    references = [{ id: 9, name: 'General French', lang: 'fr', project_id: null, is_reference: 1, docs: 3, tokens: 10 }];
+    render(Languages);
+    await loaded();
+    await pick('French');
+    await fireEvent.click(await removeItem('French'));
+    const dlg = screen.getByRole('dialog', { name: 'Remove French?' });
+    expect(within(dlg).getByText('Its base corpus, General French, is deleted for good with it.')).toBeInTheDocument();
+    await fireEvent.click(within(dlg).getByRole('button', { name: 'Cancel' }));
+    await pick('Italian');
+    await fireEvent.click(await removeItem('Italian'));
+    expect(within(screen.getByRole('dialog', { name: 'Remove Italian?' })).queryByText(/base corpus/)).toBeNull();
+  });
+
   it('the add dialog lists only catalog languages not yet added and posts the choice', async () => {
     render(Languages);
     await loaded();

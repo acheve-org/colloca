@@ -34,6 +34,8 @@
   let editing = $state.raw<LanguageSetting | null>(null);
   let removeOpen = $state(false);
   let removing = $state.raw<LanguageSetting | null>(null);
+  // The base corpus that Remove deletes along with the language (the server does it).
+  const removingBase = $derived(removing ? (refs.find((x) => x.lang === removing!.code) ?? null) : null);
   let alsoUninstall = $state(false);
 
   let seq = 0;
@@ -374,6 +376,7 @@
 </Dialog>
 <Dialog bind:open={removeOpen} title={t('lang.removeTitle', { name: removing?.name ?? '' })}>
   <p class="confirm">{t('lang.removeBody')}</p>
+  {#if removingBase}<p class="confirm">{t('lang.removeBase', { name: removingBase.name })}</p>{/if}
   <Toggle bind:checked={alsoUninstall} label={t('lang.alsoUninstall')} />
   {#snippet footer()}
     <Button onclick={() => (removeOpen = false)}>{t('common.cancel')}</Button>

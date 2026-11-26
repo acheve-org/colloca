@@ -92,17 +92,22 @@ def update(code: str, *, name: str | None = None, model_size: "str | None | _Uns
 
 
 def corpus_count(code: str) -> int:
-    """Corpora in this language, trashed ones included (a restore would orphan them)."""
+    """Your own corpora in this language, trashed ones included (a restore would orphan them). The language's
+    base corpus is not counted, live or trashed (`was_reference`): it goes with the language (see `remove`)."""
     with _session() as conn:
-        return conn.execute("SELECT COUNT(*) FROM corpora WHERE lang=?", (code,)).fetchone()[0]
+        return conn.execute("SELECT COUNT(*) FROM corpora WHERE lang=? AND is_reference=0 AND was_reference=0",
+                            (code,)).fetchone()[0]
 
 
 def remove(code: str) -> None:
+    """Remove a language no corpus of yours uses; its base corpus (live or trashed) is deleted for good with it."""
     n = corpus_count(code)
     if n:
         raise LanguageInUse(n)
     with _session() as conn:
         gone = conn.execute("DELETE FROM languages WHERE code=?", (code,)).rowcount
+        if gone:
+            conn.execute("DELETE FROM corpora WHERE lang=?", (code,))   # only base corpora are left
     _invalidate()
     if gone == 0:
         raise KeyError(code)
