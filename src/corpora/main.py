@@ -27,6 +27,7 @@ from . import (
     backup,
     backupcrypt,
     candidates,
+    cleaning,
     db,
     dedup,
     docview,
@@ -585,6 +586,13 @@ class UrlIn(BaseModel):
     url: str
 
 
+class PreviewUrlIn(UrlIn):
+    corpus_id: int | None = None        # the corpus it will go to: its language and its pages of the same site
+
+
+MAX_LINE_HASHES = 20_000                # hashes kept per document (8 bytes, 16 hex digits each)
+
+
 class DocIn(BaseModel):
     title: str = ""
     text: str = Field(max_length=ingest.MAX_TEXT_CHARS)
@@ -594,6 +602,7 @@ class DocIn(BaseModel):
     text_type: str = ""
     doc_date: str = ""                  # YYYY, YYYY-MM or YYYY-MM-DD
     author: str = ""
+    line_hashes: str = Field("", max_length=16 * MAX_LINE_HASHES, pattern=r"^(?:[0-9a-fA-F]{16})*$")
 
 
 class DocPatch(BaseModel):
@@ -610,10 +619,11 @@ def _rejected(exc: importer.ImportRejected) -> HTTPException:
 
 
 @app.post("/api/preview-url")
-def preview_url(body: UrlIn):
-    """Fetch and extract a URL without saving, so the user can review and trim it."""
+def preview_url(body: PreviewUrlIn):
+    """Fetch and extract a URL without saving, so the user can review and trim it. With `corpus_id`, cleaning
+    uses the corpus language and the corpus's other pages of the same site."""
     try:
-        return ingest.fetch_url(body.url.strip())
+        return ingest.fetch_url(body.url.strip(), corpus_id=body.corpus_id)
     except ingest.IngestError as exc:
         raise HTTPException(422, str(exc)) from exc
     except Exception as exc:  # network errors
@@ -681,6 +691,33 @@ async def preview_file(file: UploadFile = File(...), corpus_id: int | None = Non
     return {"source": file.filename or "file", **parsed}
 
 
+class CleanIn(BaseModel):
+    raw: list[str] = Field(max_length=1000)          # the `raw` pages of a preview
+    fmt: Literal["pdf", "html", "text"]
+    corpus_id: int | None = None
+    source: str = ""
+    lang: str | None = None
+    skip: list[Literal["page_furniture", "site_furniture", "edges", "noise"]] = []
+
+
+@app.post("/api/clean")
+def clean_preview(body: CleanIn):
+    """Clean the raw pages of a preview again without the steps in `skip` (to put back what a step removed):
+    {text, removed, repaired, warnings} as in the preview, and for a PDF the new text's quality. For a web page
+    (`fmt` html) with `corpus_id` and a URL `source`, the corpus's other pages of that site are compared; `lang`
+    defaults to the corpus language."""
+    if sum(len(p) for p in body.raw) > ingest.MAX_TEXT_CHARS:
+        raise HTTPException(413, f"The text is longer than {ingest.MAX_TEXT_CHARS} characters")
+    lang, counts = body.lang, None
+    if body.corpus_id is not None:
+        with db.session() as conn:
+            lang = lang or _corpus(conn, body.corpus_id)["lang"]
+            host = metadata.host_of(body.source, "url")
+            if body.fmt == "html" and host:
+                counts = cleaning.site_counts(conn, body.corpus_id, host, exclude_source=body.source)
+    return ingest.reclean(body.raw, body.fmt, lang, counts, body.skip)
+
+
 def _tags_by_doc(conn, corpus_id: int) -> dict[int, list[str]]:
     out: dict[int, list[str]] = {}
     for r in conn.execute("""SELECT g.doc_id, g.tag FROM doc_tags g JOIN documents d ON d.id=g.doc_id
@@ -716,18 +753,19 @@ def add_document(corpus_id: int, body: DocIn, background: bool = False, force_la
     and what overlaps in the body); send it again with `similar=import` to add it anyway or `similar=replace`
     to replace the most similar older document."""
     meta = _meta(body.tags, body.text_type, body.doc_date, body.author)
+    hashes = bytes.fromhex(body.line_hashes) or None
     with db.session() as conn:
         corpus = _corpus(conn, corpus_id)
         if not background:
             try:
                 return importer.add_document(conn, corpus, body.title, body.text, body.source,
-                                             body.kind, meta, force_language, similar=similar)
+                                             body.kind, meta, force_language, similar=similar, line_hashes=hashes)
             except importer.ImportRejected as exc:
                 raise _rejected(exc) from exc
 
     def build(policy: str):
         return importer.import_text(corpus_id, body.title, body.text, body.source, body.kind, meta,
-                                    force_language, policy)
+                                    force_language, policy, line_hashes=hashes)
     job = importer.submit(corpus_id, "import", body.title or "Pasted text", build(similar), build)
     return JSONResponse({"job_id": job.id}, status_code=202)
 
@@ -952,7 +990,7 @@ async def _read_upload(f: UploadFile) -> dict:
         raise HTTPException(413, f"{f.filename or 'file'} is larger than {ingest.MAX_UPLOAD_BYTES // 1024 // 1024} MB "
                                  "(set MAX_UPLOAD_MB to change)")
     try:
-        return await run_in_threadpool(ingest.read_file, f.filename or "file", data)
+        return await run_in_threadpool(ingest.read_file, f.filename or "file", data, clean=False)
     except ingest.IngestError as exc:
         raise HTTPException(400, f"{f.filename or 'file'}: {exc}") from exc
 
@@ -1106,7 +1144,8 @@ async def analyse_job(corpus_id: int, file: UploadFile | None = File(None), text
               "date_to": scope.date_to, "docs": list(scope.doc_ids)}
 
     def work(job):
-        parsed = ingest.read_file(name, data, corpus["lang"], progress=lambda f: job.set_progress(f * 0.5)) \
+        parsed = ingest.read_file(name, data, corpus["lang"], progress=lambda f: job.set_progress(f * 0.5),
+                                  clean=False) \
             if data is not None else {"text": text, "warnings": []}
         body = parsed["text"]
         with db.session() as conn:
@@ -1264,7 +1303,8 @@ def get_document(doc_id: int):
             raise HTTPException(404, "Document not found")
         tags = [r[0] for r in conn.execute("SELECT tag FROM doc_tags WHERE doc_id=? ORDER BY tag", (doc_id,))]
         doc = dict(row)
-        doc.pop("fingerprint")      # internal: a binary sketch, not for the API
+        doc.pop("fingerprint")      # internal: binary sketch and line hashes, not for the API
+        doc.pop("line_hashes")
         return {**doc, "tags": tags}
 
 

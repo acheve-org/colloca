@@ -1,6 +1,7 @@
 """Document metadata: tags, text type, date, author; and the projects that group corpora."""
 import re
 import sqlite3
+from urllib.parse import urlparse
 
 MAX_TAGS = 20
 MAX_TAG_LEN = 40
@@ -91,3 +92,8 @@ def pad_start(value: str) -> str:
 def pad_end(value: str) -> str:
     """Last day covered by a (possibly partial) date (month ends are padded to 31: dates compare as text)."""
     return {4: value + "-12-31", 7: value + "-31"}.get(len(value), value)
+
+
+def host_of(source: str, kind: str) -> str:
+    """documents.host: the lower-case host name of a URL document (no port), '' for every other kind."""
+    return (urlparse(source).hostname or "").lower() if kind == "url" else ""

@@ -39,12 +39,14 @@ class ImportRejected(Exception):
 # --------------------------------------------------------------------------- documents
 def add_document(conn, corpus, title: str, text: str, source: str, kind: str, meta: dict | None = None,
                  force_language: bool = False, progress: Callable[[float], None] | None = None,
-                 segmented: bool = False, similar: str = "warn", threshold: float | None = None) -> dict:
+                 segmented: bool = False, similar: str = "warn", threshold: float | None = None,
+                 line_hashes: bytes | None = None) -> dict:
     """Annotate and store a text. `segmented`: every line is a segment of a parallel text (its token span
     is recorded so the segment can be paired with its translation). `similar` is what to do when the corpus
     already holds a near-duplicate: "warn" rejects with code `near_duplicate` (the matches are in `details`),
     "import" adds it anyway, "replace" deletes the most similar older document first. Sentence files and
-    aligned texts are never compared."""
+    aligned texts are never compared. `line_hashes`: the hashes of the raw lines (cleaning.line_hashes), stored
+    so later imports from the same site can recognise its chrome."""
     meta = meta or {}   # validated by metadata.clean_meta/normalize_tags: tags, text_type, doc_date, author
     text = ingest.normalize_text(text)
     if len(text) < MIN_CHARS:
@@ -81,11 +83,12 @@ def add_document(conn, corpus, title: str, text: str, source: str, kind: str, me
         trash.trash_documents(conn, [replaced["id"]])      # recoverable from the Trash
     cur = conn.execute(
         """INSERT INTO documents (corpus_id,title,source,kind,text,text_hash,n_tokens,pipeline,lang_check,
-                                  text_type,doc_date,author,segmented,fingerprint)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                                  text_type,doc_date,author,segmented,fingerprint,line_hashes,host)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (corpus["id"], title.strip() or "Untitled", source, kind, text, digest, n_alpha,
          pipeline, check["verdict"], meta.get("text_type", ""), meta.get("doc_date", ""),
-         meta.get("author", ""), int(segmented), fingerprint))
+         meta.get("author", ""), int(segmented), fingerprint, line_hashes,
+         metadata.host_of(source, kind)))
     doc_id = cur.lastrowid
     metadata.set_tags(conn, doc_id, meta.get("tags", []))
     conn.executemany("INSERT INTO tokens VALUES (?,?,?,?,?,?,?,?,?,?)", ((doc_id,) + t for t in tokens))
@@ -321,15 +324,26 @@ def jobs_for(corpus_id: int) -> list[dict]:
 
 # Work units executed inside the worker thread -------------------------------------------------
 def import_text(corpus_id: int, title: str, text: str, source: str, kind: str, meta: dict,
-                force_language: bool, similar: str = "warn") -> Callable[[Job], dict]:
+                force_language: bool, similar: str = "warn",
+                line_hashes: bytes | None = None) -> Callable[[Job], dict]:
     def work(job: Job) -> dict:
         with db.session() as conn:
             corpus = conn.execute("SELECT * FROM corpora WHERE id=? AND deleted_at IS NULL", (corpus_id,)).fetchone()
             if not corpus:
                 raise ImportRejected(404, "Corpus no longer exists", "gone")
             return add_document(conn, corpus, title, text, source, kind, meta, force_language,
-                                job.set_progress, similar=similar)
+                                job.set_progress, similar=similar, line_hashes=line_hashes)
     return work
+
+
+def _hashes(parsed: dict) -> bytes | None:
+    """The line hashes of an extracted document (see ingest._cleaned), None when there are none."""
+    return bytes.fromhex(parsed["line_hashes"]) or None
+
+
+def _summary(parsed: dict) -> list[str]:
+    summary = ingest.cleaning_summary(parsed["removed"])
+    return [summary] if summary else []
 
 
 def import_url(corpus_id: int, url: str, meta: dict, force_language: bool,
@@ -337,14 +351,16 @@ def import_url(corpus_id: int, url: str, meta: dict, force_language: bool,
     """Fetch a page or PDF (politely: a pause between requests to one host) and import it, with no trimming step."""
     def work(job: Job) -> dict:
         try:
-            page = ingest.fetch_url(url, polite=True)
+            page = ingest.fetch_url(url, polite=True, corpus_id=corpus_id)
         except ingest.IngestError:
             raise
         except Exception as exc:             # network errors: a readable reason instead of "Unexpected error"
             raise ingest.IngestError(f"Could not fetch URL: {exc}") from exc
         job.set_progress(0.3)
-        result = import_text(corpus_id, page["title"], page["text"], url, "url", meta, force_language, similar)(job)
-        warnings = [*result.get("warnings", []), *ingest.extraction_warnings(page, url)]
+        result = import_text(corpus_id, page["title"], page["text"], url, "url", meta, force_language, similar,
+                             _hashes(page))(job)
+        warnings = [*result.get("warnings", []), *page["warnings"], *_summary(page),
+                    *ingest.extraction_warnings(page, url)]
         host = (urlparse(url).hostname or "").lower()
         with db.session() as conn:
             same = [] if page["title"].lower() == urlparse(url).netloc.lower() else [   # untitled: the host name
@@ -374,8 +390,8 @@ def import_file(corpus_id: int, filename: str, data: bytes, meta: dict,
             raise ImportRejected(404, "Corpus no longer exists", "gone")
         parsed = ingest.read_file(filename, data, row["lang"], columns, lambda f: job.set_progress(f * 0.3))
         result = import_text(corpus_id, parsed["title"], parsed["text"], filename, "file", meta,
-                             force_language, similar)(job)
-        return {**result, "warnings": parsed["warnings"]} if parsed["warnings"] else result
+                             force_language, similar, _hashes(parsed))(job)
+        return {**result, "warnings": [*result.get("warnings", []), *parsed["warnings"], *_summary(parsed)]}
     return work
 
 

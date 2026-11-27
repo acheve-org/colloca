@@ -9,6 +9,9 @@ import { stopAllJobs } from '../src/lib/jobs.svelte';
 import { go, route } from '../src/lib/router.svelte';
 import { t } from '../src/lib/i18n';
 
+/** The cleaning fields of a preview that removed nothing. */
+const noCleaning = { removed: [], raw: ['x'], fmt: 'text' as const, lineHashes: '', skipped: [], cleanText: 'x', cleanWarnings: [] };
+
 const NO_META = 'no tags, type, date or author';
 const NAMES = ['From the web', 'Upload files', 'Paste text', 'Aligned texts'];
 
@@ -174,14 +177,14 @@ describe('Sources entry point', () => {
 describe('actionFor', () => {
   it('web: one page', () => {
     expect(actionFor('web', 'one')).toMatchObject({ label: 'Add to corpus', enabled: false });
-    draft.preview = { source: 's', title: 't', text: 'x', kind: 'url', warnings: [] };
+    draft.preview = { source: 's', title: 't', text: 'x', kind: 'url', warnings: [], ...noCleaning };
     expect(actionFor('web', 'one')).toMatchObject({ label: 'Add to corpus', enabled: true });
   });
 
   it('a preview from the other method never enables the primary', () => {
-    draft.preview = { source: 'a.pdf', title: 't', text: 'x', kind: 'file', warnings: [] };
+    draft.preview = { source: 'a.pdf', title: 't', text: 'x', kind: 'file', warnings: [], ...noCleaning };
     expect(actionFor('web', 'one').enabled).toBe(false);
-    draft.preview = { source: 's', title: 't', text: 'x', kind: 'url', warnings: [] };
+    draft.preview = { source: 's', title: 't', text: 'x', kind: 'url', warnings: [], ...noCleaning };
     expect(actionFor('up', 'one')).toMatchObject({ label: 'Upload', enabled: false });
     draft.files = [new File(['x'], 'a.txt')];
     expect(actionFor('up', 'one')).toMatchObject({ label: 'Upload', enabled: true });
@@ -189,7 +192,7 @@ describe('actionFor', () => {
 
   it('upload: with a file preview the primary adds it', () => {
     draft.files = [new File(['x'], 'a.pdf')];
-    draft.preview = { source: 'a.pdf', title: 't', text: 'x', kind: 'file', warnings: [] };
+    draft.preview = { source: 'a.pdf', title: 't', text: 'x', kind: 'file', warnings: [], ...noCleaning };
     expect(actionFor('up', 'one')).toMatchObject({ label: 'Add to corpus', enabled: true });
     draft.preview.text = '  ';
     expect(actionFor('up', 'one').enabled).toBe(false);

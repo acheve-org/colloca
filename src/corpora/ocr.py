@@ -1,8 +1,8 @@
 """OCR for PDFs without a text layer (optional: `uv sync --extra ocr` plus the Tesseract program).
 
 Pages are rendered with pypdfium2 (a pip wheel, no Ghostscript or Poppler needed) and read with the `tesseract`
-command line program, whose TSV output carries a confidence for every word. The result is the text plus the mean
-word confidence (0-100), so the caller can warn when the scan is poor.
+command line program, whose TSV output carries a confidence for every word. The result is the text of each page
+plus the mean word confidence (0-100), so the caller can warn when the scan is poor.
 """
 import csv
 import io
@@ -29,9 +29,12 @@ HINT = ("Install it with `apt install tesseract-ocr` (Docker: build with --build
 
 @dataclass
 class OcrResult:
-    text: str
-    pages: int
+    pages: list[str]           # text of each page
     confidence: float          # mean word confidence, 0-100
+
+    @property
+    def text(self) -> str:
+        return "\n".join(self.pages)
 
 
 def _tesseract() -> str:
@@ -112,4 +115,4 @@ def ocr_pdf(data: bytes, lang: str | None, progress=None) -> OcrResult:
                 progress((i + 1) / n)
     if not confs:
         raise IngestError("OCR found no readable text in this PDF")
-    return OcrResult("\n".join(texts), n, sum(confs) / len(confs))
+    return OcrResult(texts, sum(confs) / len(confs))

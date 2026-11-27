@@ -12,6 +12,12 @@ export interface Quality {
   level: 'good' | 'fair' | 'poor';
   issues: { code: string; message: string }[];
 }
+/** A cleaning step that removes lines from an imported text. */
+export type Step = 'page_furniture' | 'site_furniture' | 'edges' | 'noise';
+export interface Removed {
+  step: Step;
+  lines: string[];
+}
 export interface Preview {
   source: string;
   title: string;
@@ -20,7 +26,48 @@ export interface Preview {
   /** Only for a PDF: how reliable the extracted text looks. */
   quality?: Quality;
   warnings: string[];
+  /** The lines cleaning removed, by step. */
+  removed: Removed[];
+  /** The text as extracted, before cleaning (one entry per page), and its format: what Put back cleans again. */
+  raw: string[];
+  fmt: 'pdf' | 'html' | 'text';
+  /** Hashes of the raw lines (hex), stored with the document. */
+  lineHashes: string;
+  /** The steps put back so far. */
+  skipped: Step[];
+  /** The text as the server last returned it, to tell whether it was edited. */
+  cleanText: string;
+  /** The warnings of the last Put back. */
+  cleanWarnings: string[];
 }
+/** What the previews return besides the text. */
+interface Cleaned {
+  title: string;
+  text: string;
+  quality?: Quality;
+  warnings?: string[];
+  removed?: Removed[];
+  raw?: string[];
+  fmt?: Preview['fmt'];
+  line_hashes?: string;
+}
+
+/** A preview from a reply of /api/preview-url or /api/preview-file. */
+const toPreview = (r: Cleaned, source: string, kind: Preview['kind']): Preview => ({
+  source,
+  title: r.title,
+  text: r.text,
+  kind,
+  quality: r.quality,
+  warnings: r.warnings ?? [],
+  removed: r.removed ?? [],
+  raw: r.raw ?? [r.text],
+  fmt: r.fmt ?? 'text',
+  lineHashes: r.line_hashes ?? '',
+  skipped: [],
+  cleanText: r.text,
+  cleanWarnings: [],
+});
 export interface Meta {
   tags: string;
   text_type: string;
@@ -96,6 +143,7 @@ class AddDraft {
     this.url = '';
     this.urlList = '';
     this.preview = null;
+    answerPutBack(false);
     this.catalogUrl = '';
     this.catalog = null;
     this.picked.clear();
@@ -244,9 +292,9 @@ export const fetchPreview = () =>
       messages.say(t('src.url.needed'), 'err');
       return false;
     }
-    const r = await post<{ url: string; title: string; text: string; quality?: Quality; warnings?: string[] }>('/api/preview-url', { url: u });
+    const r = await post<Cleaned & { url: string }>('/api/preview-url', { url: u, corpus_id: id });
     if (!still(id)) return false;
-    draft.preview = { source: r.url, title: r.title, text: r.text, kind: 'url', quality: r.quality, warnings: r.warnings ?? [] };
+    draft.preview = toPreview(r, r.url, 'url');
     messages.clear();
     return true;
   });
@@ -260,12 +308,12 @@ export const previewFile = () =>
     }
     const fd = new FormData();
     fd.append('file', draft.files[0]);
-    const r = await upload<{ source: string; title: string; text: string; quality?: Quality; warnings?: string[] }>('/api/preview-file', fd, {
+    const r = await upload<Cleaned & { source: string }>('/api/preview-file', fd, {
       corpus_id: id,
       columns: draft.textColumns.trim(),
     });
     if (!still(id)) return false;
-    draft.preview = { source: r.source, title: r.title, text: r.text, kind: 'file', quality: r.quality, warnings: r.warnings ?? [] };
+    draft.preview = toPreview(r, r.source, 'file');
     messages.clear();
     return true;
   });
@@ -276,7 +324,7 @@ export const addPreview = () =>
     if (!p) return false;
     await post(
       `/api/corpora/${id}/documents`,
-      { title: p.title, text: p.text, source: p.source, kind: p.kind, ...metaParams() },
+      { title: p.title, text: p.text, source: p.source, kind: p.kind, ...metaParams(), line_hashes: p.lineHashes },
       { background: true, force_language: draft.force },
     );
     if (!still(id)) return false;
@@ -286,6 +334,60 @@ export const addPreview = () =>
     watch(true);
     return true;
   });
+
+/** The start of the note the server adds when cleaning would have removed almost everything (ingest.KEPT_AS_EXTRACTED). */
+const KEPT_AS_EXTRACTED = 'Cleaning would have removed almost everything';
+
+/** The question Put back asks before discarding edits to the preview text; the preview shows it as a dialog. */
+export const putBackAsk = $state<{ open: boolean }>({ open: false });
+let putBackAnswer: ((ok: boolean) => void) | null = null;
+
+/** Answers the open Put back question (closing the dialog counts as Cancel). */
+export function answerPutBack(ok: boolean): void {
+  const answer = putBackAnswer;
+  putBackAnswer = null;
+  putBackAsk.open = false;
+  answer?.(ok);
+}
+
+function askPutBack(): Promise<boolean> {
+  putBackAnswer?.(false);
+  putBackAsk.open = true;
+  return new Promise((resolve) => (putBackAnswer = resolve));
+}
+
+/**
+ * Cleans the preview again without `step` (and the steps put back before), so the lines it removed come back.
+ * When the text was edited, asks first: the edits are discarded. Resolves to false when cancelled or failed.
+ */
+export async function putBack(step: Step): Promise<boolean> {
+  const p = draft.preview;
+  if (!p) return false;
+  if (p.text !== p.cleanText && !(await askPutBack())) return false;
+  return act('clean', async (id) => {
+    const skip = [...p.skipped, step];
+    const r = await post<{ text: string; removed: Removed[]; warnings?: string[]; quality?: Quality }>('/api/clean', {
+      raw: p.raw,
+      fmt: p.fmt,
+      corpus_id: id,
+      ...(p.kind === 'url' ? { source: p.source } : {}),
+      skip,
+    });
+    // The preview was discarded or replaced meanwhile.
+    if (!still(id) || draft.preview !== p) return false;
+    p.text = r.text;
+    p.cleanText = r.text;
+    p.removed = r.removed;
+    p.skipped = skip;
+    // A PDF's quality is of the text it describes (an OCRed PDF has none: its preview gets none either).
+    if (r.quality && p.quality) p.quality = r.quality;
+    // The guard's note from an earlier clean is shown only when the latest clean returned it.
+    p.warnings = p.warnings.filter((w) => !w.startsWith(KEPT_AS_EXTRACTED));
+    p.cleanWarnings = r.warnings ?? [];
+    messages.clear();
+    return true;
+  });
+}
 
 export const addUrlList = () =>
   act('urls', async (id) => {

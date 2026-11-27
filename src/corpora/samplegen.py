@@ -12,6 +12,8 @@ import itertools
 import random
 import sqlite3
 
+from .metadata import host_of
+
 SIZES = {"100k": 100_000, "1m": 1_000_000, "5m": 5_000_000}
 
 # (form, lemma, upos); stop words only, ordered roughly by real-life frequency
@@ -136,9 +138,10 @@ def generate(conn: sqlite3.Connection, corpus_id: int, lang: str, words: int, *,
         digest = hashlib.sha256(f"{seed}:{lang}:{d}:{text[:200]}".encode()).hexdigest()
         doc_id = conn.execute(
             """INSERT INTO documents (corpus_id,title,source,kind,text,text_hash,n_tokens,pipeline,lang_check,
-                                      text_type,doc_date)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+                                      text_type,doc_date,host)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
             (corpus_id, f"Sample document {d + 1}", "", "paste", text, digest, n, "samplegen", "ok",
-             ("contract", "manual", "press release")[d % 3], f"20{10 + d % 15}-{1 + d % 12:02d}")).lastrowid
+             ("contract", "manual", "press release")[d % 3], f"20{10 + d % 15}-{1 + d % 12:02d}",
+             host_of("", "paste"))).lastrowid
         conn.executemany("INSERT INTO tokens VALUES (?,?,?,?,?,?,?,?,?,?)", ((doc_id, *t) for t in tokens))
     return n_docs

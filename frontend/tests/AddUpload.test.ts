@@ -17,6 +17,7 @@ let calls: Call[];
 let jobList: Job[][];
 let uploadReply: { status: number; body: unknown };
 let previewFileReply: Record<string, unknown>;
+let cleanReply: Record<string, unknown>;
 
 const res = (status: number, body: unknown) => ({ ok: status < 400, status, statusText: 'x', json: async () => body });
 
@@ -25,6 +26,7 @@ beforeEach(() => {
   jobList = [[]];
   uploadReply = { status: 202, body: [{ file: 'a.txt', ok: true, job_id: 7 }, { file: 'b.docx', ok: true, job_id: 8 }] };
   previewFileReply = { source: 'two.pdf', title: 'two', text: 'La primera columna\nLa segunda columna', warnings: [] };
+  cleanReply = { text: 'Página 1\nUna columna', removed: [], repaired: {}, warnings: [] };
   corpusStore.list = [{ id: 1, name: 'Wind', lang: 'es', project_id: null, is_reference: 0, docs: 2, tokens: 10 }];
   corpusStore.currentId = 1;
   corpusStore.loaded = true;
@@ -43,6 +45,7 @@ beforeEach(() => {
     if (/^\/api\/corpora\/\d+\/jobs$/.test(p)) return res(200, jobList.length > 1 ? jobList.shift()! : jobList[0]);
     if (p === '/api/corpora/1/upload') return res(uploadReply.status, uploadReply.body);
     if (p === '/api/preview-file') return res(200, previewFileReply);
+    if (p === '/api/clean') return res(200, cleanReply);
     if (p === '/api/corpora') return res(200, corpusStore.list);
     if (/\/parallel$/.test(p)) return res(200, { documents: 0, segments: 0, partners: [] });
     return res(404, { detail: 'nope' });
@@ -130,6 +133,45 @@ describe('Upload files', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Preview file' }));
     expect(await screen.findByText('Text quality: good')).toBeInTheDocument();
     expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('a file preview puts back removed lines without a site and adds with its line hashes', async () => {
+    previewFileReply = {
+      source: 'two.pdf', title: 'two', text: 'Una columna', warnings: [],
+      removed: [{ step: 'page_furniture', lines: ['Página 1'] }], repaired: {},
+      raw: ['Página 1\nUna columna'], fmt: 'pdf', line_hashes: 'ff00',
+    };
+    open();
+    await choose(new File(['x'], 'two.pdf'));
+    await fireEvent.click(screen.getByRole('button', { name: 'Preview file' }));
+    expect(await screen.findByText('Repeated on every page')).toBeInTheDocument();
+    expect(screen.getByText('Removed while cleaning: 1 line')).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole('button', { name: 'Put back' }));
+    await waitFor(() => expect(calls.filter((c) => c.path === '/api/clean')).toHaveLength(1));
+    expect(calls.find((c) => c.path === '/api/clean')!.body).toEqual({
+      raw: ['Página 1\nUna columna'], fmt: 'pdf', corpus_id: 1, skip: ['page_furniture'],
+    });
+    await waitFor(() => expect((screen.getByLabelText('Text of the page') as HTMLTextAreaElement).value).toBe('Página 1\nUna columna'));
+    await fireEvent.click(screen.getByRole('button', { name: 'Add to corpus' }));
+    await waitFor(() => expect(docPosts()).toHaveLength(1));
+    expect(docPosts()[0].body).toMatchObject({ text: 'Página 1\nUna columna', line_hashes: 'ff00' });
+  });
+
+  it('Put back on a PDF shows the quality of the new text', async () => {
+    previewFileReply = {
+      source: 'two.pdf', title: 'two', text: 'Una columna', warnings: [],
+      quality: { score: 96, level: 'good', issues: [] },
+      removed: [{ step: 'page_furniture', lines: ['Página 1'] }], repaired: {},
+      raw: ['Página 1\nUna columna'], fmt: 'pdf', line_hashes: '',
+    };
+    cleanReply = { ...cleanReply, quality: { score: 70, level: 'fair', issues: [] } };
+    open();
+    await choose(new File(['x'], 'two.pdf'));
+    await fireEvent.click(screen.getByRole('button', { name: 'Preview file' }));
+    expect(await screen.findByText('Text quality: good')).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole('button', { name: 'Put back' }));
+    expect(await screen.findByText('Text quality: fair')).toBeInTheDocument();
+    expect(screen.getByText('70 / 100')).toBeInTheDocument();
   });
 
   it('Discard drops the file preview and the primary goes back to Upload', async () => {

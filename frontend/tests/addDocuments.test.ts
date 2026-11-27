@@ -17,6 +17,9 @@ import { stopAllJobs } from '../src/lib/jobs.svelte';
 import { messages } from '../src/lib/messages.svelte';
 import { t } from '../src/lib/i18n';
 
+/** The cleaning fields of a preview that removed nothing. */
+const noCleaning = { removed: [], raw: ['x'], fmt: 'text' as const, lineHashes: '', skipped: [], cleanText: 'x', cleanWarnings: [] };
+
 interface Call { method: string; path: string; params: URLSearchParams; body?: unknown }
 let calls: Call[];
 let postStatus: number;
@@ -80,7 +83,7 @@ describe('draft', () => {
     draft.pasteTitle = 'T';
     draft.textColumns = '2';
     draft.files = [new File(['a'], 'a.txt')];
-    draft.preview = { source: 's', title: 't', text: 'x', kind: 'file', warnings: [] };
+    draft.preview = { source: 's', title: 't', text: 'x', kind: 'file', warnings: [], ...noCleaning };
     const clear = vi.fn();
     draft.onClear('files', clear);
     resetDraft({ keepMeta: true });

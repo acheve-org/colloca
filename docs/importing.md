@@ -22,7 +22,7 @@ Accepted by *Upload files* on the *Add documents* page (*Sources* > *+ Add docum
   - Lines rebuilt from positioned text runs.
   - Multi-column blocks read column by column; a full-width heading stays above its columns.
   - Three or more consecutive lines of short, aligned cells become table rows (`a | b | c`).
-  - Running headers and page numbers removed.
+  - Running headers, page numbers and broken lines: see [Cleaning](#cleaning).
 - **Quality score** (0–100: *good*, *fair*, *poor*). Penalises undecodable characters, many symbols, words without vowels, words split into letters, very short lines, lines that stop mid-sentence.
   - URL and *Preview file* (one file in *Upload files*, via *Preview file*): score and reasons shown above the editable text.
   - Upload scoring below *good*: warning in the job.
@@ -30,6 +30,31 @@ Accepted by *Upload files* on the *Add documents* page (*Sources* > *+ Add docum
   - Positions only (no ruling lines or font metrics): tables with long cells may read as columns.
   - Unusual text order is left as pypdf gives it.
   - The score is a guide.
+
+## Cleaning
+
+Every URL and file import is cleaned before it is stored: whole lines that are not body text are removed, and PDF
+line breaks are repaired. Words are never changed. The job log says how many lines were removed and why
+(*Cleaning removed 14 lines (…)*).
+
+| Step | Removes | Applies to |
+|---|---|---|
+| Page furniture | Short lines repeated on many pages (running headers and footers, also when only a page number or date changes) and page-number lines. | PDF |
+| Site furniture | Short lines at the start or end of the page that two or more other pages of the same site in this corpus also have (menus, sign-ups, footers). The same line mid-article stays. | URL imports of web pages |
+| Edges | Menus, share buttons, related links, dates, bylines, cookie and copyright notices at the start or end of the text (phrase lists in Spanish, Italian and English). A short line such as a menu item goes only when a clear chrome marker (a chrome phrase, a date or a byline) sits between it and the body text; without one the edge is left alone. A heading ending in ":" and a list item are never removed. | Web pages (URL or `.html` file) |
+| Noise | Lines without a single letter: rules, ornaments, stray symbols, but also number-only lines such as table cells holding only figures or code output; table rows stay. | All cleaned formats |
+| Repairs | Words hyphenated across a line break are joined; a line that does not end a sentence is joined to the next. | PDF |
+
+- **Not cleaned**: pasted text, sentence files, aligned texts, spreadsheets (`.xlsx`, `.csv`, `.tsv`), the two
+  files of *Align documents* and the text of *Analyse a job* (PDFs there still lose running headers and page
+  numbers and get their line breaks repaired, as before cleaning existed; with `IMPORT_CLEANING=0` they keep
+  their headers and page numbers too, only the line-break repairs run).
+- **Safety net**: if cleaning would leave almost nothing (under 40 characters) of a longer text, the text is kept
+  as extracted and the job warns *Cleaning would have removed almost everything*.
+- **Off switch**: `IMPORT_CLEANING=0` skips the removal steps everywhere, including the header removal of
+  *Align documents* and *Analyse a job*; PDF repairs still run.
+- **Re-imports**: a document imported before cleaning existed and again after it has a different (cleaner) text,
+  so it is caught by the near-duplicate check, not as identical.
 
 ## OCR (optional)
 

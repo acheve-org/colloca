@@ -270,7 +270,7 @@ def test_pdf_page_limit(monkeypatch):
     w.write(buf)
     monkeypatch.setattr(ingest, "MAX_PDF_PAGES", 2)
     with pytest.raises(ingest.IngestError, match="3 pages"):
-        ingest.extract_pdf(buf.getvalue())
+        ingest.read_file("long.pdf", buf.getvalue())
 
 
 def test_job_progress_and_result(client):
@@ -349,3 +349,120 @@ def test_status_without_models(client, monkeypatch):
     monkeypatch.setattr("corpora.nlp.installed_version", lambda package: None)
     m = client.get("/api/status").json()["models"]["es"]
     assert m == {"name": None, "version": None, "size": None, "small": False}
+
+
+# --------------------------------------------------------------------------- import cleaning (Task 6)
+def test_clean_endpoint_skip_puts_lines_back(client):
+    # distinct sentences: "Body {i}." (brief) differs only by a digit, so it is page furniture too (Task 1 rules)
+    words = ["uno", "dos", "tres", "cuatro", "cinco", "seis"]
+    raw = [f"HDR\nEl texto de la página {w} sigue aquí con frases completas." for w in words]
+    a = client.post("/api/clean", json={"raw": raw, "fmt": "pdf"})
+    b = client.post("/api/clean", json={"raw": raw, "fmt": "pdf", "skip": ["page_furniture"]})
+    assert a.status_code == 200 and b.status_code == 200, (a.text, b.text)
+    a, b = a.json(), b.json()
+    assert "HDR" not in a["text"] and "HDR" in b["text"]
+    assert a["removed"][0]["step"] == "page_furniture" and b["removed"] == []
+    assert set(a) >= {"text", "removed", "repaired", "warnings"}
+
+
+def test_clean_endpoint_recomputes_pdf_quality(client):
+    from corpora import pdftext
+    raw = ["Una línea de texto normal y corriente.\n" + "x y z q w " * 30, "Otra página con frases completas."]
+    a = client.post("/api/clean", json={"raw": raw, "fmt": "pdf"}).json()
+    assert a["quality"] == pdftext.quality(a["text"])
+    assert "quality" not in client.post("/api/clean", json={"raw": raw, "fmt": "text"}).json()
+
+
+def test_clean_endpoint_rejects_unknown_step(client):
+    assert client.post("/api/clean", json={"raw": ["x"], "fmt": "pdf", "skip": ["bogus"]}).status_code == 422
+    assert client.post("/api/clean", json={"raw": ["x"], "fmt": "docx"}).status_code == 422
+
+
+def test_clean_endpoint_too_large_is_413(client):
+    from corpora import ingest
+    raw = ["a" * (ingest.MAX_TEXT_CHARS // 2 + 1)] * 2
+    assert client.post("/api/clean", json={"raw": raw, "fmt": "text"}).status_code == 413
+
+
+def test_clean_endpoint_matches_import_guard(client):
+    """Same helper as the import: cleaning that would leave next to nothing keeps the text and warns."""
+    from corpora import ingest, pdftext
+    raw = [f"Running header line\n{i}" for i in range(6)]
+    r = client.post("/api/clean", json={"raw": raw, "fmt": "pdf"}).json()
+    notes: list[str] = []
+    expected = ingest._cleaned(raw, "pdf", None, notes)
+    assert notes == [ingest.KEPT_AS_EXTRACTED]
+    assert r == {"text": expected["text"], "removed": expected["removed"], "repaired": expected["repaired"],
+                 "warnings": notes, "quality": pdftext.quality(expected["text"])}
+
+
+def test_clean_endpoint_site_counts_and_corpus_lang(client, monkeypatch):
+    from corpora import cleaning
+    cid = make_corpus(client, lang="it")
+    seen, real_clean = {}, cleaning.clean
+
+    def fake_counts(conn, corpus_id, host, exclude_source=""):
+        seen["counts"] = (corpus_id, host, exclude_source)
+        return cleaning.Counter()
+
+    def spy_clean(pages, **kw):
+        seen.setdefault("lang", kw.get("lang"))
+        return real_clean(pages, **kw)
+    monkeypatch.setattr(cleaning, "site_counts", fake_counts)
+    monkeypatch.setattr(cleaning, "clean", spy_clean)
+    src = "https://ex.com:8080/a"
+    r = client.post("/api/clean", json={"raw": ["Hola mundo."], "fmt": "html", "corpus_id": cid, "source": src})
+    assert r.status_code == 200, r.text
+    assert seen == {"counts": (cid, "ex.com", src), "lang": "it"}
+    seen.clear()
+    client.post("/api/clean", json={"raw": ["Hola mundo."], "fmt": "html", "corpus_id": cid, "source": "notes.html"})
+    assert "counts" not in seen
+    assert client.post("/api/clean", json={"raw": ["x"], "fmt": "html", "corpus_id": 999999}).status_code == 404
+
+
+def test_preview_url_passes_corpus_id(client, monkeypatch):
+    seen = {}
+
+    def fake_fetch(url, polite=False, corpus_id=None):
+        seen.update(url=url, corpus_id=corpus_id)
+        return {"url": url, "title": "t", "text": "x"}
+    monkeypatch.setattr("corpora.ingest.fetch_url", fake_fetch)
+    assert client.post("/api/preview-url", json={"url": " https://ex.com/a ", "corpus_id": 7}).status_code == 200
+    assert seen == {"url": "https://ex.com/a", "corpus_id": 7}
+    client.post("/api/preview-url", json={"url": "https://ex.com/a"})
+    assert seen["corpus_id"] is None
+
+
+def _stored(doc_id: int):
+    from corpora import db
+    with db.session() as conn:
+        return conn.execute("SELECT line_hashes, host FROM documents WHERE id=?", (doc_id,)).fetchone()
+
+
+@pytest.mark.parametrize("background", [False, True])
+def test_add_document_with_line_hashes(client, background):
+    cid = make_corpus(client)
+    r = client.post(f"/api/corpora/{cid}/documents", params={"background": background},
+                    json={"title": "a", "text": ES_TEXT, "kind": "url", "source": "https://ex.com/a",
+                          "line_hashes": "01" * 8})
+    assert r.status_code in (201, 202), r.text
+    if background:
+        wait_for_jobs(client, cid)
+    doc_id = client.get(f"/api/corpora/{cid}/documents").json()[0]["id"]
+    row = _stored(doc_id)
+    assert row["line_hashes"] == bytes.fromhex("01" * 8) and row["host"] == "ex.com"
+
+
+def test_add_document_bad_hex_is_422(client):
+    cid = make_corpus(client)
+    for bad in ("zz" * 8, "012", "01" * (16 * 20_000 // 2 + 1)):
+        r = client.post(f"/api/corpora/{cid}/documents", json={"title": "a", "text": ES_TEXT, "line_hashes": bad})
+        assert r.status_code == 422, bad[:20]
+
+
+def test_clean_endpoint_step_codes_match_cleaning():
+    from typing import get_args
+
+    from corpora import cleaning
+    from corpora.main import CleanIn
+    assert get_args(get_args(CleanIn.model_fields["skip"].annotation)[0]) == cleaning.STEPS

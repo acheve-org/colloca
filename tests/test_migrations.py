@@ -68,15 +68,19 @@ def test_failed_migration_rolls_back_completely(tmp_path, monkeypatch):
     assert conn.execute("SELECT 1 FROM sqlite_master WHERE name='half_done'").fetchone() is None
 
 
-def v14(path):
+def at_version(path, target):
     conn = raw(path)
     cql.register(conn)
     for version, sql in db.MIGRATIONS:
-        if version <= 14:
+        if version <= target:
             conn.executescript(sql)
-    conn.execute("PRAGMA user_version = 14")
+    conn.execute(f"PRAGMA user_version = {target}")
     conn.commit()
     return conn
+
+
+def v14(path):
+    return at_version(path, 14)
 
 
 def general_ids(conn):
@@ -89,7 +93,7 @@ def test_v15_moves_projectless_corpora_into_general(tmp_path):
     conn.execute("INSERT INTO corpora (id, name, lang, is_reference) VALUES (2, 'base', 'es', 1)")
     conn.execute("INSERT INTO corpora (id, name, lang, deleted_at) VALUES (3, 'trashed', 'it', '2026-01-01 00:00:00')")
     conn.commit()
-    assert db.migrate(conn) == 15
+    assert db.migrate(conn) == db.SCHEMA_VERSION
     (gid,) = general_ids(conn)
 
     def pid(table, row_id):
@@ -135,7 +139,7 @@ def test_v15_leaves_the_general_termbase_alone_and_creates_no_general_for_it(tmp
     conn.execute("INSERT INTO terms (src_lang, tgt_lang, src_term) VALUES ('es', 'it', 'casa')")
     conn.execute("INSERT INTO term_rejections (lang, term) VALUES ('es', 'foo')")
     conn.commit()
-    assert db.migrate(conn) == 15
+    assert db.migrate(conn) == db.SCHEMA_VERSION
     assert general_ids(conn) == []
     assert conn.execute("SELECT project_id FROM terms").fetchone()[0] is None
     assert conn.execute("SELECT project_id FROM term_rejections").fetchone()[0] is None
@@ -151,3 +155,20 @@ def test_v15_keeps_null_terms_null_even_when_general_is_created_for_corpora(tmp_
     assert len(general_ids(conn)) == 1
     assert conn.execute("SELECT project_id FROM terms").fetchone()[0] is None
     assert conn.execute("SELECT project_id FROM term_rejections").fetchone()[0] is None
+
+
+def test_v16_adds_line_hashes_and_backfills_host_for_url_documents(tmp_path):
+    conn = at_version(tmp_path / "h.db", 15)
+    conn.execute("INSERT INTO corpora (id, name, lang) VALUES (1, 'work', 'es')")
+    rows = [("https://WWW.Example.com/a/b", "url"), ("http://example.org", "url"), ("report.pdf", "file"),
+            ("https://Ex.com:8080/a", "url"), ("http://localhost:3000", "url")]
+    for i, (source, kind) in enumerate(rows):
+        conn.execute("INSERT INTO documents (corpus_id,title,text,text_hash,n_tokens,source,kind) "
+                     "VALUES (1,'d',?,?,2,?,?)", (f"text {i}", f"h{i}", source, kind))
+    conn.commit()
+    assert db.migrate(conn) == db.SCHEMA_VERSION
+    hosts = [r[0] for r in conn.execute("SELECT host FROM documents ORDER BY id")]
+    assert hosts == ["www.example.com", "example.org", "", "ex.com", "localhost"]
+    assert {"line_hashes", "host"} <= columns(conn, "documents")
+    assert conn.execute("SELECT COUNT(*) FROM documents WHERE line_hashes IS NOT NULL").fetchone()[0] == 0
+    assert conn.execute("SELECT 1 FROM sqlite_master WHERE type='index' AND name='idx_docs_host'").fetchone()

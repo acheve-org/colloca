@@ -390,6 +390,23 @@ def test_invalid_records_are_reported_not_stored(client):
     assert {c["kind"] for c in rep["conflicts"]} >= {"project", "corpus", "document", "term"}
 
 
+def test_a_restored_url_document_gets_its_host(client):
+    payload = {"format": "corpora-export", "format_version": 1,
+               "projects": [{"ref": 1, "name": "Hosts"}],
+               "corpora": [{"ref": 1, "name": "hosts es", "lang": "es", "project_ref": 1}],
+               "documents": [{"ref": 1, "corpus_ref": 1, "title": "page", "text": ES_TEXT, "kind": "url",
+                              "source": "https://News.Example.com:8443/a/b"},
+                             {"ref": 2, "corpus_ref": 1, "title": "file", "text": IT_TEXT, "kind": "file",
+                              "source": "https://example.com/x.pdf"}]}
+    rep = client.post("/api/import", data={"dry_run": "false", "annotate": "false"},
+                      files={"file": ("p.json", json.dumps(payload).encode())}).json()
+    assert rep["created"]["documents"] == 2
+    with db.session() as conn:
+        rows = dict(conn.execute("SELECT d.title, d.host FROM documents d JOIN corpora c ON c.id = d.corpus_id "
+                                 "WHERE c.name = 'hosts es'").fetchall())
+    assert rows == {"page": "news.example.com", "file": ""}
+
+
 def test_v9_database_upgrades_to_v10_keeping_everything_visible(tmp_path):
     conn = db.connect(str(tmp_path / "v9.db"))
     conn.executescript("".join(sql for v, sql in db.MIGRATIONS if v <= 9) + "PRAGMA user_version = 9;")

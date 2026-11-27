@@ -14,10 +14,8 @@ RIGHT = ["La segunda columna trata de la garantía", "y del plazo de entrega del
 
 
 def read(data: bytes, **kw):
-    notes: list[str] = []
-    rep: dict = {}
-    text = ingest.extract_pdf(data, None, notes, None, rep)
-    return text, notes, rep
+    res = ingest.read_file("doc.pdf", data)
+    return res["text"], res["warnings"], {k: res[k] for k in ("quality",) if k in res}
 
 
 def interleaved(left, right, top=700):
@@ -131,7 +129,7 @@ def test_empty_pdf_still_goes_to_ocr_path(monkeypatch):
     called = {}
 
     class Res:
-        pages, confidence, text = 1, 99.0, "texto reconocido por ocr de prueba"
+        pages, confidence = ["texto reconocido por ocr de prueba"], 99.0
 
     import corpora.ocr as ocr
     monkeypatch.setattr(ocr, "ocr_pdf", lambda data, lang, progress: called.setdefault("ok", True) and Res)
