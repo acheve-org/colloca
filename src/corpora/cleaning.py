@@ -16,7 +16,8 @@ from . import pdftext
 STEPS = ("page_furniture", "site_furniture", "edges", "noise")
 
 MAX_FURNITURE_LEN = 80     # running headers/footers are short lines
-MAX_HASHED_LEN = 120       # only short lines are hashed for cross-document furniture detection
+FURNITURE_ZONE = 1         # first/last lines of a page where headers may differ in digits (page numbers, dates)
+MAX_HASHED_LEN = 120      # only short lines are hashed for cross-document furniture detection
 PAGE_NUMBER = re.compile(r"(?i)^[-–—\s]*(p(á|a)g(ina|e|\.)?\s*)?\d{1,4}(\s*(de|di|of|/)\s*\d{1,4})?[-–—\s]*$")
 HYPHENATED = re.compile(r"(\w)-\n(\w)")
 # a line that doesn't end a sentence continues on the next one (never a table row)
@@ -60,20 +61,39 @@ def line_hashes(pages: list[str]) -> bytes:
 Pages = list[list[str]]
 
 
+def _sentence_like(ln: str) -> bool:
+    return ln.endswith((".", "!", "?", "…")) and len(ln.split()) >= 5
+
+
 def _page_furniture(pages: Pages) -> tuple[Pages, list[str]]:
-    """Running headers/footers (short lines repeated on many pages, digits aside) and page-number lines."""
+    """Running headers/footers and page-number lines. A short line repeated verbatim on many pages is furniture
+    anywhere on the page; within a page's header/footer zone (its first and last FURNITURE_ZONE lines, sentences
+    aside) lines are compared with digits ignored, so "Report — page 3" and "Report — page 4" count as one header."""
     def key(ln: str) -> str:
         return re.sub(r"\d+", "#", norm_line(ln))
-    counts: Counter = Counter()
-    for p in pages:
-        counts.update({key(ln) for ln in p if len(ln) < MAX_FURNITURE_LEN})
+
+    def zone(p: list[str]) -> set[int]:
+        """Indexes of the lines that may be matched with digits ignored: the first and last FURNITURE_ZONE lines of
+        the page, unless they read like a sentence (headers rarely do)."""
+        n = len(p)
+        edge = set(range(min(FURNITURE_ZONE, n))) | set(range(max(0, n - FURNITURE_ZONE), n))
+        return {i for i in edge if not _sentence_like(p[i])}
+
+    exact: Counter = Counter()
+    fuzzy: Counter = Counter()
+    zones = [zone(p) for p in pages]
+    for p, z in zip(pages, zones, strict=True):
+        exact.update({ln for ln in p if len(ln) < MAX_FURNITURE_LEN})
+        fuzzy.update({key(p[i]) for i in z if len(p[i]) < MAX_FURNITURE_LEN})
     threshold = max(3, len(pages) // 2)
-    repeated = {k for k, c in counts.items() if c >= threshold}
+    rep_exact = {ln for ln, c in exact.items() if c >= threshold}
+    rep_fuzzy = {k for k, c in fuzzy.items() if c >= threshold}
     kept, removed = [], []
-    for p in pages:
+    for p, z in zip(pages, zones, strict=True):
         keep = []
-        for ln in p:
-            if (len(ln) < MAX_FURNITURE_LEN and key(ln) in repeated) or PAGE_NUMBER.match(ln):
+        for i, ln in enumerate(p):
+            if (ln in rep_exact or PAGE_NUMBER.match(ln)
+                    or (len(ln) < MAX_FURNITURE_LEN and i in z and key(ln) in rep_fuzzy)):
                 removed.append(ln)
             else:
                 keep.append(ln)
