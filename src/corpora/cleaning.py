@@ -18,6 +18,9 @@ STEPS = ("page_furniture", "site_furniture", "edges", "noise")
 MAX_FURNITURE_LEN = 80     # running headers/footers are short lines
 FURNITURE_ZONE = 1         # first/last lines of a page where headers may differ in digits (page numbers, dates)
 MAX_HASHED_LEN = 120      # only short lines are hashed for cross-document furniture detection
+SITE_MIN_DOCS = 2         # a line on this many other documents of the same site is site furniture...
+SITE_ZONE = 0.25          # ...when it lies in the first or last quarter of the page's lines
+SITE_RECENT_DOCS = 200    # site furniture is learnt from the most recent documents of the site
 PAGE_NUMBER = re.compile(r"(?i)^[-–—\s]*(p(á|a)g(ina|e|\.)?\s*)?\d{1,4}(\s*(de|di|of|/)\s*\d{1,4})?[-–—\s]*$")
 HYPHENATED = re.compile(r"(\w)-\n(\w)")
 # a line that doesn't end a sentence continues on the next one (never a table row)
@@ -141,8 +144,32 @@ def _page_furniture(pages: Pages) -> tuple[Pages, list[str]]:
     return kept, removed
 
 
+def site_counts(conn, corpus_id: int, host: str, exclude_source: str = "") -> Counter[bytes]:
+    """For the SITE_RECENT_DOCS most recent documents of the corpus from `host` (the Trash aside, and the document
+    at `exclude_source`, which is being re-imported): how many of them contain each line hash."""
+    counts: Counter[bytes] = Counter()
+    rows = conn.execute("""SELECT line_hashes FROM documents
+                           WHERE corpus_id=? AND host=? AND deleted_at IS NULL AND line_hashes IS NOT NULL
+                             AND source<>? ORDER BY id DESC LIMIT ?""",
+                        (corpus_id, host, exclude_source, SITE_RECENT_DOCS))
+    for (blob,) in rows:
+        counts.update(blob[i:i + 8] for i in range(0, len(blob), 8))
+    return counts
+
+
 def _site_furniture(pages: Pages, site_counts: Counter[bytes]) -> tuple[Pages, list[str]]:
-    return pages, []        # Task 4
+    """Short lines found on SITE_MIN_DOCS or more other documents of the same site (menus, sign-ups, footers), when
+    they lie in the first or last SITE_ZONE of the page's lines; the same line mid-article is kept."""
+    def furniture(ln: str, i: int, n: int) -> bool:
+        return ((i < n * SITE_ZONE or i >= n * (1 - SITE_ZONE)) and len(norm_line(ln)) < MAX_HASHED_LEN
+                and site_counts[line_hash(ln)] >= SITE_MIN_DOCS)
+
+    kept, removed = [], []
+    for p in pages:
+        gone = {i for i, ln in enumerate(p) if furniture(ln, i, len(p))}
+        kept.append([ln for i, ln in enumerate(p) if i not in gone])
+        removed += [p[i] for i in sorted(gone)]
+    return kept, removed
 
 
 def _phrase_pattern(table: dict[str, list[str]], lang: str | None) -> re.Pattern:

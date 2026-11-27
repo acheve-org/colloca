@@ -1,16 +1,27 @@
 """Import cleaning (cleaning.py): page furniture, noise, repairs and line hashes."""
 
 import sqlite3
+from collections import Counter
 from pathlib import Path
 
 import pytest
 
 from corpora import db, importer, metadata
-from corpora.cleaning import clean, line_hash, line_hashes
+from corpora.cleaning import clean, line_hash, line_hashes, site_counts
 
 FIXTURES = Path(__file__).parent / "fixtures" / "web"
 BODY_ES = ("El pleno aprobó ayer el nuevo plan de movilidad para toda la ciudad. Las obras empezarán en primavera "
            "y durarán dos años. Los vecinos podrán presentar alegaciones durante un mes.")
+BODY_LINES_ES = [
+    "El pleno aprobó ayer el nuevo plan de movilidad para toda la ciudad.",
+    "Las obras empezarán en primavera y durarán dos años.",
+    "Los vecinos podrán presentar alegaciones durante un mes.",
+    "El alcalde defendió que el plan reducirá el tráfico en el centro.",
+    "La oposición criticó la falta de consenso con los comerciantes.",
+    "El presupuesto total asciende a cuarenta millones de euros.",
+    "Una parte de la financiación procede de fondos europeos.",
+    "El ayuntamiento publicará el calendario de obras la próxima semana.",
+]
 BODY_EN = ("The council announced new grants for community archives today. The awards will fund cataloguing and "
            "volunteer training. Applications for the next round open in the autumn.")
 
@@ -181,3 +192,54 @@ def test_add_document_without_line_hashes_and_not_a_url(conn, corpus):
     ("http://example.org", "url", "example.org"), ("https://ex.com/x.pdf", "file", ""), ("", "paste", "")])
 def test_host_of(source, kind, host):
     assert metadata.host_of(source, kind) == host
+
+
+# --------------------------------------------------------------------------- site furniture
+def test_site_line_in_edge_zone_removed():
+    counts = Counter({line_hash("Suscríbete a nuestro boletín"): 2})
+    page = "\n".join(["Suscríbete a nuestro boletín", *BODY_LINES_ES])   # 8 body lines
+    c = clean([page], fmt="html", lang="es", site_counts=counts, skip={"edges"})
+    assert "Suscríbete" not in c.text and c.removed[0].step == "site_furniture"
+
+
+def test_site_line_mid_article_kept():
+    counts = Counter({line_hash("Aviso legal estándar."): 5})
+    page = "\n".join([*BODY_LINES_ES[:4], "Aviso legal estándar.", *BODY_LINES_ES[4:]])
+    assert "Aviso legal" in clean([page], fmt="html", site_counts=counts, skip={"edges"}).text
+
+
+def test_needs_two_other_pages():
+    counts = Counter({line_hash("Menú principal"): 1})
+    assert "Menú principal" in clean(["Menú principal\n" + BODY_ES], fmt="html", site_counts=counts,
+                                     skip={"edges"}).text
+
+
+def test_site_furniture_only_for_html():
+    counts = Counter({line_hash("Menú principal"): 5})
+    assert "Menú principal" in clean(["Menú principal\n" + BODY_ES], fmt="text", site_counts=counts).text
+
+
+@pytest.fixture()
+def other_corpus(conn):
+    cid = conn.execute("INSERT INTO corpora (name, lang) VALUES ('other', 'es')").lastrowid
+    return conn.execute("SELECT * FROM corpora WHERE id=?", (cid,)).fetchone()
+
+
+def _doc(conn, corpus_id, host, hashes, source="", deleted=False):
+    conn.execute("INSERT INTO documents (corpus_id, title, text, text_hash, source, host, line_hashes, deleted_at) "
+                 "VALUES (?, 'T', 'x', ?, ?, ?, ?, ?)",
+                 (corpus_id, f"h{conn.execute('SELECT COUNT(*) FROM documents').fetchone()[0]}", source, host,
+                  hashes, "2026-11-27" if deleted else None))
+
+
+def test_site_counts_reads_same_corpus_and_host_only(conn, corpus, other_corpus):
+    H, other = line_hash("Menú principal"), line_hash("Portada")
+    _doc(conn, corpus["id"], "ex.com", H + other, "https://ex.com/a")
+    _doc(conn, corpus["id"], "ex.com", H, "https://ex.com/b")
+    _doc(conn, other_corpus["id"], "ex.com", H)
+    _doc(conn, corpus["id"], "other.com", H)
+    _doc(conn, corpus["id"], "ex.com", H, deleted=True)
+    _doc(conn, corpus["id"], "ex.com", None)
+    counts = site_counts(conn, corpus["id"], "ex.com")
+    assert counts[H] == 2 and counts[other] == 1
+    assert site_counts(conn, corpus["id"], "ex.com", exclude_source="https://ex.com/a")[H] == 1
