@@ -266,7 +266,7 @@ WHERE is_reference = 0 AND project_id IS NULL;
 # later imports from the same site can spot its repeated chrome; NULL for documents imported before cleaning. `host`
 # is the lower-case host name of a URL document ('' for everything else), indexed per corpus to find a site's other
 # pages. Existing URL documents get their host from `source`: the part between '://' and the next '/' (the whole
-# remainder when there is none) without a ':port', so it agrees with importer.host_of (urlparse().hostname).
+# remainder when there is none) without a ':port', so it agrees with metadata.host_of (urlparse().hostname).
 _V16 = """
 ALTER TABLE documents ADD COLUMN line_hashes BLOB;
 ALTER TABLE documents ADD COLUMN host TEXT NOT NULL DEFAULT '';

@@ -41,16 +41,18 @@ line breaks are repaired. Words are never changed. The job log says how many lin
 |---|---|---|
 | Page furniture | Short lines repeated on many pages (running headers and footers, also when only a page number or date changes) and page-number lines. | PDF |
 | Site furniture | Short lines at the start or end of the page that two or more other pages of the same site in this corpus also have (menus, sign-ups, footers). The same line mid-article stays. | URL imports of web pages |
-| Edges | Menus, share buttons, related links, dates, bylines, cookie and copyright notices at the start or end of the text (phrase lists in Spanish, Italian and English). | Web pages (URL or `.html` file) |
-| Noise | Lines without a single letter (rules, ornaments, stray symbols); table rows stay. | All cleaned formats |
+| Edges | Menus, share buttons, related links, dates, bylines, cookie and copyright notices at the start or end of the text (phrase lists in Spanish, Italian and English). A short line such as a menu item goes only when a clear chrome marker (a chrome phrase, a date or a byline) sits between it and the body text; without one the edge is left alone. A heading ending in ":" and a list item are never removed. | Web pages (URL or `.html` file) |
+| Noise | Lines without a single letter: rules, ornaments, stray symbols, but also number-only lines such as table cells holding only figures or code output; table rows stay. | All cleaned formats |
 | Repairs | Words hyphenated across a line break are joined; a line that does not end a sentence is joined to the next. | PDF |
 
 - **Not cleaned**: pasted text, sentence files, aligned texts, spreadsheets (`.xlsx`, `.csv`, `.tsv`), the two
   files of *Align documents* and the text of *Analyse a job* (PDFs there still lose running headers and page
-  numbers and get their line breaks repaired, as before cleaning existed).
+  numbers and get their line breaks repaired, as before cleaning existed; with `IMPORT_CLEANING=0` they keep
+  their headers and page numbers too, only the line-break repairs run).
 - **Safety net**: if cleaning would leave almost nothing (under 40 characters) of a longer text, the text is kept
   as extracted and the job warns *Cleaning would have removed almost everything*.
-- **Off switch**: `IMPORT_CLEANING=0` skips the removal steps; PDF repairs still run.
+- **Off switch**: `IMPORT_CLEANING=0` skips the removal steps everywhere, including the header removal of
+  *Align documents* and *Analyse a job*; PDF repairs still run.
 - **Re-imports**: a document imported before cleaning existed and again after it has a different (cleaner) text,
   so it is caught by the near-duplicate check, not as identical.
 

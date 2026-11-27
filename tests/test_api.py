@@ -270,7 +270,7 @@ def test_pdf_page_limit(monkeypatch):
     w.write(buf)
     monkeypatch.setattr(ingest, "MAX_PDF_PAGES", 2)
     with pytest.raises(ingest.IngestError, match="3 pages"):
-        ingest.extract_pdf(buf.getvalue())
+        ingest.read_file("long.pdf", buf.getvalue())
 
 
 def test_job_progress_and_result(client):
@@ -365,6 +365,14 @@ def test_clean_endpoint_skip_puts_lines_back(client):
     assert set(a) >= {"text", "removed", "repaired", "warnings"}
 
 
+def test_clean_endpoint_recomputes_pdf_quality(client):
+    from corpora import pdftext
+    raw = ["Una línea de texto normal y corriente.\n" + "x y z q w " * 30, "Otra página con frases completas."]
+    a = client.post("/api/clean", json={"raw": raw, "fmt": "pdf"}).json()
+    assert a["quality"] == pdftext.quality(a["text"])
+    assert "quality" not in client.post("/api/clean", json={"raw": raw, "fmt": "text"}).json()
+
+
 def test_clean_endpoint_rejects_unknown_step(client):
     assert client.post("/api/clean", json={"raw": ["x"], "fmt": "pdf", "skip": ["bogus"]}).status_code == 422
     assert client.post("/api/clean", json={"raw": ["x"], "fmt": "docx"}).status_code == 422
@@ -378,14 +386,14 @@ def test_clean_endpoint_too_large_is_413(client):
 
 def test_clean_endpoint_matches_import_guard(client):
     """Same helper as the import: cleaning that would leave next to nothing keeps the text and warns."""
-    from corpora import ingest
+    from corpora import ingest, pdftext
     raw = [f"Running header line\n{i}" for i in range(6)]
     r = client.post("/api/clean", json={"raw": raw, "fmt": "pdf"}).json()
     notes: list[str] = []
     expected = ingest._cleaned(raw, "pdf", None, notes)
     assert notes == [ingest.KEPT_AS_EXTRACTED]
     assert r == {"text": expected["text"], "removed": expected["removed"], "repaired": expected["repaired"],
-                 "warnings": notes}
+                 "warnings": notes, "quality": pdftext.quality(expected["text"])}
 
 
 def test_clean_endpoint_site_counts_and_corpus_lang(client, monkeypatch):

@@ -703,8 +703,9 @@ class CleanIn(BaseModel):
 @app.post("/api/clean")
 def clean_preview(body: CleanIn):
     """Clean the raw pages of a preview again without the steps in `skip` (to put back what a step removed):
-    {text, removed, repaired, warnings}, as in the preview. For a web page (`fmt` html) with `corpus_id` and a
-    URL `source`, the corpus's other pages of that site are compared; `lang` defaults to the corpus language."""
+    {text, removed, repaired, warnings} as in the preview, and for a PDF the new text's quality. For a web page
+    (`fmt` html) with `corpus_id` and a URL `source`, the corpus's other pages of that site are compared; `lang`
+    defaults to the corpus language."""
     if sum(len(p) for p in body.raw) > ingest.MAX_TEXT_CHARS:
         raise HTTPException(413, f"The text is longer than {ingest.MAX_TEXT_CHARS} characters")
     lang, counts = body.lang, None

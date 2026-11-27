@@ -366,7 +366,7 @@ export async function putBack(step: Step): Promise<boolean> {
   if (p.text !== p.cleanText && !(await askPutBack())) return false;
   return act('clean', async (id) => {
     const skip = [...p.skipped, step];
-    const r = await post<{ text: string; removed: Removed[]; warnings?: string[] }>('/api/clean', {
+    const r = await post<{ text: string; removed: Removed[]; warnings?: string[]; quality?: Quality }>('/api/clean', {
       raw: p.raw,
       fmt: p.fmt,
       corpus_id: id,
@@ -379,6 +379,8 @@ export async function putBack(step: Step): Promise<boolean> {
     p.cleanText = r.text;
     p.removed = r.removed;
     p.skipped = skip;
+    // A PDF's quality is of the text it describes (an OCRed PDF has none: its preview gets none either).
+    if (r.quality && p.quality) p.quality = r.quality;
     // The guard's note from an earlier clean is shown only when the latest clean returned it.
     p.warnings = p.warnings.filter((w) => !w.startsWith(KEPT_AS_EXTRACTED));
     p.cleanWarnings = r.warnings ?? [];

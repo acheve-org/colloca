@@ -299,12 +299,6 @@ def extract_html_raw(data: bytes, favor_recall: bool = False) -> tuple[str, str]
     return title, text
 
 
-def extract_html(data: bytes) -> tuple[str, str]:
-    """(title, cleaned main text) of a web page."""
-    title, text = extract_html_raw(data)
-    return title, _cleaned([text], "html", None, [])["text"]
-
-
 def _pdf_pages(data: bytes, lang: str | None, notes: list[str] | None, progress) -> tuple[list[str], bool]:
     """(raw text of each page, whether it was OCRed)."""
     from pypdf import PdfReader
@@ -357,13 +351,6 @@ def _read_pdf(data: bytes, lang: str | None, notes: list[str], progress, report:
     return res
 
 
-def extract_pdf(data: bytes, lang: str | None = None, notes: list[str] | None = None,
-                progress=None, report: dict | None = None) -> str:
-    """Cleaned text of a PDF (see `extract_pdf_pages` and cleaning.py). `notes` collects warnings; `report`, if
-    given, receives the quality of the text under "quality" (see pdftext.quality)."""
-    return _read_pdf(data, lang, notes if notes is not None else [], progress, report)["text"]
-
-
 def extract_docx(data: bytes) -> str:
     from docx import Document
     from docx.table import Table
@@ -398,14 +385,16 @@ def decode_text(data: bytes) -> str:
 KEPT_AS_EXTRACTED = "Cleaning would have removed almost everything, so the text is kept as extracted: check it."
 MIN_CLEANED_CHARS = 40
 _STEP_SUMMARY = {"page_furniture": "repeated on every page", "site_furniture": "repeated on other pages of this site",
-                 "edges": "site menus and links", "noise": "lines without words"}
+                 "edges": "menus and links at the start or end", "noise": "lines without words"}
 
 
 def _cleaned(pages: list[str], fmt: str, lang: str | None, notes: list[str],
              site_counts: Counter[bytes] | None = None, skip: Collection[str] = ()) -> dict:
     """The text of a document cleaned (cleaning.clean, without the steps in `skip`) and what was removed and
     repaired, with the raw pages for cleaning it again. If cleaning leaves next to nothing of a longer text, the
-    text is kept as extracted (PDF line breaks still repaired) and a warning is added to `notes`."""
+    text is kept as extracted (PDF line breaks still repaired) and a warning is added to `notes`. `line_hashes`
+    is given for a web page only: the site step of later imports is the only reader (and a long PDF would
+    exceed what a document may carry)."""
     from . import cleaning
     c = cleaning.clean(pages, fmt=fmt, lang=lang, site_counts=site_counts, skip=skip)
     if c.removed and len(c.text) < MIN_CLEANED_CHARS:
@@ -413,17 +402,23 @@ def _cleaned(pages: list[str], fmt: str, lang: str | None, notes: list[str],
         if len(kept.text) > len(c.text):
             c = cleaning.Cleaned(kept.text, [], kept.repaired, c.line_hashes)
             notes.append(KEPT_AS_EXTRACTED)
+    hashes = c.line_hashes.hex() if fmt == "html" else ""
     return {"text": c.text, "removed": [{"step": r.step, "lines": r.lines} for r in c.removed],
-            "repaired": c.repaired, "raw": pages, "fmt": fmt, "line_hashes": c.line_hashes.hex()}
+            "repaired": c.repaired, "raw": pages, "fmt": fmt, "line_hashes": hashes}
 
 
 def reclean(raw: list[str], fmt: str, lang: str | None = None, site_counts: Counter[bytes] | None = None,
             skip: Collection[str] = ()) -> dict:
     """{"text", "removed", "repaired", "warnings"} of the raw pages of a preview cleaned again without the steps
-    in `skip`: the same cleaning, and the same keep-as-extracted guard, as the import."""
+    in `skip`: the same cleaning, and the same keep-as-extracted guard, as the import. For a PDF, also the
+    "quality" of the new text (see pdftext.quality)."""
+    from . import pdftext
     notes: list[str] = []
     res = _cleaned(raw, fmt, lang, notes, site_counts, skip)
-    return {"text": res["text"], "removed": res["removed"], "repaired": res["repaired"], "warnings": notes}
+    out = {"text": res["text"], "removed": res["removed"], "repaired": res["repaired"], "warnings": notes}
+    if fmt == "pdf":
+        out["quality"] = pdftext.quality(res["text"])
+    return out
 
 
 def _uncleaned(text: str) -> dict:

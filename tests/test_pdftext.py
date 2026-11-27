@@ -14,10 +14,8 @@ RIGHT = ["La segunda columna trata de la garantía", "y del plazo de entrega del
 
 
 def read(data: bytes, **kw):
-    notes: list[str] = []
-    rep: dict = {}
-    text = ingest.extract_pdf(data, None, notes, None, rep)
-    return text, notes, rep
+    res = ingest.read_file("doc.pdf", data)
+    return res["text"], res["warnings"], {k: res[k] for k in ("quality",) if k in res}
 
 
 def interleaved(left, right, top=700):
