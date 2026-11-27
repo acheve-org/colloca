@@ -336,19 +336,31 @@ def import_text(corpus_id: int, title: str, text: str, source: str, kind: str, m
     return work
 
 
+def _hashes(parsed: dict) -> bytes | None:
+    """The line hashes of an extracted document (see ingest._cleaned), None when there are none."""
+    return bytes.fromhex(parsed["line_hashes"]) or None
+
+
+def _summary(parsed: dict) -> list[str]:
+    summary = ingest.cleaning_summary(parsed["removed"])
+    return [summary] if summary else []
+
+
 def import_url(corpus_id: int, url: str, meta: dict, force_language: bool,
                similar: str = "warn") -> Callable[[Job], dict]:
     """Fetch a page or PDF (politely: a pause between requests to one host) and import it, with no trimming step."""
     def work(job: Job) -> dict:
         try:
-            page = ingest.fetch_url(url, polite=True)
+            page = ingest.fetch_url(url, polite=True, corpus_id=corpus_id)
         except ingest.IngestError:
             raise
         except Exception as exc:             # network errors: a readable reason instead of "Unexpected error"
             raise ingest.IngestError(f"Could not fetch URL: {exc}") from exc
         job.set_progress(0.3)
-        result = import_text(corpus_id, page["title"], page["text"], url, "url", meta, force_language, similar)(job)
-        warnings = [*result.get("warnings", []), *ingest.extraction_warnings(page, url)]
+        result = import_text(corpus_id, page["title"], page["text"], url, "url", meta, force_language, similar,
+                             _hashes(page))(job)
+        warnings = [*result.get("warnings", []), *page["warnings"], *_summary(page),
+                    *ingest.extraction_warnings(page, url)]
         host = (urlparse(url).hostname or "").lower()
         with db.session() as conn:
             same = [] if page["title"].lower() == urlparse(url).netloc.lower() else [   # untitled: the host name
@@ -378,8 +390,8 @@ def import_file(corpus_id: int, filename: str, data: bytes, meta: dict,
             raise ImportRejected(404, "Corpus no longer exists", "gone")
         parsed = ingest.read_file(filename, data, row["lang"], columns, lambda f: job.set_progress(f * 0.3))
         result = import_text(corpus_id, parsed["title"], parsed["text"], filename, "file", meta,
-                             force_language, similar)(job)
-        return {**result, "warnings": parsed["warnings"]} if parsed["warnings"] else result
+                             force_language, similar, _hashes(parsed))(job)
+        return {**result, "warnings": [*result.get("warnings", []), *parsed["warnings"], *_summary(parsed)]}
     return work
 
 

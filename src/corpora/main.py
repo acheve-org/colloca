@@ -952,7 +952,7 @@ async def _read_upload(f: UploadFile) -> dict:
         raise HTTPException(413, f"{f.filename or 'file'} is larger than {ingest.MAX_UPLOAD_BYTES // 1024 // 1024} MB "
                                  "(set MAX_UPLOAD_MB to change)")
     try:
-        return await run_in_threadpool(ingest.read_file, f.filename or "file", data)
+        return await run_in_threadpool(ingest.read_file, f.filename or "file", data, clean=False)
     except ingest.IngestError as exc:
         raise HTTPException(400, f"{f.filename or 'file'}: {exc}") from exc
 
@@ -1106,7 +1106,8 @@ async def analyse_job(corpus_id: int, file: UploadFile | None = File(None), text
               "date_to": scope.date_to, "docs": list(scope.doc_ids)}
 
     def work(job):
-        parsed = ingest.read_file(name, data, corpus["lang"], progress=lambda f: job.set_progress(f * 0.5)) \
+        parsed = ingest.read_file(name, data, corpus["lang"], progress=lambda f: job.set_progress(f * 0.5),
+                                  clean=False) \
             if data is not None else {"text": text, "warnings": []}
         body = parsed["text"]
         with db.session() as conn:
@@ -1264,7 +1265,8 @@ def get_document(doc_id: int):
             raise HTTPException(404, "Document not found")
         tags = [r[0] for r in conn.execute("SELECT tag FROM doc_tags WHERE doc_id=? ORDER BY tag", (doc_id,))]
         doc = dict(row)
-        doc.pop("fingerprint")      # internal: a binary sketch, not for the API
+        doc.pop("fingerprint")      # internal: binary sketch and line hashes, not for the API
+        doc.pop("line_hashes")
         return {**doc, "tags": tags}
 
 

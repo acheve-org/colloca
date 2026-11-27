@@ -285,22 +285,27 @@ def discover_links(url: str) -> dict:
 
 
 # --------------------------------------------------------------------------- formats
-def extract_html(data: bytes) -> tuple[str, str]:
+def extract_html_raw(data: bytes, favor_recall: bool = False) -> tuple[str, str]:
+    """(title, main text) of a web page as trafilatura gives it, before cleaning. `favor_recall` keeps more of the
+    page (the extraction used before import cleaning existed; uncleaned callers keep it)."""
     import trafilatura
     text = trafilatura.extract(data, include_comments=False, include_tables=True,
-                               include_links=False, deduplicate=True, favor_recall=True)
+                               include_links=False, deduplicate=True, favor_recall=favor_recall)
     if not text or len(text.strip()) < 40:
         raise IngestError("No main text could be extracted (page may need JavaScript or a login)")
     meta = trafilatura.extract_metadata(data)
     title = (meta.title if meta and meta.title else "").strip()
-    return title, normalize_text(text)
+    return title, text
 
 
-def extract_pdf(data: bytes, lang: str | None = None, notes: list[str] | None = None,
-                progress=None, report: dict | None = None) -> str:
-    """Text of a PDF, columns read one after the other and table rows kept as rows (see pdftext). Without a text
-    layer the pages are OCRed (see ocr.py). `notes` collects warnings; `report`, if given, receives the quality of
-    the extracted text under "quality" (see pdftext.quality)."""
+def extract_html(data: bytes) -> tuple[str, str]:
+    """(title, cleaned main text) of a web page."""
+    title, text = extract_html_raw(data)
+    return title, _cleaned([text], "html", None, [])["text"]
+
+
+def _pdf_pages(data: bytes, lang: str | None, notes: list[str] | None, progress) -> tuple[list[str], bool]:
+    """(raw text of each page, whether it was OCRed)."""
     from pypdf import PdfReader
 
     from . import pdftext
@@ -308,39 +313,54 @@ def extract_pdf(data: bytes, lang: str | None = None, notes: list[str] | None = 
     if len(reader.pages) > MAX_PDF_PAGES:
         raise IngestError(f"PDF has {len(reader.pages)} pages (limit {MAX_PDF_PAGES}; set MAX_PDF_PAGES)")
     pages = [pdftext.page_text(p) for p in reader.pages]
-    if not any(p.strip() for p in pages):
-        from . import ocr
-        res = ocr.ocr_pdf(data, lang, progress)
-        if notes is not None:
-            notes.append(f"Text recognised by OCR ({res.pages} pages, mean confidence {res.confidence:.0f}%).")
-            if res.confidence < ocr.MIN_CONFIDENCE:
-                notes.append(f"OCR quality is low (below {ocr.MIN_CONFIDENCE:.0f}%): check the text, expect "
-                             "misspelt words and wrong lemmas, or rescan at a higher resolution.")
-        return normalize_text(res.text)
-    # drop running headers/footers: short lines repeated on many pages
-    line_pages: Counter = Counter()
-    for p in pages:
-        for ln in {ln.strip() for ln in p.splitlines() if ln.strip()}:
-            line_pages[ln] += 1
-    threshold = max(3, len(pages) // 2)
-    repeated = {ln for ln, c in line_pages.items() if c >= threshold and len(ln) < 80}
-    out = []
-    for p in pages:
-        lines = [ln.strip() for ln in p.splitlines() if ln.strip() and ln.strip() not in repeated
-                 and not re.fullmatch(r"\d{1,4}", ln.strip())]
-        out.append("\n".join(lines))
-    text = "\n".join(out)
-    text = re.sub(r"(\w)-\n(\w)", r"\1\2", text)           # de-hyphenate line breaks
-    # join soft-wrapped lines: a line that doesn't end a sentence continues on the next one (never a table row)
-    text = re.sub(rf"(?<![.!?:;»”\"{pdftext.ROW_END}])\n(?=[a-zà-ÿ0-9(¿¡«“\"])", " ", text)
-    text = normalize_text(text.replace(pdftext.ROW_END, ""))
-    score = pdftext.quality(text)
-    if report is not None:
-        report["quality"] = score
-    if notes is not None and score["level"] != "good":
-        notes.append(f"The text of this PDF may be unreliable (quality {score['score']}/100, {score['level']}): "
-                     + " ".join(i["message"] for i in score["issues"]) + " Check the preview before adding it.")
-    return text
+    if any(p.strip() for p in pages):
+        return pages, False
+    from . import ocr
+    res = ocr.ocr_pdf(data, lang, progress)
+    if notes is not None:
+        notes.append(f"Text recognised by OCR ({len(res.pages)} pages, mean confidence {res.confidence:.0f}%).")
+        if res.confidence < ocr.MIN_CONFIDENCE:
+            notes.append(f"OCR quality is low (below {ocr.MIN_CONFIDENCE:.0f}%): check the text, expect "
+                         "misspelt words and wrong lemmas, or rescan at a higher resolution.")
+    return res.pages, True
+
+
+def extract_pdf_pages(data: bytes, lang: str | None = None, notes: list[str] | None = None,
+                      progress=None) -> list[str]:
+    """Raw text of each page of a PDF: the text layer (columns read one after the other, table rows kept as rows;
+    see pdftext) or, without one, OCR (see ocr.py). `notes` collects the OCR warnings."""
+    return _pdf_pages(data, lang, notes, progress)[0]
+
+
+def _read_pdf(data: bytes, lang: str | None, notes: list[str], progress, report: dict | None,
+              clean: bool = True) -> dict:
+    """A PDF cleaned (see `_cleaned`); the quality of the text layer's cleaned text goes to `report["quality"]`
+    and, below good, to `notes`. Uncleaned (`clean=False`), the text is the one read before import cleaning
+    existed: a text layer still loses running headers and page numbers and gets its line breaks repaired, OCR
+    text is kept as recognised; nothing is reported."""
+    from . import cleaning, pdftext
+    pages, ocred = _pdf_pages(data, lang, notes, progress)
+    if clean:
+        res = _cleaned(pages, "pdf", lang, notes)
+    elif ocred:
+        res = _uncleaned(normalize_text("\n".join(pages)))
+    else:
+        res = _uncleaned(cleaning.clean(pages, fmt="pdf", skip={"noise"}).text)
+    if not ocred:
+        score = pdftext.quality(res["text"])
+        if report is not None:
+            report["quality"] = score
+        if score["level"] != "good":
+            notes.append(f"The text of this PDF may be unreliable (quality {score['score']}/100, {score['level']}): "
+                         + " ".join(i["message"] for i in score["issues"]) + " Check the preview before adding it.")
+    return res
+
+
+def extract_pdf(data: bytes, lang: str | None = None, notes: list[str] | None = None,
+                progress=None, report: dict | None = None) -> str:
+    """Cleaned text of a PDF (see `extract_pdf_pages` and cleaning.py). `notes` collects warnings; `report`, if
+    given, receives the quality of the text under "quality" (see pdftext.quality)."""
+    return _read_pdf(data, lang, notes if notes is not None else [], progress, report)["text"]
 
 
 def extract_docx(data: bytes) -> str:
@@ -373,22 +393,76 @@ def decode_text(data: bytes) -> str:
     return normalize_text(decode_bytes(data))
 
 
+# --------------------------------------------------------------------------- cleaning
+KEPT_AS_EXTRACTED = "Cleaning would have removed almost everything, so the text is kept as extracted: check it."
+MIN_CLEANED_CHARS = 40
+_STEP_SUMMARY = {"page_furniture": "repeated on every page", "site_furniture": "repeated on other pages of this site",
+                 "edges": "site menus and links", "noise": "lines without words"}
+
+
+def _cleaned(pages: list[str], fmt: str, lang: str | None, notes: list[str],
+             site_counts: Counter[bytes] | None = None) -> dict:
+    """The text of a document cleaned (cleaning.clean) and what was removed and repaired, with the raw pages for
+    cleaning it again. If cleaning leaves next to nothing of a longer text, the text is kept as extracted (PDF line
+    breaks still repaired) and a warning is added to `notes`."""
+    from . import cleaning
+    c = cleaning.clean(pages, fmt=fmt, lang=lang, site_counts=site_counts)
+    if c.removed and len(c.text) < MIN_CLEANED_CHARS:
+        kept = cleaning.clean(pages, fmt=fmt, skip=cleaning.STEPS)
+        if len(kept.text) > len(c.text):
+            c = cleaning.Cleaned(kept.text, [], kept.repaired, c.line_hashes)
+            notes.append(KEPT_AS_EXTRACTED)
+    return {"text": c.text, "removed": [{"step": r.step, "lines": r.lines} for r in c.removed],
+            "repaired": c.repaired, "raw": pages, "fmt": fmt, "line_hashes": c.line_hashes.hex()}
+
+
+def _uncleaned(text: str) -> dict:
+    return {"text": text, "removed": [], "repaired": {}, "raw": [text], "fmt": "text", "line_hashes": ""}
+
+
+def cleaning_summary(removed: list[dict]) -> str | None:
+    """One line for the job log saying how many lines cleaning removed and why; None when nothing was removed."""
+    n = sum(len(r["lines"]) for r in removed)
+    if not n:
+        return None
+    why = ", ".join(_STEP_SUMMARY.get(r["step"], r["step"]) for r in removed if r["lines"])
+    return f"Cleaning removed {n} line{'s' if n != 1 else ''} ({why})."
+
+
 # --------------------------------------------------------------------------- entry points
-def fetch_url(url: str, polite: bool = False) -> dict:
+def _corpus_context(corpus_id: int | None, url: str, html: bool) -> tuple[str | None, Counter[bytes] | None]:
+    """(corpus language, for a web page the site counts of the URL's host) for cleaning a page imported into a
+    corpus; (None, None) without one."""
+    from . import cleaning, db, metadata
+    if corpus_id is None:
+        return None, None
+    with db.session() as conn:
+        row = conn.execute("SELECT lang FROM corpora WHERE id=?", (corpus_id,)).fetchone()
+        counts = cleaning.site_counts(conn, corpus_id, metadata.host_of(url, "url"), exclude_source=url) \
+            if html else None
+    return (row["lang"] if row else None), counts
+
+
+def fetch_url(url: str, polite: bool = False, corpus_id: int | None = None) -> dict:
+    """{"url", "title", "text", "format", "warnings", ...} of a page or PDF, cleaned (see `_cleaned` for the
+    other keys). With `corpus_id`, the corpus language picks the cleaning phrases and the corpus's other pages of
+    the same site teach which lines are site furniture."""
     data, ctype = _download(url, polite)
     extra: dict = {}
-    if "pdf" in ctype or data[:5] == b"%PDF-":
-        notes: list[str] = []
-        text, title, fmt = extract_pdf(data, None, notes, None, extra), "", "pdf"
-        extra["warnings"] = notes
-    elif "html" in ctype or "xml" in ctype or b"<html" in data[:2048].lower():
-        title, text = extract_html(data)
-        fmt = "html"
+    notes: list[str] = []
+    pdf = "pdf" in ctype or data[:5] == b"%PDF-"
+    html = not pdf and ("html" in ctype or "xml" in ctype or b"<html" in data[:2048].lower())
+    lang, counts = _corpus_context(corpus_id, url, html)
+    if pdf:
+        res, title, fmt = _read_pdf(data, lang, notes, None, extra), "", "pdf"
+    elif html:
+        title, raw = extract_html_raw(data)
+        res, fmt = _cleaned([raw], "html", lang, notes, counts), "html"
     elif ctype.startswith("text/"):
-        text, title, fmt = decode_text(data), "", "text"
+        res, title, fmt = _cleaned([decode_text(data)], "text", lang, notes), "", "text"
     else:
         raise IngestError(f"Unsupported content type: {ctype or 'unknown'}")
-    return {"url": url, "title": title or urlparse(url).netloc, "text": text, "format": fmt, **extra}
+    return {"url": url, "title": title or urlparse(url).netloc, **res, "format": fmt, "warnings": notes, **extra}
 
 
 MIN_ARTICLE_CHARS = 300
@@ -417,31 +491,39 @@ READ_EXTENSIONS = (".docx", ".pdf", ".odt", ".rtf", ".xlsx", ".csv", ".tsv", ".x
                    ".txt", ".md", ".html", ".htm")
 
 
-def read_file(filename: str, data: bytes, lang: str | None = None, columns: str = "", progress=None) -> dict:
-    """{"title", "text", "warnings"}. `lang` (corpus language, es/it) selects the OCR language and the side of an
-    XLIFF to read; `columns` picks the text columns of a spreadsheet (see formats.select_text_columns)."""
+def read_file(filename: str, data: bytes, lang: str | None = None, columns: str = "", progress=None, *,
+              clean: bool = True) -> dict:
+    """{"title", "text", "warnings", "removed", "repaired", "raw", "fmt", "line_hashes"} (see `_cleaned`).
+    `lang` (corpus language, es/it) selects the OCR language, the cleaning phrases and the side of an XLIFF to
+    read; `columns` picks the text columns of a spreadsheet (see formats.select_text_columns). Spreadsheets are
+    never cleaned; with `clean=False` (alignment, job analysis) nothing is (PDFs keep today's header removal and
+    line-break repairs)."""
     from . import formats
     ext = os.path.splitext(filename)[1].lower()
     title = os.path.splitext(os.path.basename(filename))[0]
     notes: list[str] = []
     extra: dict = {}
+    fmt = "text"
+    if ext == ".pdf":
+        res = _read_pdf(data, lang, notes, progress, extra, clean)
+        if not res["text"].strip():
+            raise IngestError("File contains no text")
+        return {"title": title, **res, "warnings": notes, **extra}
     if ext == ".docx":
         text = extract_docx(data)
-    elif ext == ".pdf":
-        text = extract_pdf(data, lang, notes, progress, extra)
     elif ext == ".odt":
         text = formats.extract_odt(data)
     elif ext == ".rtf":
         text = formats.extract_rtf(data)
     elif ext in (".xlsx", ".csv", ".tsv"):
-        text = formats.extract_table(filename, data, columns)
+        text, clean = formats.extract_table(filename, data, columns), False
     elif ext in (".xlf", ".xliff"):
         text = formats.extract_xliff(data, lang)
     elif ext in (".srt", ".vtt"):
         text = formats.extract_subtitles(data)
     elif ext in (".html", ".htm"):
-        title2, text = extract_html(data)
-        title = title2 or title
+        title2, raw = extract_html_raw(data, favor_recall=not clean)
+        title, text, fmt = title2 or title, raw if clean else normalize_text(raw), "html"
     elif ext in (".txt", ".md", ".text", ""):
         text = decode_text(data)
     else:
@@ -449,4 +531,5 @@ def read_file(filename: str, data: bytes, lang: str | None = None, columns: str 
                           ".vtt, .txt, .md, .html)")
     if not text.strip():
         raise IngestError("File contains no text")
-    return {"title": title, "text": text, "warnings": notes, **extra}
+    res = _cleaned([text], fmt, lang, notes) if clean else _uncleaned(text)
+    return {"title": title, **res, "warnings": notes, **extra}

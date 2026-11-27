@@ -131,7 +131,7 @@ def test_empty_pdf_still_goes_to_ocr_path(monkeypatch):
     called = {}
 
     class Res:
-        pages, confidence, text = 1, 99.0, "texto reconocido por ocr de prueba"
+        pages, confidence = ["texto reconocido por ocr de prueba"], 99.0
 
     import corpora.ocr as ocr
     monkeypatch.setattr(ocr, "ocr_pdf", lambda data, lang, progress: called.setdefault("ok", True) and Res)

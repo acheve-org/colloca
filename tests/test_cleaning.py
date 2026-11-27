@@ -6,8 +6,12 @@ from pathlib import Path
 
 import pytest
 
-from corpora import db, importer, metadata
+from corpora import db, importer, ingest, metadata
 from corpora.cleaning import clean, line_hash, line_hashes, site_counts
+
+from .pdfmaker import lines, make_pdf
+from .test_api import make_corpus, wait_for_jobs
+from .test_extraction_flags import serve  # noqa: F401  (fixture)
 
 FIXTURES = Path(__file__).parent / "fixtures" / "web"
 BODY_ES = ("El pleno aprobó ayer el nuevo plan de movilidad para toda la ciudad. Las obras empezarán en primavera "
@@ -136,9 +140,7 @@ def test_edges_only_for_html():
 
 
 def _extract(data: bytes) -> str:
-    import trafilatura  # switch to ingest.extract_html_raw in Task 5
-    return trafilatura.extract(data, include_comments=False, include_tables=True, include_links=False,
-                               deduplicate=True)
+    return ingest.extract_html_raw(data)[1]
 
 
 FIXTURE_CASES = [
@@ -243,3 +245,96 @@ def test_site_counts_reads_same_corpus_and_host_only(conn, corpus, other_corpus)
     counts = site_counts(conn, corpus["id"], "ex.com")
     assert counts[H] == 2 and counts[other] == 1
     assert site_counts(conn, corpus["id"], "ex.com", exclude_source="https://ex.com/a")[H] == 1
+
+
+# --------------------------------------------------------------------------- extraction (ingest)
+def _pdf_bytes(pages: list[str]) -> bytes:
+    return make_pdf([lines(50, 750, p.split("\n")) for p in pages])
+
+
+PDF_PAGES = [f"HDR\nBody sentence number {i} of this short test document." for i in range(6)]
+
+
+def test_read_file_pdf_reports_removals():
+    r = ingest.read_file("a.pdf", _pdf_bytes(PDF_PAGES))
+    assert "HDR" not in r["text"] and r["removed"][0]["step"] == "page_furniture"
+    assert r["fmt"] == "pdf" and len(r["raw"]) == 6 and len(bytes.fromhex(r["line_hashes"])) % 8 == 0
+    assert r["removed"][0]["lines"] == ["HDR"] * 6 and "quality" in r
+
+
+def test_read_file_clean_false_keeps_todays_text():
+    # alignment and job analysis: running headers still go (as before cleaning existed), nothing is reported
+    r = ingest.read_file("a.pdf", _pdf_bytes(PDF_PAGES), clean=False)
+    assert "HDR" not in r["text"] and "Body sentence number 5" in r["text"]
+    assert r["removed"] == [] and r["line_hashes"] == ""
+
+
+def test_read_file_clean_false_keeps_noise():
+    r = ingest.read_file("a.txt", "Una línea de texto normal y corriente.\n* * *\nOtra más.".encode(), clean=False)
+    assert "* * *" in r["text"] and r["removed"] == [] and r["fmt"] == "text"
+
+
+def test_read_file_text_removes_noise():
+    r = ingest.read_file("a.txt", "Una línea de texto normal y corriente.\n* * *\nOtra línea más.".encode())
+    assert "* * *" not in r["text"] and r["removed"] == [{"step": "noise", "lines": ["* * *"]}]
+
+
+def test_import_cleaning_off_repairs_pdf_only(monkeypatch):
+    monkeypatch.setenv("IMPORT_CLEANING", "0")
+    r = ingest.read_file("a.pdf", _pdf_bytes(PDF_PAGES))
+    assert "HDR" in r["text"] and r["removed"] == []
+
+
+def test_spreadsheet_not_cleaned():
+    r = ingest.read_file("t.csv", "Texto,Notas\nEl contrato se firma mañana,---\nLas partes acuerdan,ok\n".encode(),
+                         columns="1,2")
+    assert "---" in r["text"].splitlines() and r["removed"] == [] and r["fmt"] == "text"
+    assert r["line_hashes"] == ""
+
+
+def test_all_chrome_page_kept_with_warning():
+    html = ("<html><body><article><p>Inicio</p><p>Noticias</p><p>2024 — 2025 — 2026</p>"
+            "<p>1.234.567 · 8.910.111 · 12/13/14 · 15 16 17</p></article></body></html>").encode()
+    r = ingest.read_file("a.html", html)
+    assert "Inicio" in r["text"] and "1.234.567" in r["text"] and r["removed"] == []
+    assert "Cleaning would have removed almost everything, so the text is kept as extracted: check it." \
+        in r["warnings"]
+
+
+def test_cleaning_summary():
+    removed = [{"step": "page_furniture", "lines": ["a"] * 10}, {"step": "edges", "lines": ["b"] * 4}]
+    assert ingest.cleaning_summary(removed) == \
+        "Cleaning removed 14 lines (repeated on every page, site menus and links)."
+    assert ingest.cleaning_summary([{"step": "noise", "lines": ["-"]}]) == \
+        "Cleaning removed 1 line (lines without words)."
+    assert ingest.cleaning_summary([]) is None
+
+
+def test_import_url_stores_hashes_and_reports_summary(client, serve):  # noqa: F811  (fixture)
+    body = "El contrato de arrendamiento se firma en la oficina de la empresa y todos los socios deben asistir."
+    urls = [f"https://site.example/n{i}" for i in range(3)]
+    for i, url in enumerate(urls):
+        serve[url.removeprefix("https://")] = (
+            f"<html><head><title>Noticia {i}</title></head><body><article><p>Síguenos en redes</p>"
+            f"<p>{body.replace('empresa', f'empresa {i}')}</p><p>{body.replace('socios', f'socios {i}')}</p>"
+            "</article></body></html>").encode()
+    cid = make_corpus(client, "es", "site-clean")
+    for url in urls:                                       # one at a time: each sees the ones before it
+        job_id = client.post(f"/api/corpora/{cid}/urls", json={"urls": [url]}).json()[0]["job_id"]
+        jobs = {j["id"]: j for j in wait_for_jobs(client, cid)}
+    with db.session() as conn:
+        rows = conn.execute("SELECT source, text, line_hashes FROM documents WHERE corpus_id=? ORDER BY id",
+                            (cid,)).fetchall()
+    assert [r["source"] for r in rows] == urls and all(r["line_hashes"] for r in rows)
+    blob = rows[0]["line_hashes"]
+    assert line_hash("Síguenos en redes") in {blob[i:i + 8] for i in range(0, len(blob), 8)}
+    assert "Síguenos" not in rows[2]["text"]
+    assert "Cleaning removed 1 line (repeated on other pages of this site)." in jobs[job_id]["result"]["warnings"]
+
+
+def test_ocr_pages_cleaned_unless_clean_false(monkeypatch):
+    import corpora.ocr as ocr
+    monkeypatch.setattr(ocr, "ocr_pdf", lambda data, lang, progress: ocr.OcrResult(PDF_PAGES, 95.0))
+    empty = make_pdf([[]])
+    assert "HDR" not in ingest.read_file("scan.pdf", empty)["text"]
+    assert "HDR" in ingest.read_file("scan.pdf", empty, clean=False)["text"]   # OCR text was never cleaned
