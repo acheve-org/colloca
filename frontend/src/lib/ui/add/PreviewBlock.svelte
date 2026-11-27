@@ -35,7 +35,7 @@
     {/if}
     {#if removedLines}
       <details class="removed">
-        <summary>{t('src.clean.summary', { n: fmt(removedLines) })}</summary>
+        <summary>{removedLines === 1 ? t('src.clean.summary1') : t('src.clean.summary', { n: fmt(removedLines) })}</summary>
         {#each groups as g (g.step)}
           <section class="group" aria-labelledby="{uid}-{g.step}">
             <div class="row">

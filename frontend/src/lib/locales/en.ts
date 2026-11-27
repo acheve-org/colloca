@@ -967,6 +967,7 @@ export const en: Messages = {
   'src.quality.fair': 'Text quality: fair',
   'src.quality.poor': 'Text quality: poor',
   'src.quality.score': '{n} / 100',
+  'src.clean.summary1': 'Removed while cleaning: 1 line',
   'src.clean.summary': 'Removed while cleaning: {n} lines',
   'src.clean.page_furniture': 'Repeated on every page',
   'src.clean.site_furniture': 'Repeated on other pages of this site',

@@ -248,6 +248,33 @@ describe('From the web: what cleaning removed', () => {
     await waitFor(() => expect(textArea().value).toBe('Inicio\none two three\nCompartir'));
   });
 
+  it('says "1 line" when one line was removed', async () => {
+    previewReply = { ...cleaned(), removed: [{ step: 'edges', lines: ['Inicio'] }] };
+    await fetchPage();
+    expect(screen.getByText('Removed while cleaning: 1 line')).toBeInTheDocument();
+  });
+
+  it('put back shows the kept-as-extracted note only when the latest clean returned it', async () => {
+    const guard = 'Cleaning would have removed almost everything, so the text is kept as extracted: check it.';
+    previewReply = { ...cleaned(), warnings: ['Fetched over a slow link.', guard] };
+    await fetchPage();
+    expect(screen.getByText(guard)).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole('button', { name: 'Put back' }));
+    await waitFor(() => expect(cleanCalls()).toHaveLength(1));
+    await waitFor(() => expect(screen.queryByText(guard)).toBeNull());
+    expect(screen.getByText('Fetched over a slow link.')).toBeInTheDocument();
+  });
+
+  it('put back keeps the kept-as-extracted note when the new clean returns it again', async () => {
+    const guard = 'Cleaning would have removed almost everything, so the text is kept as extracted: check it.';
+    previewReply = { ...cleaned(), warnings: [guard] };
+    cleanReply = { text: 'x', removed: [], repaired: {}, warnings: [guard] };
+    await fetchPage();
+    await fireEvent.click(screen.getByRole('button', { name: 'Put back' }));
+    await waitFor(() => expect(textArea().value).toBe('x'));
+    expect(screen.getAllByText(guard)).toHaveLength(1);
+  });
+
   it('sends line hashes when adding the preview', async () => {
     previewReply = cleaned();
     await fetchPage();

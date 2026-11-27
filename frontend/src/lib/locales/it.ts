@@ -966,6 +966,7 @@ export const it: Messages = {
   'src.quality.fair': 'Qualità del testo: discreta',
   'src.quality.poor': 'Qualità del testo: scarsa',
   'src.quality.score': '{n} / 100',
+  'src.clean.summary1': 'Rimosso durante la pulizia: 1 riga',
   'src.clean.summary': 'Rimosso durante la pulizia: {n} righe',
   'src.clean.page_furniture': 'Ripetuto in ogni pagina',
   'src.clean.site_furniture': 'Ripetuto in altre pagine di questo sito',

@@ -143,7 +143,7 @@ describe('Upload files', () => {
     await choose(new File(['x'], 'two.pdf'));
     await fireEvent.click(screen.getByRole('button', { name: 'Preview file' }));
     expect(await screen.findByText('Repeated on every page')).toBeInTheDocument();
-    expect(screen.getByText('Removed while cleaning: 1 lines')).toBeInTheDocument();
+    expect(screen.getByText('Removed while cleaning: 1 line')).toBeInTheDocument();
     await fireEvent.click(screen.getByRole('button', { name: 'Put back' }));
     await waitFor(() => expect(calls.filter((c) => c.path === '/api/clean')).toHaveLength(1));
     expect(calls.find((c) => c.path === '/api/clean')!.body).toEqual({
