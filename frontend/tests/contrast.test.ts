@@ -128,6 +128,15 @@ describe('base.css heading scale and controls', () => {
     expect(baseCss).toMatch(/button,\s*input,\s*select,\s*textarea\s*\{[^}]*background:\s*var\(--panel\)/);
     expect(baseCss).toMatch(/^button\s*\{[^}]*background:\s*var\(--panel\)/m);
   });
+  it('unticked boxes are outlined in --muted, which stands out on every row background (3:1 for UI parts)', () => {
+    expect(baseCss).toMatch(/input\[type='checkbox'\]\s*\{[^}]*appearance:\s*none;[^}]*border:\s*[\d.]+px solid var\(--muted\)/);
+    for (const t of [light, dark, { ...light, ...mediaDark }]) {
+      for (const bg of ['--panel', '--surface', '--accent-soft']) {
+        expect(contrast(t['--muted'], t[bg])).toBeGreaterThanOrEqual(3);
+      }
+      expect(contrast(t['--accent-fg'], t['--accent'])).toBeGreaterThanOrEqual(3);
+    }
+  });
 });
 
 describe.each([
