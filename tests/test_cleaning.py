@@ -106,6 +106,18 @@ def test_edges_removes_a_long_cookie_notice():
     assert notice not in c.text and c.removed[0].lines == [notice]
 
 
+def test_edges_removes_copyright_glued_to_the_year():
+    footer = "©2025 Regional Heritage Council, registered charity no. 1234567, 10 High Street"
+    c = clean(["\n".join([BODY_EN] * 4 + [footer])], fmt="html", lang="en")
+    assert footer not in c.text and c.removed[0].lines == [footer]
+
+
+@pytest.mark.parametrize("lang,sentence", [("en", "By then it was over."), ("es", "Por fin llegó la primavera."),
+                                           ("it", "Di notte pioveva.")])
+def test_edges_keeps_short_sentences_that_look_like_bylines(lang, sentence):
+    assert clean(["\n".join([BODY_EN] * 3 + [sentence])], fmt="html", lang=lang).text.endswith(sentence)
+
+
 def test_edges_only_for_html():
     assert clean(["Inicio\n" + BODY_ES], fmt="text", lang="es").text.startswith("Inicio")
 

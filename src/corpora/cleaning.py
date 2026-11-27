@@ -61,7 +61,7 @@ DATE_LINE = re.compile(
     rf"|({_MONTHS})\s+\d{{1,2}},?\s+\d{{4}}"                                # March 12, 2025
     rf"|\d{{1,2}}[/.-]\d{{1,2}}[/.-]\d{{2,4}}|\d{{4}}-\d{{2}}-\d{{2}})"          # 12/03/2025, 2025-03-12
     rf"([\s,·|-]+(a las\s+|alle\s+|at\s+)?\d{{1,2}}[:.]\d{{2}}(\s*h)?)?\s*$")  # time
-BYLINE = re.compile(r"^(por|di|by)\s+(\w[\w.'-]*\s*){1,4}$", re.IGNORECASE)
+BYLINE = re.compile(r"^(por|di|by)\s+(\w[\w.'-]*\s*){1,4}(?<![.!?…])$", re.IGNORECASE)  # never a sentence
 
 
 @dataclass
@@ -147,7 +147,9 @@ def _site_furniture(pages: Pages, site_counts: Counter[bytes]) -> tuple[Pages, l
 
 def _phrase_pattern(table: dict[str, list[str]], lang: str | None) -> re.Pattern:
     phrases = table["shared"] + table.get(lang or "", [])
-    return re.compile("|".join(rf"(?<!\w){re.escape(p)}(?!\w)" for p in phrases), re.IGNORECASE)
+    def word(p: str) -> str:     # whole words; a symbol such as "©" may touch the next word ("©2025")
+        return (r"(?<!\w)" if p[0].isalnum() else "") + re.escape(p) + (r"(?!\w)" if p[-1].isalnum() else "")
+    return re.compile("|".join(word(p) for p in phrases), re.IGNORECASE)
 
 
 def _is_chrome(ln: str, phrases: re.Pattern, strong: re.Pattern) -> bool:
