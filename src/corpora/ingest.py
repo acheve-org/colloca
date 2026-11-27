@@ -9,6 +9,7 @@ import threading
 import time
 import unicodedata
 from collections import Counter
+from collections.abc import Collection
 from urllib.parse import urljoin, urlparse, urlsplit, urlunsplit
 
 import httpx
@@ -401,12 +402,12 @@ _STEP_SUMMARY = {"page_furniture": "repeated on every page", "site_furniture": "
 
 
 def _cleaned(pages: list[str], fmt: str, lang: str | None, notes: list[str],
-             site_counts: Counter[bytes] | None = None) -> dict:
-    """The text of a document cleaned (cleaning.clean) and what was removed and repaired, with the raw pages for
-    cleaning it again. If cleaning leaves next to nothing of a longer text, the text is kept as extracted (PDF line
-    breaks still repaired) and a warning is added to `notes`."""
+             site_counts: Counter[bytes] | None = None, skip: Collection[str] = ()) -> dict:
+    """The text of a document cleaned (cleaning.clean, without the steps in `skip`) and what was removed and
+    repaired, with the raw pages for cleaning it again. If cleaning leaves next to nothing of a longer text, the
+    text is kept as extracted (PDF line breaks still repaired) and a warning is added to `notes`."""
     from . import cleaning
-    c = cleaning.clean(pages, fmt=fmt, lang=lang, site_counts=site_counts)
+    c = cleaning.clean(pages, fmt=fmt, lang=lang, site_counts=site_counts, skip=skip)
     if c.removed and len(c.text) < MIN_CLEANED_CHARS:
         kept = cleaning.clean(pages, fmt=fmt, skip=cleaning.STEPS)
         if len(kept.text) > len(c.text):
@@ -414,6 +415,15 @@ def _cleaned(pages: list[str], fmt: str, lang: str | None, notes: list[str],
             notes.append(KEPT_AS_EXTRACTED)
     return {"text": c.text, "removed": [{"step": r.step, "lines": r.lines} for r in c.removed],
             "repaired": c.repaired, "raw": pages, "fmt": fmt, "line_hashes": c.line_hashes.hex()}
+
+
+def reclean(raw: list[str], fmt: str, lang: str | None = None, site_counts: Counter[bytes] | None = None,
+            skip: Collection[str] = ()) -> dict:
+    """{"text", "removed", "repaired", "warnings"} of the raw pages of a preview cleaned again without the steps
+    in `skip`: the same cleaning, and the same keep-as-extracted guard, as the import."""
+    notes: list[str] = []
+    res = _cleaned(raw, fmt, lang, notes, site_counts, skip)
+    return {"text": res["text"], "removed": res["removed"], "repaired": res["repaired"], "warnings": notes}
 
 
 def _uncleaned(text: str) -> dict:
