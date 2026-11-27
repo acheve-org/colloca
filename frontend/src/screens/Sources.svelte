@@ -712,10 +712,6 @@
   .table :global(.dt) {
     border-width: 0;
   }
-  /* muted cell text (author, date) stays legible on the accent background of the selected row */
-  .table :global(.body.selected .muted) {
-    color: var(--accent-fg);
-  }
   .title {
     display: flex;
     flex-direction: column;
