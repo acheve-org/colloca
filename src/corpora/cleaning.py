@@ -267,9 +267,10 @@ def clean(pages: list[str], *, fmt: str, lang: str | None = None, site_counts: C
     hashes = line_hashes(pages)
     lines: Pages = [[s for ln in p.splitlines() if (s := ln.strip())] for p in pages]
     run = set(STEPS) - set(skip) if enabled() else set()
+    counts = site_counts or Counter()
     steps = [
         ("page_furniture", fmt == "pdf", _page_furniture),
-        ("site_furniture", fmt == "html" and site_counts is not None, lambda ps: _site_furniture(ps, site_counts)),
+        ("site_furniture", fmt == "html" and site_counts is not None, lambda ps: _site_furniture(ps, counts)),
         ("edges", fmt == "html", lambda ps: _edges_pages(ps, lang)),
         ("noise", True, _noise),
     ]
