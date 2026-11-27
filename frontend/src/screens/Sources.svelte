@@ -6,6 +6,7 @@
 
 <script lang="ts">
   import { onMount, tick, untrack } from 'svelte';
+  import { SvelteSet } from 'svelte/reactivity';
   import { del, get, post } from '../lib/api';
   import { act, still, watch, work } from '../lib/addDocuments.svelte';
   import { CORPUS_CHANGED, corpusStore } from '../lib/corpus.svelte';
@@ -15,6 +16,7 @@
   import { messages } from '../lib/messages.svelte';
   import { viewport } from '../lib/viewport.svelte';
   import type { Doc, Facets, Job, NearDupMatch, NearDupReport } from '../lib/types';
+  import BulkEditDocumentsDialog from './BulkEditDocumentsDialog.svelte';
   import EditDocumentDialog from './EditDocumentDialog.svelte';
   import TmxExport from './TmxExport.svelte';
   import ActionMenu from '../lib/ui/ActionMenu.svelte';
@@ -22,7 +24,7 @@
   import Button from '../lib/ui/Button.svelte';
   import CorpusSizeGauge from '../lib/ui/CorpusSizeGauge.svelte';
   import DataTable from '../lib/ui/DataTable.svelte';
-  import { cellValue, type Column } from '../lib/ui/DataTable.types';
+  import { cellValue, rowMatchesFilter, type Column } from '../lib/ui/DataTable.types';
   import Dialog from '../lib/ui/Dialog.svelte';
   import NoCorpus from '../lib/ui/NoCorpus.svelte';
   import ReadyHint from '../lib/ui/ReadyHint.svelte';
@@ -54,6 +56,11 @@
   let editing = $state.raw<Doc | null>(null);
   let delOpen = $state(false);
   let toDelete = $state.raw<Doc | null>(null);
+
+  // Documents ticked for the bulk actions (ids), apart from the highlighted row that the side panel shows.
+  const checked = new SvelteSet<number>();
+  let bulkEditOpen = $state(false);
+  let bulkDelOpen = $state(false);
 
   // Near-duplicates: the decision on a held import, and the report on the whole corpus.
   let dupOpen = $state(false);
@@ -123,6 +130,7 @@
   }
 
   const columns: Column<Doc>[] = [
+    { key: 'sel', label: '', width: '2.5rem', sortable: false, value: () => '' },
     { key: 'title', label: t('src.col.title'), width: 'minmax(12rem, 2fr)', value: (d) => `${d.title} ${d.author}` },
     { key: 'text_type', label: t('src.col.type'), width: '8rem' },
     { key: 'doc_date', label: t('src.col.date'), width: '6.5rem' },
@@ -130,6 +138,49 @@
     { key: 'n_tokens', label: t('src.col.words'), num: true, width: '6rem' },
     { key: 'checks', label: t('src.col.checks'), width: '10rem', value: (d) => checks(d).map((c) => c.label).join(' ') },
   ];
+
+  // ---------------------------------------------------------------- bulk selection
+  /** The documents the filter shows: "select all" ticks only these. */
+  const shownDocs = $derived(docs.filter((d) => rowMatchesFilter(d, columns, filter)));
+  const allShownChecked = $derived(shownDocs.length > 0 && shownDocs.every((d) => checked.has(d.id)));
+  const someShownChecked = $derived(shownDocs.some((d) => checked.has(d.id)));
+  const checkedIds = $derived([...checked]);
+
+  function toggleRow(id: number, on: boolean): void {
+    if (on) checked.add(id);
+    else checked.delete(id);
+  }
+
+  function toggleAll(on: boolean): void {
+    for (const d of shownDocs) toggleRow(d.id, on);
+  }
+
+  /** Drop ticks on documents that are no longer listed. */
+  function pruneChecked(rows: Doc[]): void {
+    const ids = new Set(rows.map((r) => r.id));
+    for (const id of [...checked]) if (!ids.has(id)) checked.delete(id);
+  }
+
+  async function confirmBulkDelete(): Promise<void> {
+    bulkDelOpen = false;
+    const ids = [...checked];
+    if (!ids.length) return;
+    await act('delete', async (id) => {
+      seq++; // a list response in flight predates the delete
+      loading = false;
+      const res = await post<{ deleted: number }>('/api/documents/delete', { ids });
+      if (!still(id)) return;
+      const gone = new Set(ids);
+      docs = docs.filter((x) => !gone.has(x.id));
+      checked.clear();
+      if (selected && gone.has(selected.id)) selected = null;
+      messages.say(t('src.bulkRemoved', { n: res.deleted }), 'ok');
+      loadFacets();
+      corpusStore.reload().catch((err) => messages.say(errMsg(err), 'err'));
+      await tick();
+      tableEl?.querySelector<HTMLElement>('[role="grid"]')?.focus();
+    });
+  }
 
   // ---------------------------------------------------------------- loading
   async function loadDocs(): Promise<void> {
@@ -141,6 +192,7 @@
       const rows = await get<Doc[]>(`/api/corpora/${id}/documents`);
       if (n !== seq) return;
       docs = rows;
+      pruneChecked(rows);
       loadedOnce = true;
       if (selected) selected = rows.find((r) => r.id === selected!.id) ?? null;
     } catch (err) {
@@ -182,6 +234,7 @@
     loading = false;
     docs = [];
     selected = null;
+    checked.clear();
     filter = '';
     loadedOnce = false;
     facets = emptyFacets();
@@ -219,10 +272,16 @@
     editOpen = true;
   }
 
-  function closeOnEscape(e: KeyboardEvent): void {
-    if (e.key !== 'Escape' || selected === null) return;
-    e.preventDefault();
-    selected = null;
+  /** In the documents grid: Esc closes the panel, Space ticks or unticks the highlighted document. */
+  function onTableKey(e: KeyboardEvent): void {
+    if (selected === null) return;
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      selected = null;
+    } else if (e.key === ' ' && (e.target as HTMLElement).getAttribute('role') === 'grid') {
+      e.preventDefault();
+      toggleRow(selected.id, !checked.has(selected.id));
+    }
   }
 
   function askDelete(d: Doc): void {
@@ -240,6 +299,7 @@
       await del(`/api/documents/${d.id}`);
       if (!still(id)) return;
       docs = docs.filter((x) => x.id !== d.id);
+      checked.delete(d.id);
       if (selected?.id === d.id) selected = null;
       messages.say(t('src.docRemoved'), 'ok');
       loadFacets();
@@ -269,7 +329,16 @@
 </script>
 
 {#snippet cell(d: Doc, col: Column<Doc>)}
-  {#if col.key === 'title'}
+  {#if col.key === 'sel'}
+    <input
+      type="checkbox"
+      checked={checked.has(d.id)}
+      aria-label={t('src.selectRow', { title: d.title })}
+      onclick={(e) => e.stopPropagation()}
+      ondblclick={(e) => e.stopPropagation()}
+      onchange={(e) => toggleRow(d.id, e.currentTarget.checked)}
+    />
+  {:else if col.key === 'title'}
     <span class="title" title={d.source}>
       <span>{d.title}</span>
       {#if d.author}<span class="muted">{d.author}</span>{/if}
@@ -328,6 +397,17 @@
     <!-- One line (wrapping when narrow): count, size gauge, filter, then the actions on the right. -->
     <div class="toolbar">
       <h2 class="sr-only">{t('src.documents')}</h2>
+      {#if docs.length}
+        <input
+          type="checkbox"
+          checked={allShownChecked}
+          indeterminate={someShownChecked && !allShownChecked}
+          disabled={!shownDocs.length}
+          aria-label={t('src.selectAll')}
+          title={t('src.selectAll')}
+          onchange={(e) => toggleAll(e.currentTarget.checked)}
+        />
+      {/if}
       {#if loadedOnce}<span class="count">{count}</span>{/if}
       <CorpusSizeGauge {docs} />
       {#if docs.length}
@@ -347,6 +427,17 @@
       </span>
     </div>
 
+    {#if checked.size}
+      <div class="bulk" role="group" aria-label={t('src.bulk')}>
+        <b aria-live="polite">{t('src.selected', { n: checked.size })}</b>
+        <Button disabled={work.busy !== null} onclick={() => (bulkEditOpen = true)}>{t('src.bulkEdit')}</Button>
+        <Button variant="danger" disabled={work.busy !== null} onclick={() => (bulkDelOpen = true)}>
+          {t('src.bulkRemove')}
+        </Button>
+        <Button onclick={() => checked.clear()}>{t('src.bulkClear')}</Button>
+      </div>
+    {/if}
+
     {#if jobLog.length}
       <ul class="jobs" aria-live="polite" aria-label={t('jobs.label')}>
         {#each jobLog as j (j.id)}{@render jobRow(j)}{/each}
@@ -355,8 +446,8 @@
 
     <!-- The table scrolls on its own; the selected document's panel sits beside it (over it when narrower). -->
     <div class="split">
-      <!-- svelte-ignore a11y_no_static_element_interactions (Esc in the documents grid closes the panel) -->
-      <div class="table" bind:this={tableEl} onkeydown={closeOnEscape}>
+      <!-- svelte-ignore a11y_no_static_element_interactions (Esc in the documents grid closes the panel, Space ticks) -->
+      <div class="table" bind:this={tableEl} onkeydown={onTableKey}>
         {#if loadedOnce && !docs.length && !loading}
           <ReadyHint title={t('src.empty')} hint={t('src.emptyHint')} />
           <MethodTiles />
@@ -420,6 +511,15 @@
 </div>
 
 <EditDocumentDialog bind:open={editOpen} doc={editing} {facets} onsaved={refresh} />
+<BulkEditDocumentsDialog bind:open={bulkEditOpen} ids={checkedIds} {facets} onsaved={refresh} />
+
+<Dialog bind:open={bulkDelOpen} title={t('src.bulkConfirmTitle')}>
+  <p class="confirm">{t('src.bulkConfirmBody', { n: checked.size })}</p>
+  {#snippet footer()}
+    <Button onclick={() => (bulkDelOpen = false)}>{t('common.cancel')}</Button>
+    <Button variant="danger" onclick={confirmBulkDelete}>{t('src.bulkRemove')}</Button>
+  {/snippet}
+</Dialog>
 
 <Dialog bind:open={dupOpen} title={t('dup.title')} wide>
   <form
@@ -573,6 +673,16 @@
   }
   .count {
     font-weight: 600;
+  }
+  .bulk {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--s-2);
+    padding: var(--s-1) var(--s-3);
+    font-size: var(--fs-small);
+    background: var(--accent-soft);
+    border-bottom: 1px solid var(--line);
   }
   .filter {
     width: 14rem;

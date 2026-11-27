@@ -61,7 +61,7 @@ Screen details: [analysis.md](analysis.md).
   | Date | `2024`, `2024-05`, `2024-05-17` |
   | Author | free |
 
-  Set before adding (*About these documents* on the *Add documents* page; applies to URL, upload, pasted text and translation-memory imports, not to *Align two documents*) or later with *Edit details* on *Sources*.
+  Set before adding (*About these documents* on the *Add documents* page; applies to URL, upload, pasted text and translation-memory imports, not to *Align two documents*) or later with *Edit details* on *Sources* (one document, or several at once: tick them and use *Edit details…* in the bar that appears).
 - **Corpus size**: the pill after the document count on *Sources* shows the total words of the corpus (all its documents) and a band. Guidance only: nothing is blocked.
 
   | Band | Total words | Fair to use |

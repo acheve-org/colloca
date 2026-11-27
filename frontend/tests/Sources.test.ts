@@ -86,6 +86,8 @@ beforeEach(() => {
     }
     if (p === '/api/corpora/1/aligned-partners') return res(200, partners);
     if (p === '/api/corpora/1/reannotate') return res(202, { job_id: 12 });
+    if (p === '/api/documents' && method === 'PATCH') return res(200, { updated: (body as { ids: number[] }).ids.length });
+    if (p === '/api/documents/delete') return res(200, { deleted: (body as { ids: number[] }).ids.length });
     if (/^\/api\/documents\/\d+$/.test(p)) return method === 'DELETE' ? res(204, null) : res(200, { ok: true });
     if (p === '/api/corpora/1' && method === 'PATCH') return res(200, { ok: true });
     if (p === '/api/corpora/2/documents') return res(200, []);
@@ -471,6 +473,64 @@ describe('Sources', () => {
       expect(calls.find((c) => c.path === '/api/corpora/1/near-duplicates')?.params.get('threshold')).toBe('0.85');
       await fireEvent.click(screen.getByRole('button', { name: 'Remove “Doc 2”' }));
       await waitFor(() => expect(calls.some((c) => c.method === 'DELETE' && c.path === '/api/documents/2')).toBe(true));
+    });
+  });
+
+  describe('bulk actions', () => {
+    const tick = (title: string) => screen.getByRole('checkbox', { name: `Select ${title}` });
+
+    it('ticking documents shows the bulk bar; select all ticks only the filtered rows', async () => {
+      docs = { status: 200, body: [doc(1), doc(2, { title: 'Manual' }), doc(3)] };
+      render(Sources);
+      await waitFor(() => expect(bodyRows().length).toBe(3));
+      expect(screen.queryByRole('group', { name: 'Actions on the selected documents' })).toBeNull();
+      await fireEvent.click(tick('Doc 1'));
+      expect(screen.getByText('1 selected')).toBeInTheDocument();
+      await fireEvent.input(screen.getByRole('searchbox'), { target: { value: 'Doc' } });
+      await fireEvent.click(screen.getByRole('checkbox', { name: 'Select all documents shown' }));
+      expect(screen.getByText('2 selected')).toBeInTheDocument();
+      await fireEvent.click(screen.getByRole('button', { name: 'Clear selection' }));
+      expect(screen.queryByRole('group', { name: 'Actions on the selected documents' })).toBeNull();
+    });
+
+    it('ticking a box does not open the side panel', async () => {
+      await ready();
+      await fireEvent.click(tick('Doc 2'));
+      expect(screen.queryByRole('link', { name: 'Read' })).toBeNull();
+    });
+
+    it('removes the selected documents after confirming', async () => {
+      await ready();
+      await fireEvent.click(tick('Doc 1'));
+      await fireEvent.click(tick('Doc 2'));
+      await fireEvent.click(screen.getByRole('button', { name: 'Remove selected' }));
+      expect(screen.getByText(/Move 2 documents to the Trash/)).toBeInTheDocument();
+      const dialog = screen.getByRole('dialog');
+      await fireEvent.click(within(dialog).getByRole('button', { name: 'Remove selected' }));
+      await waitFor(() => expect(bodyRows().length).toBe(0));
+      const call = calls.find((c) => c.path === '/api/documents/delete');
+      expect(call?.body).toEqual({ ids: [1, 2] });
+      expect(messages.current?.text).toBe('2 documents removed.');
+    });
+
+    it('edits the details of the selected documents, sending only what was asked for', async () => {
+      await ready();
+      await fireEvent.click(tick('Doc 1'));
+      await fireEvent.click(tick('Doc 2'));
+      await fireEvent.click(screen.getByRole('button', { name: 'Edit details…' }));
+      const dialog = screen.getByRole('dialog', { name: 'Edit 2 documents' });
+      const apply = within(dialog).getByRole('button', { name: 'Apply to 2' });
+      expect(apply).toBeDisabled();
+      await fireEvent.input(within(dialog).getByLabelText('Add tags'), { target: { value: 'nuevo' } });
+      const author = within(dialog).getByRole('textbox', { name: 'Author' });
+      expect(author).toBeDisabled();
+      await fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Set Author' }));
+      await fireEvent.input(author, { target: { value: 'Ana' } });
+      await fireEvent.click(apply);
+      await waitFor(() => expect(calls.some((c) => c.path === '/api/documents' && c.method === 'PATCH')).toBe(true));
+      const call = calls.find((c) => c.path === '/api/documents' && c.method === 'PATCH')!;
+      expect(call.body).toEqual({ ids: [1, 2], add_tags: 'nuevo', author: 'Ana' });
+      await waitFor(() => expect(messages.current?.text).toBe('2 documents updated.'));
     });
   });
 });
