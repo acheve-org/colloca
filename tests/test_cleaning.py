@@ -1,8 +1,16 @@
 """Import cleaning (cleaning.py): page furniture, noise, repairs and line hashes."""
 
+from pathlib import Path
+
 import pytest
 
 from corpora.cleaning import clean, line_hash, line_hashes
+
+FIXTURES = Path(__file__).parent / "fixtures" / "web"
+BODY_ES = ("El pleno aprobó ayer el nuevo plan de movilidad para toda la ciudad. Las obras empezarán en primavera "
+           "y durarán dos años. Los vecinos podrán presentar alegaciones durante un mes.")
+BODY_EN = ("The council announced new grants for community archives today. The awards will fund cataloguing and "
+           "volunteer training. Applications for the next round open in the autumn.")
 
 
 def _pdf(pages):
@@ -65,3 +73,53 @@ def test_line_hashes_sorted_unique_and_short_lines_only():
 def test_sentence_in_header_zone_differing_only_in_digits_is_kept():
     pages = [f"Chapter {i} opens on a quiet morning.\nMore body text here.\nAnd more." for i in range(1, 7)]
     assert all(f"Chapter {i} opens on a quiet morning." in _pdf(pages).text for i in range(1, 7))
+
+
+def test_edges_trims_menu_and_footer():
+    lines = ["Inicio", "Noticias", "Compartir en Facebook", "12 de marzo de 2025",
+             BODY_ES,
+             "Noticias relacionadas", "© 2025 El Diario. Todos los derechos reservados."]
+    c = clean(["\n".join(lines)], fmt="html", lang="es")
+    assert c.text == BODY_ES and [r.step for r in c.removed] == ["edges"]
+
+
+def test_edges_never_removes_more_than_30_percent():
+    poem = "\n".join(["Verde que te quiero verde"] * 8 + [BODY_ES])
+    assert clean([poem], fmt="html", lang="es").text.startswith("Verde")
+
+
+def test_edges_runs_without_a_phrase_list_for_the_language():
+    c = clean(["Home\nMenu\n" + BODY_EN], fmt="html", lang="pt")
+    assert c.text == BODY_EN
+
+
+def test_edges_keeps_a_long_sentence_with_a_chrome_phrase():
+    last = "The museum will share its digitised photographs with every school in the region."
+    assert clean([BODY_EN + "\n" + last], fmt="html", lang="en").text.endswith(last)
+
+
+def test_edges_only_for_html():
+    assert clean(["Inicio\n" + BODY_ES], fmt="text", lang="es").text.startswith("Inicio")
+
+
+def _extract(data: bytes) -> str:
+    import trafilatura  # switch to ingest.extract_html_raw in Task 5
+    return trafilatura.extract(data, include_comments=False, include_tables=True, include_links=False,
+                               deduplicate=True)
+
+
+FIXTURE_CASES = [
+    ("es-news.html", "se ejecutarán por fases para reducir las molestias a los vecinos.",
+     ["Movilidad\n", "Leer más: la nueva línea de autobús nocturno"]),
+    ("it-blog.html", "non abbiate paura di sporcarvi le mani.",
+     ["Leggi anche", "Articoli correlati", "Iscriviti alla newsletter"]),
+    ("en-institution.html", "published on the funding pages of this website.",
+     ["Related links", "Tags: archives"]),
+]
+
+
+@pytest.mark.parametrize("name,kept,gone", FIXTURE_CASES)
+def test_real_pages(name, kept, gone):
+    text = _extract((FIXTURES / name).read_bytes())
+    c = clean([text], fmt="html", lang=name[:2])
+    assert kept in c.text and not any(g in c.text for g in gone)

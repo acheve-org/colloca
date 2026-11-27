@@ -23,6 +23,35 @@ HYPHENATED = re.compile(r"(\w)-\n(\w)")
 # a line that doesn't end a sentence continues on the next one (never a table row)
 SOFT_WRAP = re.compile(rf"(?<![.!?:;»”\"{pdftext.ROW_END}])\n(?=[a-zà-ÿ0-9(¿¡«“\"])")
 
+# Web page chrome (menus, share buttons, related links, footers) found at the start or end of extracted text.
+# "shared" is checked for every language; phrases match whole words, case-insensitively.
+CHROME_PHRASES: dict[str, list[str]] = {
+    "shared": ["©", "cookies", "facebook", "twitter", "whatsapp", "instagram", "linkedin", "telegram", "newsletter",
+               "copyright"],
+    "es": ["compartir", "comparte", "síguenos", "suscríbete", "suscripción", "relacionados", "relacionadas",
+           "leer más", "lee también", "etiquetas", "todos los derechos reservados", "aviso legal",
+           "política de privacidad"],
+    "it": ["condividi", "seguici", "iscriviti", "abbonati", "correlati", "correlate", "leggi anche", "leggi di più",
+           "tag", "tutti i diritti riservati", "privacy policy"],
+    "en": ["share", "follow us", "subscribe", "related", "read more", "tags", "all rights reserved",
+           "privacy policy"],
+}
+EDGE_CHROME_LEN = 40       # a short line without sentence-ending punctuation is chrome at the edges
+EDGE_BODY_LEN = 60         # a line this long is body text
+EDGE_MAX_SHARE = 0.3       # an edge run longer than this share of the page's characters is left alone
+_MONTHS = ("enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre|"
+           "gennaio|febbraio|aprile|maggio|giugno|luglio|settembre|ottobre|dicembre|"
+           "january|february|march|april|may|june|july|august|september|october|november|december|"
+           r"[a-z]{3}\.?")
+DATE_LINE = re.compile(
+    rf"(?i)^((publicado|actualizado|pubblicato|aggiornato|published|updated)( el| il| on)?:?\s*)?"
+    rf"([a-zà-ú]+,?\s+)?"                                                   # weekday
+    rf"(\d{{1,2}}(\s+de)?\s+({_MONTHS})(\s+de)?,?\s+\d{{4}}"               # 12 de marzo de 2025, 3 febbraio 2025
+    rf"|({_MONTHS})\s+\d{{1,2}},?\s+\d{{4}}"                                # March 12, 2025
+    rf"|\d{{1,2}}[/.-]\d{{1,2}}[/.-]\d{{2,4}}|\d{{4}}-\d{{2}}-\d{{2}})"          # 12/03/2025, 2025-03-12
+    rf"([\s,·|-]+(a las\s+|alle\s+|at\s+)?\d{{1,2}}[:.]\d{{2}}(\s*h)?)?\s*$")  # time
+BYLINE = re.compile(r"^(por|di|by)\s+(\w[\w.'-]*\s*){1,4}$", re.IGNORECASE)
+
 
 @dataclass
 class Removal:
@@ -105,8 +134,46 @@ def _site_furniture(pages: Pages, site_counts: Counter[bytes]) -> tuple[Pages, l
     return pages, []        # Task 4
 
 
-def _edges(pages: Pages) -> tuple[Pages, list[str]]:
-    return pages, []        # Task 2
+def _phrase_pattern(lang: str | None) -> re.Pattern:
+    phrases = CHROME_PHRASES["shared"] + CHROME_PHRASES.get(lang or "", [])
+    return re.compile("|".join(rf"(?<!\w){re.escape(p)}(?!\w)" for p in phrases), re.IGNORECASE)
+
+
+def _is_chrome(ln: str, phrases: re.Pattern) -> bool:
+    """A line of page chrome: a chrome phrase, a date or byline alone, or a short line that is no sentence. A line
+    of EDGE_BODY_LEN characters or more is body text; a shorter sentence is chrome only if it has a chrome phrase
+    ("© 2025 El Diario. Todos los derechos reservados.")."""
+    if len(ln) >= EDGE_BODY_LEN:
+        return False
+    return bool(phrases.search(ln) or DATE_LINE.match(ln) or BYLINE.match(ln)
+                or (len(ln) < EDGE_CHROME_LEN and not ln.endswith((".", "!", "?", "…"))))
+
+
+def _edges(lines: list[str], lang: str | None) -> tuple[list[str], list[str]]:
+    """Web page chrome at the start and end of a page: from each edge, consecutive chrome lines are dropped until
+    the first line that is not chrome. An edge whose run holds more than EDGE_MAX_SHARE of the page's characters
+    is left untouched."""
+    phrases = _phrase_pattern(lang)
+    total = sum(len(ln) for ln in lines)
+
+    def run(seq: list[str]) -> int:
+        n = 0
+        while n < len(seq) and _is_chrome(seq[n], phrases):
+            n += 1
+        return n if sum(len(ln) for ln in seq[:n]) <= EDGE_MAX_SHARE * total else 0
+
+    start = run(lines)
+    end = len(lines) - run(lines[start:][::-1])
+    return lines[start:end], lines[:start] + lines[end:]
+
+
+def _edges_pages(pages: Pages, lang: str | None) -> tuple[Pages, list[str]]:
+    kept, removed = [], []
+    for p in pages:
+        k, r = _edges(p, lang)
+        kept.append(k)
+        removed += r
+    return kept, removed
 
 
 def _is_noise(ln: str) -> bool:
@@ -128,8 +195,8 @@ def _repair(text: str) -> tuple[str, dict[str, int]]:
 # --------------------------------------------------------------------------- entry point
 def clean(pages: list[str], *, fmt: str, lang: str | None = None, site_counts: Counter[bytes] | None = None,
           skip: Collection[str] = ()) -> Cleaned:
-    """Clean a document given as pages (`fmt` is "pdf", "html" or "text"). `lang` is reserved for language-aware
-    steps; `site_counts` maps line hashes to the number of documents of the same site they appear on."""
+    """Clean a document given as pages (`fmt` is "pdf", "html" or "text"). `lang` picks the edges step's
+    phrase list; `site_counts` maps line hashes to the number of documents of the same site they appear on."""
     from .ingest import normalize_text
 
     hashes = line_hashes(pages)
@@ -138,7 +205,7 @@ def clean(pages: list[str], *, fmt: str, lang: str | None = None, site_counts: C
     steps = [
         ("page_furniture", fmt == "pdf", _page_furniture),
         ("site_furniture", fmt == "html" and site_counts is not None, lambda ps: _site_furniture(ps, site_counts)),
-        ("edges", fmt == "html", _edges),
+        ("edges", fmt == "html", lambda ps: _edges_pages(ps, lang)),
         ("noise", True, _noise),
     ]
     removed: list[Removal] = []
