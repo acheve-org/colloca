@@ -29,7 +29,7 @@ SOFT_WRAP = re.compile(rf"(?<![.!?:;»”\"{pdftext.ROW_END}])\n(?=[a-zà-ÿ0-9(
 # Web page chrome (menus, share buttons, related links, footers) found at the start or end of extracted text.
 # "shared" is checked for every language; phrases match whole words, case-insensitively.
 CHROME_PHRASES: dict[str, list[str]] = {
-    "shared": ["©", "cookies", "facebook", "twitter", "whatsapp", "instagram", "linkedin", "telegram", "newsletter",
+    "shared": ["©", "facebook", "twitter", "whatsapp", "instagram", "linkedin", "telegram", "newsletter",
                "copyright"],
     "es": ["compartir", "comparte", "síguenos", "suscríbete", "suscripción", "relacionados", "relacionadas",
            "leer más", "lee también", "etiquetas", "todos los derechos reservados", "aviso legal",
@@ -40,17 +40,23 @@ CHROME_PHRASES: dict[str, list[str]] = {
            "privacy policy"],
 }
 # Phrases that make a line chrome whatever its length (up to EDGE_STRONG_LEN): cookie notices, copyright lines,
-# newsletter sign-ups. "shared" is checked for every language.
+# newsletter sign-ups. "shared" is checked for every language. Never a bare word that body text uses too
+# ("cookies", "copyright"): a recipe or a legal text may end with it.
 STRONG_CHROME_PHRASES: dict[str, list[str]] = {
-    "shared": ["©", "cookies", "cookie policy", "copyright"],
-    "es": ["todos los derechos reservados", "política de cookies", "suscríbete a nuestra newsletter",
+    "shared": ["©", "cookie policy"],
+    "es": ["todos los derechos reservados", "política de cookies", "utilizamos cookies", "usamos cookies",
+           "este sitio web utiliza cookies", "uso de cookies", "aceptar cookies", "aceptar las cookies",
+           "acepta las cookies", "aceptar todas las cookies", "suscríbete a nuestra newsletter",
            "suscríbete a nuestro boletín", "suscríbete al boletín"],
-    "it": ["tutti i diritti riservati", "utilizza cookie", "usa cookie", "iscriviti alla newsletter",
-           "iscriviti alla nostra newsletter"],
-    "en": ["all rights reserved", "subscribe to our newsletter", "sign up for our newsletter"],
+    "it": ["tutti i diritti riservati", "utilizza cookie", "usa cookie", "utilizziamo i cookie",
+           "utilizziamo cookie", "usiamo i cookie", "uso dei cookie", "accetta i cookie", "accetta tutti i cookie",
+           "accettare i cookie", "iscriviti alla newsletter", "iscriviti alla nostra newsletter"],
+    "en": ["all rights reserved", "we use cookies", "this website uses cookies", "this site uses cookies",
+           "use of cookies", "accept cookies", "accept all cookies", "subscribe to our newsletter",
+           "sign up for our newsletter"],
 }
 EDGE_STRONG_LEN = 300      # a line with a strong chrome phrase is chrome up to this length
-EDGE_CHROME_LEN = 40       # a short line without sentence-ending punctuation is chrome at the edges
+EDGE_CHROME_LEN = 40       # a short line without sentence-ending punctuation may be chrome at the edges
 EDGE_BODY_LEN = 60         # a line this long is body text
 EDGE_MAX_SHARE = 0.3       # an edge run longer than this share of the page's characters is left alone
 _MONTHS = ("enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre|"
@@ -64,6 +70,7 @@ DATE_LINE = re.compile(
     rf"|({_MONTHS})\s+\d{{1,2}},?\s+\d{{4}}"                                # March 12, 2025
     rf"|\d{{1,2}}[/.-]\d{{1,2}}[/.-]\d{{2,4}}|\d{{4}}-\d{{2}}-\d{{2}})"          # 12/03/2025, 2025-03-12
     rf"([\s,·|-]+(a las\s+|alle\s+|at\s+)?\d{{1,2}}[:.]\d{{2}}(\s*h)?)?\s*$")  # time
+LIST_ITEM = re.compile(r"^([-•*·–]|\d{1,2}[.)]|[a-z][.)])\s")
 BYLINE = re.compile(r"^(por|di|by)\s+(\w[\w.'-]*\s*){1,4}(?<![.!?…])$", re.IGNORECASE)  # never a sentence
 
 
@@ -179,31 +186,45 @@ def _phrase_pattern(table: dict[str, list[str]], lang: str | None) -> re.Pattern
     return re.compile("|".join(word(p) for p in phrases), re.IGNORECASE)
 
 
-def _is_chrome(ln: str, phrases: re.Pattern, strong: re.Pattern) -> bool:
-    """A line of page chrome: a chrome phrase, a date or byline alone, or a short line that is no sentence. A line
-    of EDGE_BODY_LEN characters or more is body text unless it has a strong chrome phrase (cookie notices,
-    copyright, newsletter sign-ups; up to EDGE_STRONG_LEN); a shorter sentence is chrome only if it has a chrome
-    phrase ("© 2025 El Diario. Todos los derechos reservados.")."""
+def _edge_kind(ln: str, phrases: re.Pattern, strong: re.Pattern) -> str | None:
+    """How a line at the edge of a web page reads: "anchor" (a clear chrome marker: a strong chrome phrase, up to
+    EDGE_STRONG_LEN characters; or, under EDGE_BODY_LEN, a chrome phrase, a date or a byline alone), "weak" (a
+    short line that is no sentence, such as a menu item or a heading, or a sentence that starts with a chrome
+    phrase: "Share it with your friends.") or None (body text). A heading that ends in ":" and a list item are
+    never weak: they introduce or carry body text."""
     if len(ln) <= EDGE_STRONG_LEN and strong.search(ln):
-        return True
+        return "anchor"
     if len(ln) >= EDGE_BODY_LEN:
-        return False
-    return bool(phrases.search(ln) or DATE_LINE.match(ln) or BYLINE.match(ln)
-                or (len(ln) < EDGE_CHROME_LEN and not ln.endswith((".", "!", "?", "…"))))
+        return None
+    if DATE_LINE.match(ln) or BYLINE.match(ln):
+        return "anchor"
+    phrase = phrases.search(ln)
+    if phrase and not _sentence_like(ln):
+        return "anchor"
+    if ln.endswith(":") or LIST_ITEM.match(ln):
+        return None
+    if (phrase and phrase.start() == 0) or (len(ln) < EDGE_CHROME_LEN and not ln.endswith((".", "!", "?", "…"))):
+        return "weak"
+    return None
 
 
 def _edges(lines: list[str], lang: str | None) -> tuple[list[str], list[str]]:
-    """Web page chrome at the start and end of a page: from each edge, consecutive chrome lines are dropped until
-    the first line that is not chrome. An edge whose run holds more than EDGE_MAX_SHARE of the page's characters
-    is left untouched."""
+    """Web page chrome at the start and end of a page. From each edge, the run of consecutive anchor and weak lines
+    (see `_edge_kind`) is cut back to just after its innermost anchor: a weak line goes only when a clear chrome
+    marker lies between it and the body text, and an edge without one keeps everything. An edge whose cut holds
+    more than EDGE_MAX_SHARE of the page's characters is left untouched."""
     phrases = _phrase_pattern(CHROME_PHRASES, lang)
     strong = _phrase_pattern(STRONG_CHROME_PHRASES, lang)
     total = sum(len(ln) for ln in lines)
 
     def run(seq: list[str]) -> int:
         n = 0
-        while n < len(seq) and _is_chrome(seq[n], phrases, strong):
-            n += 1
+        for i, ln in enumerate(seq):
+            kind = _edge_kind(ln, phrases, strong)
+            if kind is None:
+                break
+            if kind == "anchor":
+                n = i + 1
         return n if sum(len(ln) for ln in seq[:n]) <= EDGE_MAX_SHARE * total else 0
 
     start = run(lines)

@@ -105,9 +105,44 @@ def test_edges_never_removes_more_than_30_percent():
     assert clean([poem], fmt="html", lang="es").text.startswith("Verde")
 
 
-def test_edges_runs_without_a_phrase_list_for_the_language():
+def test_edges_keeps_short_lines_without_a_chrome_marker_further_out():
     c = clean(["Home\nMenu\n" + BODY_EN], fmt="html", lang="pt")
-    assert c.text == BODY_EN
+    assert c.text.startswith("Home\nMenu\n") and c.removed == []
+
+
+def test_edges_runs_without_a_phrase_list_for_the_language():
+    c = clean(["Home\nMenu\n12/03/2025\n" + BODY_EN], fmt="html", lang="pt")
+    assert c.text == BODY_EN and c.removed[0].lines == ["Home", "Menu", "12/03/2025"]
+
+
+def test_edges_keeps_a_heading_inside_the_chrome_marker():
+    c = clean(["\n".join(["Compartir", "12 de marzo de 2025", "Un plan para el centro"] + BODY_LINES_ES)],
+              fmt="html", lang="es")
+    assert c.text.startswith("Un plan para el centro\n") and c.removed[0].lines == ["Compartir", "12 de marzo de 2025"]
+
+
+def test_edges_keeps_intro_and_list_items_of_a_guidance_page():
+    lines = ["Published 3 March 2025", "Apply for a heritage grant", "This topic will help you:",
+             "- find out if you can apply", "- prepare your application", "- understand how grants are paid",
+             BODY_EN, BODY_EN, BODY_EN, "1. contact the grants team", "a) keep your receipts",
+             "Related content", "Share this page"]
+    c = clean(["\n".join(lines)], fmt="html", lang="en")
+    assert c.text.splitlines() == lines[1:-2]
+    assert [ln for r in c.removed for ln in r.lines] == ["Published 3 March 2025", "Related content",
+                                                          "Share this page"]
+
+
+def test_edges_keeps_the_end_of_a_recipe_that_mentions_cookies():
+    last = ["Bake the cookies for twelve minutes, until the edges are golden, then let them cool on a rack.",
+            "Share them with your friends."]
+    c = clean(["\n".join([BODY_EN] * 3 + last)], fmt="html", lang="en")
+    assert c.text.endswith("\n".join(last)) and c.removed == []
+
+
+def test_edges_keeps_a_sentence_with_a_chrome_phrase_inside_it():
+    c = clean(["\n".join([BODY_EN] * 3 + ["We will share the results soon.", "© 2025 Council"])],
+              fmt="html", lang="en")
+    assert c.text.endswith("We will share the results soon.") and c.removed[0].lines == ["© 2025 Council"]
 
 
 def test_edges_keeps_a_long_sentence_with_a_chrome_phrase():
@@ -145,11 +180,11 @@ def _extract(data: bytes) -> str:
 
 FIXTURE_CASES = [
     ("es-news.html", "se ejecutarán por fases para reducir las molestias a los vecinos.",
-     ["Movilidad\n", "Leer más: la nueva línea de autobús nocturno"]),
+     ["Leer más: la nueva línea de autobús nocturno"]),
     ("it-blog.html", "non abbiate paura di sporcarvi le mani.",
-     ["Leggi anche", "Articoli correlati", "Iscriviti alla newsletter"]),
+     ["Leggi anche: la focaccia pugliese della nonna", "Articoli correlati", "Iscriviti alla newsletter"]),
     ("en-institution.html", "published on the funding pages of this website.",
-     ["Related links", "Tags: archives"]),
+     ["Related links", "Tags: archives, funding, heritage"]),
 ]
 
 
@@ -158,6 +193,7 @@ def test_real_pages(name, kept, gone):
     text = _extract((FIXTURES / name).read_bytes())
     c = clean([text], fmt="html", lang=name[:2])
     assert kept in c.text and not any(g in c.text for g in gone)
+    assert [ln for r in c.removed for ln in r.lines] == gone
 
 
 # --------------------------------------------------------------------------- storage (db v16)
@@ -258,8 +294,14 @@ PDF_PAGES = [f"HDR\nBody sentence number {i} of this short test document." for i
 def test_read_file_pdf_reports_removals():
     r = ingest.read_file("a.pdf", _pdf_bytes(PDF_PAGES))
     assert "HDR" not in r["text"] and r["removed"][0]["step"] == "page_furniture"
-    assert r["fmt"] == "pdf" and len(r["raw"]) == 6 and len(bytes.fromhex(r["line_hashes"])) % 8 == 0
+    assert r["fmt"] == "pdf" and len(r["raw"]) == 6 and r["line_hashes"] == ""   # only the site step (HTML) reads them
     assert r["removed"][0]["lines"] == ["HDR"] * 6 and "quality" in r
+
+
+def test_read_file_html_gives_line_hashes():
+    html = f"<html><body><article><p>Community archives</p><p>{BODY_EN}</p></article></body></html>".encode()
+    r = ingest.read_file("a.html", html)
+    assert r["fmt"] == "html" and r["line_hashes"] and len(bytes.fromhex(r["line_hashes"])) % 8 == 0
 
 
 def test_read_file_clean_false_keeps_todays_text():
@@ -304,7 +346,7 @@ def test_all_chrome_page_kept_with_warning():
 def test_cleaning_summary():
     removed = [{"step": "page_furniture", "lines": ["a"] * 10}, {"step": "edges", "lines": ["b"] * 4}]
     assert ingest.cleaning_summary(removed) == \
-        "Cleaning removed 14 lines (repeated on every page, site menus and links)."
+        "Cleaning removed 14 lines (repeated on every page, menus and links at the start or end)."
     assert ingest.cleaning_summary([{"step": "noise", "lines": ["-"]}]) == \
         "Cleaning removed 1 line (lines without words)."
     assert ingest.cleaning_summary([]) is None
