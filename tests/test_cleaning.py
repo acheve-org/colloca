@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from corpora import db, importer
+from corpora import db, importer, metadata
 from corpora.cleaning import clean, line_hash, line_hashes
 
 FIXTURES = Path(__file__).parent / "fixtures" / "web"
@@ -174,3 +174,10 @@ def test_add_document_without_line_hashes_and_not_a_url(conn, corpus):
     r = importer.add_document(conn, corpus, "T", BODY_ES, "https://ex.com/report.pdf", "file")
     row = conn.execute("SELECT line_hashes, host FROM documents WHERE id=?", (r["id"],)).fetchone()
     assert row["line_hashes"] is None and row["host"] == ""
+
+
+@pytest.mark.parametrize(("source", "kind", "host"), [
+    ("https://WWW.Example.com/a/b", "url", "www.example.com"), ("https://Ex.com:8080/a", "url", "ex.com"),
+    ("http://example.org", "url", "example.org"), ("https://ex.com/x.pdf", "file", ""), ("", "paste", "")])
+def test_host_of(source, kind, host):
+    assert metadata.host_of(source, kind) == host

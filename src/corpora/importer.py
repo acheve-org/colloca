@@ -88,7 +88,7 @@ def add_document(conn, corpus, title: str, text: str, source: str, kind: str, me
         (corpus["id"], title.strip() or "Untitled", source, kind, text, digest, n_alpha,
          pipeline, check["verdict"], meta.get("text_type", ""), meta.get("doc_date", ""),
          meta.get("author", ""), int(segmented), fingerprint, line_hashes,
-         (urlparse(source).hostname or "").lower() if kind == "url" else ""))
+         metadata.host_of(source, kind)))
     doc_id = cur.lastrowid
     metadata.set_tags(conn, doc_id, meta.get("tags", []))
     conn.executemany("INSERT INTO tokens VALUES (?,?,?,?,?,?,?,?,?,?)", ((doc_id,) + t for t in tokens))

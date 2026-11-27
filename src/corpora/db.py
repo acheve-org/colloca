@@ -266,13 +266,14 @@ WHERE is_reference = 0 AND project_id IS NULL;
 # later imports from the same site can spot its repeated chrome; NULL for documents imported before cleaning. `host`
 # is the lower-case host name of a URL document ('' for everything else), indexed per corpus to find a site's other
 # pages. Existing URL documents get their host from `source`: the part between '://' and the next '/' (the whole
-# remainder when there is none).
+# remainder when there is none) without a ':port', so it agrees with importer.host_of (urlparse().hostname).
 _V16 = """
 ALTER TABLE documents ADD COLUMN line_hashes BLOB;
 ALTER TABLE documents ADD COLUMN host TEXT NOT NULL DEFAULT '';
 UPDATE documents SET host = (
-    SELECT lower(CASE WHEN instr(rest, '/') > 0 THEN substr(rest, 1, instr(rest, '/') - 1) ELSE rest END)
-    FROM (SELECT substr(documents.source, instr(documents.source, '://') + 3) AS rest))
+    SELECT lower(CASE WHEN instr(auth, ':') > 0 THEN substr(auth, 1, instr(auth, ':') - 1) ELSE auth END)
+    FROM (SELECT CASE WHEN instr(rest, '/') > 0 THEN substr(rest, 1, instr(rest, '/') - 1) ELSE rest END AS auth
+          FROM (SELECT substr(documents.source, instr(documents.source, '://') + 3) AS rest)))
 WHERE kind = 'url' AND instr(source, '://') > 0;
 CREATE INDEX idx_docs_host ON documents (corpus_id, host);
 """

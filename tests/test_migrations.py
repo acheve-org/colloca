@@ -160,14 +160,15 @@ def test_v15_keeps_null_terms_null_even_when_general_is_created_for_corpora(tmp_
 def test_v16_adds_line_hashes_and_backfills_host_for_url_documents(tmp_path):
     conn = at_version(tmp_path / "h.db", 15)
     conn.execute("INSERT INTO corpora (id, name, lang) VALUES (1, 'work', 'es')")
-    rows = [("https://WWW.Example.com/a/b", "url"), ("http://example.org", "url"), ("report.pdf", "file")]
+    rows = [("https://WWW.Example.com/a/b", "url"), ("http://example.org", "url"), ("report.pdf", "file"),
+            ("https://Ex.com:8080/a", "url"), ("http://localhost:3000", "url")]
     for i, (source, kind) in enumerate(rows):
         conn.execute("INSERT INTO documents (corpus_id,title,text,text_hash,n_tokens,source,kind) "
                      "VALUES (1,'d',?,?,2,?,?)", (f"text {i}", f"h{i}", source, kind))
     conn.commit()
     assert db.migrate(conn) == db.SCHEMA_VERSION
     hosts = [r[0] for r in conn.execute("SELECT host FROM documents ORDER BY id")]
-    assert hosts == ["www.example.com", "example.org", ""]
+    assert hosts == ["www.example.com", "example.org", "", "ex.com", "localhost"]
     assert {"line_hashes", "host"} <= columns(conn, "documents")
     assert conn.execute("SELECT COUNT(*) FROM documents WHERE line_hashes IS NOT NULL").fetchone()[0] == 0
     assert conn.execute("SELECT 1 FROM sqlite_master WHERE type='index' AND name='idx_docs_host'").fetchone()

@@ -362,10 +362,11 @@ def import_payload(conn: sqlite3.Connection, payload: dict, *, project_id: int |
             continue
         doc_id = conn.execute(
             """INSERT INTO documents (corpus_id,title,source,kind,text,text_hash,n_tokens,pipeline,lang_check,
-                                      text_type,doc_date,author,segmented,fingerprint,added)
-               VALUES (?,?,?,?,?,?,0,'',?,?,?,?,?,?,COALESCE(NULLIF(?, ''), CURRENT_TIMESTAMP))""",
+                                      text_type,doc_date,author,segmented,fingerprint,host,added)
+               VALUES (?,?,?,?,?,?,0,'',?,?,?,?,?,?,?,COALESCE(NULLIF(?, ''), CURRENT_TIMESTAMP))""",
             (corpus["id"], title, source, kind, text, digest, check, meta["text_type"], meta["doc_date"],
-             meta["author"], int(bool(d.get("segmented"))), dedup.sketch(text), added)).lastrowid or 0
+             meta["author"], int(bool(d.get("segmented"))), dedup.sketch(text), metadata.host_of(source, kind),
+             added)).lastrowid or 0
         metadata.set_tags(conn, doc_id, tags)
         dmap[_ref(d.get("ref"))] = doc_id
         rep.created["documents"] += 1
