@@ -1,9 +1,11 @@
 """Import cleaning (cleaning.py): page furniture, noise, repairs and line hashes."""
 
+import sqlite3
 from pathlib import Path
 
 import pytest
 
+from corpora import db, importer
 from corpora.cleaning import clean, line_hash, line_hashes
 
 FIXTURES = Path(__file__).parent / "fixtures" / "web"
@@ -143,3 +145,32 @@ def test_real_pages(name, kept, gone):
     text = _extract((FIXTURES / name).read_bytes())
     c = clean([text], fmt="html", lang=name[:2])
     assert kept in c.text and not any(g in c.text for g in gone)
+
+
+# --------------------------------------------------------------------------- storage (db v16)
+@pytest.fixture()
+def conn():
+    c = sqlite3.connect(":memory:")
+    c.row_factory = sqlite3.Row
+    c.execute("PRAGMA foreign_keys = ON")
+    db.migrate(c)
+    yield c
+    c.close()
+
+
+@pytest.fixture()
+def corpus(conn):
+    cid = conn.execute("INSERT INTO corpora (name, lang) VALUES ('work', 'es')").lastrowid
+    return conn.execute("SELECT * FROM corpora WHERE id=?", (cid,)).fetchone()
+
+
+def test_add_document_stores_line_hashes_and_host(conn, corpus):
+    r = importer.add_document(conn, corpus, "T", BODY_ES, "https://Ex.com/p", "url", line_hashes=b"\x01" * 8)
+    row = conn.execute("SELECT line_hashes, host FROM documents WHERE id=?", (r["id"],)).fetchone()
+    assert row["line_hashes"] == b"\x01" * 8 and row["host"] == "ex.com"
+
+
+def test_add_document_without_line_hashes_and_not_a_url(conn, corpus):
+    r = importer.add_document(conn, corpus, "T", BODY_ES, "https://ex.com/report.pdf", "file")
+    row = conn.execute("SELECT line_hashes, host FROM documents WHERE id=?", (r["id"],)).fetchone()
+    assert row["line_hashes"] is None and row["host"] == ""

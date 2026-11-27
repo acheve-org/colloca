@@ -262,8 +262,24 @@ UPDATE corpora SET project_id = (SELECT MIN(id) FROM projects WHERE name = 'Gene
 WHERE is_reference = 0 AND project_id IS NULL;
 """
 
+# --- v16: import cleaning. `line_hashes` keeps the hashes of the raw (uncleaned) lines of an imported document, so
+# later imports from the same site can spot its repeated chrome; NULL for documents imported before cleaning. `host`
+# is the lower-case host name of a URL document ('' for everything else), indexed per corpus to find a site's other
+# pages. Existing URL documents get their host from `source`: the part between '://' and the next '/' (the whole
+# remainder when there is none).
+_V16 = """
+ALTER TABLE documents ADD COLUMN line_hashes BLOB;
+ALTER TABLE documents ADD COLUMN host TEXT NOT NULL DEFAULT '';
+UPDATE documents SET host = (
+    SELECT lower(CASE WHEN instr(rest, '/') > 0 THEN substr(rest, 1, instr(rest, '/') - 1) ELSE rest END)
+    FROM (SELECT substr(documents.source, instr(documents.source, '://') + 3) AS rest))
+WHERE kind = 'url' AND instr(source, '://') > 0;
+CREATE INDEX idx_docs_host ON documents (corpus_id, host);
+"""
+
 MIGRATIONS: list[tuple[int, str]] = [(1, _V1), (2, _V2), (3, _V3), (4, _V4), (5, _V5), (6, _V6), (7, _V7), (8, _V8),
-                                     (9, _V9), (10, _V10), (11, _V11), (12, _V12), (13, _V13), (14, _V14), (15, _V15)]
+                                     (9, _V9), (10, _V10), (11, _V11), (12, _V12), (13, _V13), (14, _V14), (15, _V15),
+                                     (16, _V16)]
 SCHEMA_VERSION = MIGRATIONS[-1][0]
 
 
