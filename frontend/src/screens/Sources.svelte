@@ -395,7 +395,9 @@
     {#if corpusStore.loaded}<NoCorpus />{/if}
   {:else}
     <!-- One line (wrapping when narrow): count, size gauge, filter, then the actions on the right. -->
-    <div class="toolbar">
+    <!-- While documents are ticked, this same line carries their actions (no bar is inserted above the table,
+         so the rows do not move on the first tick). -->
+    <div class="toolbar" class:picking={checked.size > 0}>
       <h2 class="sr-only">{t('src.documents')}</h2>
       {#if docs.length}
         <input
@@ -408,35 +410,36 @@
           onchange={(e) => toggleAll(e.currentTarget.checked)}
         />
       {/if}
-      {#if loadedOnce}<span class="count">{count}</span>{/if}
+      {#if loadedOnce}
+        <span class="count" aria-live="polite">{checked.size ? t('src.selected', { n: checked.size }) : count}</span>
+      {/if}
       <CorpusSizeGauge {docs} />
       {#if docs.length}
         <input class="filter" type="search" bind:value={filter} placeholder={t('cc.filter')} aria-label={t('cc.filter')} />
       {/if}
-      <span class="actions">
-        {#if staleCount}
-          <span class="stale">
-            <span class="muted">{staleCount === 1 ? t('src.reann.info1') : t('src.reann.info', { n: staleCount })}</span>
-            <Button disabled={work.busy !== null} onclick={reannotate}>{t('src.reann.go')}</Button>
-          </span>
-        {/if}
-        <Button disabled={work.busy !== null || !docs.length} onclick={openDuplicates}>{t('dup.find')}</Button>
-        <TmxExport mode="button" />
-        <ActionMenu label={t('src.more')} items={[{ label: t('src.reload'), onclick: refresh }]} />
-        <a class="linkbtn" href={hrefFor('sources-add')}>{t('add.add')}</a>
-      </span>
+      {#if checked.size}
+        <span class="actions" role="group" aria-label={t('src.bulk')}>
+          <Button disabled={work.busy !== null} onclick={() => (bulkEditOpen = true)}>{t('src.bulkEdit')}</Button>
+          <Button variant="danger" disabled={work.busy !== null} onclick={() => (bulkDelOpen = true)}>
+            {t('src.bulkRemove')}
+          </Button>
+          <Button onclick={() => checked.clear()}>{t('src.bulkClear')}</Button>
+        </span>
+      {:else}
+        <span class="actions">
+          {#if staleCount}
+            <span class="stale">
+              <span class="muted">{staleCount === 1 ? t('src.reann.info1') : t('src.reann.info', { n: staleCount })}</span>
+              <Button disabled={work.busy !== null} onclick={reannotate}>{t('src.reann.go')}</Button>
+            </span>
+          {/if}
+          <Button disabled={work.busy !== null || !docs.length} onclick={openDuplicates}>{t('dup.find')}</Button>
+          <TmxExport mode="button" />
+          <ActionMenu label={t('src.more')} items={[{ label: t('src.reload'), onclick: refresh }]} />
+          <a class="linkbtn" href={hrefFor('sources-add')}>{t('add.add')}</a>
+        </span>
+      {/if}
     </div>
-
-    {#if checked.size}
-      <div class="bulk" role="group" aria-label={t('src.bulk')}>
-        <b aria-live="polite">{t('src.selected', { n: checked.size })}</b>
-        <Button disabled={work.busy !== null} onclick={() => (bulkEditOpen = true)}>{t('src.bulkEdit')}</Button>
-        <Button variant="danger" disabled={work.busy !== null} onclick={() => (bulkDelOpen = true)}>
-          {t('src.bulkRemove')}
-        </Button>
-        <Button onclick={() => checked.clear()}>{t('src.bulkClear')}</Button>
-      </div>
-    {/if}
 
     {#if jobLog.length}
       <ul class="jobs" aria-live="polite" aria-label={t('jobs.label')}>
@@ -674,15 +677,9 @@
   .count {
     font-weight: 600;
   }
-  .bulk {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--s-2);
-    padding: var(--s-1) var(--s-3);
-    font-size: var(--fs-small);
+  /* ticked documents: the toolbar takes the selected-row tint */
+  .toolbar.picking {
     background: var(--accent-soft);
-    border-bottom: 1px solid var(--line);
   }
   .filter {
     width: 14rem;

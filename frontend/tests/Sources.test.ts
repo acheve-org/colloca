@@ -493,6 +493,21 @@ describe('Sources', () => {
       expect(screen.queryByRole('group', { name: 'Actions on the selected documents' })).toBeNull();
     });
 
+    it('the bulk actions take the place of the toolbar actions, so no bar pushes the table down', async () => {
+      const { container } = await ready();
+      const toolbar = container.querySelector('.toolbar') as HTMLElement;
+      const before = toolbar.parentElement!.children.length;
+      await fireEvent.click(tick('Doc 1'));
+      const group = screen.getByRole('group', { name: 'Actions on the selected documents' });
+      expect(toolbar.contains(group)).toBe(true);
+      expect(toolbar.parentElement!.children.length).toBe(before);
+      expect(within(toolbar).getByText('1 selected')).toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: '+ Add documents' })).toBeNull();
+      await fireEvent.click(screen.getByRole('button', { name: 'Clear selection' }));
+      expect(within(toolbar).getByText('2 documents')).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: '+ Add documents' })).toBeInTheDocument();
+    });
+
     it('ticking a box does not open the side panel', async () => {
       await ready();
       await fireEvent.click(tick('Doc 2'));
