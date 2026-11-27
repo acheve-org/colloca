@@ -36,6 +36,17 @@ CHROME_PHRASES: dict[str, list[str]] = {
     "en": ["share", "follow us", "subscribe", "related", "read more", "tags", "all rights reserved",
            "privacy policy"],
 }
+# Phrases that make a line chrome whatever its length (up to EDGE_STRONG_LEN): cookie notices, copyright lines,
+# newsletter sign-ups. "shared" is checked for every language.
+STRONG_CHROME_PHRASES: dict[str, list[str]] = {
+    "shared": ["©", "cookies", "cookie policy", "copyright"],
+    "es": ["todos los derechos reservados", "política de cookies", "suscríbete a nuestra newsletter",
+           "suscríbete a nuestro boletín", "suscríbete al boletín"],
+    "it": ["tutti i diritti riservati", "utilizza cookie", "usa cookie", "iscriviti alla newsletter",
+           "iscriviti alla nostra newsletter"],
+    "en": ["all rights reserved", "subscribe to our newsletter", "sign up for our newsletter"],
+}
+EDGE_STRONG_LEN = 300      # a line with a strong chrome phrase is chrome up to this length
 EDGE_CHROME_LEN = 40       # a short line without sentence-ending punctuation is chrome at the edges
 EDGE_BODY_LEN = 60         # a line this long is body text
 EDGE_MAX_SHARE = 0.3       # an edge run longer than this share of the page's characters is left alone
@@ -134,15 +145,18 @@ def _site_furniture(pages: Pages, site_counts: Counter[bytes]) -> tuple[Pages, l
     return pages, []        # Task 4
 
 
-def _phrase_pattern(lang: str | None) -> re.Pattern:
-    phrases = CHROME_PHRASES["shared"] + CHROME_PHRASES.get(lang or "", [])
+def _phrase_pattern(table: dict[str, list[str]], lang: str | None) -> re.Pattern:
+    phrases = table["shared"] + table.get(lang or "", [])
     return re.compile("|".join(rf"(?<!\w){re.escape(p)}(?!\w)" for p in phrases), re.IGNORECASE)
 
 
-def _is_chrome(ln: str, phrases: re.Pattern) -> bool:
+def _is_chrome(ln: str, phrases: re.Pattern, strong: re.Pattern) -> bool:
     """A line of page chrome: a chrome phrase, a date or byline alone, or a short line that is no sentence. A line
-    of EDGE_BODY_LEN characters or more is body text; a shorter sentence is chrome only if it has a chrome phrase
-    ("© 2025 El Diario. Todos los derechos reservados.")."""
+    of EDGE_BODY_LEN characters or more is body text unless it has a strong chrome phrase (cookie notices,
+    copyright, newsletter sign-ups; up to EDGE_STRONG_LEN); a shorter sentence is chrome only if it has a chrome
+    phrase ("© 2025 El Diario. Todos los derechos reservados.")."""
+    if len(ln) <= EDGE_STRONG_LEN and strong.search(ln):
+        return True
     if len(ln) >= EDGE_BODY_LEN:
         return False
     return bool(phrases.search(ln) or DATE_LINE.match(ln) or BYLINE.match(ln)
@@ -153,12 +167,13 @@ def _edges(lines: list[str], lang: str | None) -> tuple[list[str], list[str]]:
     """Web page chrome at the start and end of a page: from each edge, consecutive chrome lines are dropped until
     the first line that is not chrome. An edge whose run holds more than EDGE_MAX_SHARE of the page's characters
     is left untouched."""
-    phrases = _phrase_pattern(lang)
+    phrases = _phrase_pattern(CHROME_PHRASES, lang)
+    strong = _phrase_pattern(STRONG_CHROME_PHRASES, lang)
     total = sum(len(ln) for ln in lines)
 
     def run(seq: list[str]) -> int:
         n = 0
-        while n < len(seq) and _is_chrome(seq[n], phrases):
+        while n < len(seq) and _is_chrome(seq[n], phrases, strong):
             n += 1
         return n if sum(len(ln) for ln in seq[:n]) <= EDGE_MAX_SHARE * total else 0
 

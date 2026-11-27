@@ -98,6 +98,14 @@ def test_edges_keeps_a_long_sentence_with_a_chrome_phrase():
     assert clean([BODY_EN + "\n" + last], fmt="html", lang="en").text.endswith(last)
 
 
+def test_edges_removes_a_long_cookie_notice():
+    notice = ("We use cookies to improve your experience on our website, to analyse traffic and to show you "
+              "relevant content. By continuing to browse you accept their use.")
+    assert len(notice) > 140
+    c = clean([notice + "\n" + "\n".join([BODY_EN] * 3)], fmt="html", lang="en")
+    assert notice not in c.text and c.removed[0].lines == [notice]
+
+
 def test_edges_only_for_html():
     assert clean(["Inicio\n" + BODY_ES], fmt="text", lang="es").text.startswith("Inicio")
 
