@@ -175,3 +175,14 @@ which keeps less sidebar text; edges and site furniture then catch what remains.
 - Exact phrase lists and thresholds, tuned on the fixtures.
 - How removed-line positions are represented for "Put back".
 - Whether site furniture reads all of a host's documents or a recent sample (cap for performance).
+
+## Changes made while building
+
+- **Edges step (after testing on real pages):** a short line without sentence punctuation is removed only when a
+  clear chrome marker (a chrome phrase, a date line or a byline) sits between it and the page edge; with no
+  marker nothing is removed. Lines ending in ":" and list items are never chrome. Bare "cookies"/"copyright" no
+  longer mark a line as chrome; cookie-notice phrases and "©" do. See `docs/importing.md`.
+- **Page furniture:** header lines that differ only in digits are matched only on a page's first and last line,
+  and never when the line reads like a sentence.
+- **Line hashes** are stored for web pages only (the only format the site step reads).
+- **`extract_html` / `extract_pdf`** were removed; `fetch_url` and `read_file` are the entry points.
