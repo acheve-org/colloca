@@ -64,6 +64,25 @@ def set_tags(conn: sqlite3.Connection, doc_id: int, tags: list[str]) -> None:
     conn.executemany("INSERT INTO doc_tags (doc_id, tag) VALUES (?, ?)", ((doc_id, t) for t in tags))
 
 
+def bulk_update(conn: sqlite3.Connection, ids: list[int], add_tags: list[str], remove_tags: list[str],
+                fields: dict[str, str]) -> int:
+    """Add and remove tags on, and set the given cleaned fields (text_type, doc_date, author) of, every listed
+    document. Raises MetadataError if a document would end up with too many tags; the caller rolls back."""
+    if fields:
+        sets = ", ".join(f"{k}=?" for k in fields)
+        conn.executemany(f"UPDATE documents SET {sets} WHERE id=?", ([*fields.values(), i] for i in ids))
+    if add_tags or remove_tags:
+        for doc_id in ids:
+            current = [r[0] for r in conn.execute("SELECT tag FROM doc_tags WHERE doc_id=? ORDER BY tag", (doc_id,))]
+            tags = [t for t in current if t not in remove_tags]
+            tags += [t for t in add_tags if t not in tags and t not in remove_tags]
+            if len(tags) > MAX_TAGS:
+                raise MetadataError(f"At most {MAX_TAGS} tags per document")
+            if tags != current:
+                set_tags(conn, doc_id, tags)
+    return len(ids)
+
+
 def pad_start(value: str) -> str:
     """First day covered by a (possibly partial) date."""
     return {4: value + "-01-01", 7: value + "-01"}.get(len(value), value)

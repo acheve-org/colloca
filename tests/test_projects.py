@@ -297,3 +297,47 @@ def test_v3_database_upgrades_and_old_tags_become_filterable(tmp_path):
     general = conn.execute("SELECT id FROM projects WHERE name = 'General'").fetchone()[0]
     assert conn.execute("SELECT project_id FROM corpora").fetchone()[0] == general    # v15: project-less -> General
     assert conn.execute("SELECT text_type, doc_date, author FROM documents").fetchone()[:] == ("", "", "")
+
+
+def test_bulk_patch_documents_adds_and_removes_tags_and_sets_fields(client):
+    cid = make_corpus(client)
+    a = doc(client, cid, ES_TEXT, tags="old,keep", text_type="manual", doc_date="2022", author="X")
+    b = doc(client, cid, MANUAL, tags="keep", text_type="report", author="Y")
+    c = doc(client, cid, CONTRACT, tags="old", text_type="manual")
+    r = client.patch("/api/documents", json={"ids": [a, b], "add_tags": "Nuevo, keep", "remove_tags": ["old"],
+                                             "text_type": "Contract", "doc_date": "2024-05"})
+    assert r.status_code == 200 and r.json() == {"updated": 2}
+    da, db_, dc = (client.get(f"/api/documents/{i}").json() for i in (a, b, c))
+    assert da["tags"] == ["keep", "nuevo"] and db_["tags"] == ["keep", "nuevo"]
+    assert da["text_type"] == db_["text_type"] == "contract" and da["doc_date"] == db_["doc_date"] == "2024-05"
+    assert da["author"] == "X" and db_["author"] == "Y"           # not sent: unchanged
+    assert dc["tags"] == ["old"] and dc["text_type"] == "manual"  # not selected: unchanged
+    client.patch("/api/documents", json={"ids": [a, b], "author": ""})
+    assert client.get(f"/api/documents/{a}").json()["author"] == ""
+
+
+def test_bulk_patch_documents_is_all_or_nothing(client):
+    cid = make_corpus(client)
+    a = doc(client, cid, ES_TEXT, text_type="manual")
+    b = doc(client, cid, MANUAL)
+    assert client.patch("/api/documents", json={"ids": [a, 999999], "text_type": "x"}).status_code == 404
+    assert client.patch("/api/documents", json={"ids": [a, b], "doc_date": "soon"}).status_code == 400
+    assert client.patch("/api/documents", json={"ids": [], "text_type": "x"}).status_code == 422
+    many = ",".join(f"t{i}" for i in range(25))
+    assert client.patch("/api/documents", json={"ids": [a], "add_tags": many}).status_code == 400
+    assert client.get(f"/api/documents/{a}").json()["text_type"] == "manual"
+    client.delete(f"/api/documents/{b}")
+    assert client.patch("/api/documents", json={"ids": [a, b], "text_type": "x"}).status_code == 404
+
+
+def test_bulk_delete_documents_moves_them_to_the_trash(client):
+    cid = make_corpus(client)
+    a = doc(client, cid, ES_TEXT)
+    b = doc(client, cid, MANUAL)
+    c = doc(client, cid, CONTRACT)
+    r = client.post("/api/documents/delete", json={"ids": [a, b]})
+    assert r.status_code == 200 and r.json() == {"deleted": 2}
+    assert [d["id"] for d in client.get(f"/api/corpora/{cid}/documents").json()] == [c]
+    trashed = {d["id"] for d in client.get("/api/trash").json()["documents"]}
+    assert {a, b} <= trashed
+    assert client.post("/api/documents/delete", json={"ids": [a]}).json() == {"deleted": 0}

@@ -1317,6 +1317,51 @@ def update_document(doc_id: int, body: DocPatch):
     return {"ok": True}
 
 
+class DocBulk(BaseModel):
+    ids: list[int] = Field(min_length=1, max_length=20000)
+    add_tags: str | list[str] | None = None
+    remove_tags: str | list[str] | None = None
+    text_type: str | None = None
+    doc_date: str | None = None
+    author: str | None = None
+
+
+class DocIds(BaseModel):
+    ids: list[int] = Field(max_length=20000)
+
+
+@app.patch("/api/documents")
+def bulk_update_documents(body: DocBulk):
+    """Add/remove tags on, and set the text type, date or author of, the selected documents (only the fields
+    you send are changed; all or nothing)."""
+    ids = list(dict.fromkeys(body.ids))
+    try:
+        add = metadata.normalize_tags(body.add_tags)
+        remove = metadata.normalize_tags(body.remove_tags)
+        clean = metadata.clean_meta(body.text_type or "", body.doc_date or "", body.author or "")
+    except metadata.MetadataError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    fields = {k: clean[k] for k in ("text_type", "doc_date", "author") if k in body.model_fields_set}
+    with db.session() as conn:
+        marks = ",".join("?" * len(ids))
+        found = conn.execute(f"""SELECT COUNT(*) FROM documents d JOIN corpora c ON c.id=d.corpus_id
+                                 WHERE d.id IN ({marks}) AND d.deleted_at IS NULL AND c.deleted_at IS NULL""",
+                             ids).fetchone()[0]
+        if found != len(ids):
+            raise HTTPException(404, "Document not found")
+        try:
+            return {"updated": metadata.bulk_update(conn, ids, add, remove, fields)}
+        except metadata.MetadataError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+
+@app.post("/api/documents/delete")
+def bulk_delete_documents(body: DocIds):
+    """Moves the selected documents to the Trash; returns how many were moved."""
+    with db.session() as conn:
+        return {"deleted": trash.trash_documents(conn, list(dict.fromkeys(body.ids)))}
+
+
 @app.delete("/api/documents/{doc_id}", status_code=204)
 def delete_document(doc_id: int):
     """Moves the document to the Trash (its metadata and aligned-partner link are kept for a restore)."""
