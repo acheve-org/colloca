@@ -43,6 +43,7 @@ beforeEach(() => {
     if (/^\/api\/corpora\/\d+\/jobs$/.test(p)) return res(200, jobList.length > 1 ? jobList.shift()! : jobList[0]);
     if (p === '/api/corpora/1/upload') return res(uploadReply.status, uploadReply.body);
     if (p === '/api/preview-file') return res(200, previewFileReply);
+    if (p === '/api/clean') return res(200, { text: 'Página 1\nUna columna', removed: [], repaired: {}, warnings: [] });
     if (p === '/api/corpora') return res(200, corpusStore.list);
     if (/\/parallel$/.test(p)) return res(200, { documents: 0, segments: 0, partners: [] });
     return res(404, { detail: 'nope' });
@@ -130,6 +131,28 @@ describe('Upload files', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Preview file' }));
     expect(await screen.findByText('Text quality: good')).toBeInTheDocument();
     expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('a file preview puts back removed lines without a site and adds with its line hashes', async () => {
+    previewFileReply = {
+      source: 'two.pdf', title: 'two', text: 'Una columna', warnings: [],
+      removed: [{ step: 'page_furniture', lines: ['Página 1'] }], repaired: {},
+      raw: ['Página 1\nUna columna'], fmt: 'pdf', line_hashes: 'ff00',
+    };
+    open();
+    await choose(new File(['x'], 'two.pdf'));
+    await fireEvent.click(screen.getByRole('button', { name: 'Preview file' }));
+    expect(await screen.findByText('Repeated on every page')).toBeInTheDocument();
+    expect(screen.getByText('Removed while cleaning: 1 lines')).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole('button', { name: 'Put back' }));
+    await waitFor(() => expect(calls.filter((c) => c.path === '/api/clean')).toHaveLength(1));
+    expect(calls.find((c) => c.path === '/api/clean')!.body).toEqual({
+      raw: ['Página 1\nUna columna'], fmt: 'pdf', corpus_id: 1, skip: ['page_furniture'],
+    });
+    await waitFor(() => expect((screen.getByLabelText('Text of the page') as HTMLTextAreaElement).value).toBe('Página 1\nUna columna'));
+    await fireEvent.click(screen.getByRole('button', { name: 'Add to corpus' }));
+    await waitFor(() => expect(docPosts()).toHaveLength(1));
+    expect(docPosts()[0].body).toMatchObject({ text: 'Página 1\nUna columna', line_hashes: 'ff00' });
   });
 
   it('Discard drops the file preview and the primary goes back to Upload', async () => {

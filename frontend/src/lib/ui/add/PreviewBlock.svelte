@@ -1,14 +1,19 @@
 <script lang="ts">
-  import { draft, type Preview } from '../../addDocuments.svelte';
+  import { answerPutBack, draft, putBack, putBackAsk, work, type Preview } from '../../addDocuments.svelte';
   import { fmt, t } from '../../i18n';
   import Badge from '../Badge.svelte';
   import Button from '../Button.svelte';
+  import Dialog from '../Dialog.svelte';
   import Field from '../Field.svelte';
 
   /** Which method's preview this shows: one from the other method is never shown here. */
   let { kind }: { kind: Preview['kind'] } = $props();
   const words = $derived(draft.preview ? draft.preview.text.split(/\s+/).filter(Boolean).length : 0);
   const uid = $props.id();
+  /** Lines shown per step; the rest are counted. */
+  const SHOWN = 50;
+  const groups = $derived(draft.preview ? draft.preview.removed.filter((g) => g.lines.length) : []);
+  const removedLines = $derived(groups.reduce((n, g) => n + g.lines.length, 0));
 </script>
 
 {#if draft.preview?.kind === kind}
@@ -28,7 +33,24 @@
         </ul>
       {/if}
     {/if}
-    {#each draft.preview.warnings.filter((w) => !draft.preview?.quality || !w.includes('may be unreliable')) as w (w)}<p class="hint">{w}</p>{/each}
+    {#if removedLines}
+      <details class="removed">
+        <summary>{t('src.clean.summary', { n: fmt(removedLines) })}</summary>
+        {#each groups as g (g.step)}
+          <section class="group" aria-labelledby="{uid}-{g.step}">
+            <div class="row">
+              <h4 id="{uid}-{g.step}" class="grow">{t(`src.clean.${g.step}`)}</h4>
+              <Button disabled={work.busy !== null} onclick={() => putBack(g.step)}>{t('src.clean.putBack')}</Button>
+            </div>
+            <ul class="lines">
+              {#each g.lines.slice(0, SHOWN) as line, i (i)}<li>{line}</li>{/each}
+            </ul>
+            {#if g.lines.length > SHOWN}<p class="hint">{t('src.clean.more', { n: fmt(g.lines.length - SHOWN) })}</p>{/if}
+          </section>
+        {/each}
+      </details>
+    {/if}
+    {#each [...new Set([...draft.preview.warnings.filter((w) => !draft.preview?.quality || !w.includes('may be unreliable')), ...draft.preview.cleanWarnings])] as w (w)}<p class="hint">{w}</p>{/each}
     <Field label={t('src.url.pvTitle')}>
       <input bind:value={draft.preview.title} />
     </Field>
@@ -41,6 +63,13 @@
     </div>
     <p class="hint">{t('src.url.hint')}</p>
   </section>
+  <Dialog bind:open={putBackAsk.open} title={t('src.clean.confirmTitle')} onclose={() => answerPutBack(false)}>
+    <p>{t('src.clean.confirm')}</p>
+    {#snippet footer()}
+      <Button onclick={() => answerPutBack(false)}>{t('common.cancel')}</Button>
+      <Button variant="primary" onclick={() => answerPutBack(true)}>{t('src.clean.putBack')}</Button>
+    {/snippet}
+  </Dialog>
 {/if}
 
 <style>
@@ -82,6 +111,25 @@
     align-items: center;
     gap: var(--s-2);
     margin: 0;
+  }
+  .removed summary {
+    cursor: pointer;
+  }
+  .group {
+    margin-top: var(--s-2);
+  }
+  .group h4 {
+    margin: 0;
+    font-size: var(--fs-small);
+  }
+  .lines {
+    margin: var(--s-1) 0 0;
+    padding-left: 1.2rem;
+    max-height: 12rem;
+    overflow-y: auto;
+    color: var(--muted);
+    font-size: var(--fs-small);
+    overflow-wrap: anywhere;
   }
   .issues {
     margin: 0;

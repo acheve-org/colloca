@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AddDocuments from '../src/screens/AddDocuments.svelte';
 import { addUrlList, draft, importSelected, resetDraft, work } from '../src/lib/addDocuments.svelte';
@@ -14,6 +14,7 @@ let urlsReply: ((body: { urls: string[] }, n: number) => { status: number; body:
 let documentsStatus: number;
 let previewGate: Promise<void> | null;
 let previewReply: Record<string, unknown>;
+let cleanReply: Record<string, unknown>;
 
 const res = (status: number, body: unknown) => ({ ok: status < 400, status, statusText: 'x', json: async () => body });
 
@@ -23,6 +24,7 @@ beforeEach(() => {
   urlsReply = null;
   documentsStatus = 202;
   previewReply = { url: 'https://example.org/final', title: 'Fetched title', text: 'one two three' };
+  cleanReply = { text: 'Inicio\none two three\nCompartir', removed: [], repaired: {}, warnings: [] };
   discovered = { links: [], max_per_request: 20, truncated: false };
   corpusStore.list = [{ id: 1, name: 'Wind', lang: 'es', project_id: null, is_reference: 0, docs: 0, tokens: 0 }];
   corpusStore.currentId = 1;
@@ -40,6 +42,7 @@ beforeEach(() => {
     if (p === '/api/corpora/1/facets') return res(200, { tags: [], text_types: [], date_min: '', date_max: '' });
     if (p === '/api/preview-url' && previewGate) await previewGate;
     if (p === '/api/preview-url') return res(200, previewReply);
+    if (p === '/api/clean') return res(200, cleanReply);
     if (p === '/api/corpora/1/documents' && method === 'POST') {
       return documentsStatus < 400 ? res(202, { job_id: 9 }) : res(documentsStatus, { detail: 'boom' });
     }
@@ -99,7 +102,7 @@ describe('From the web: one page', () => {
 
   it('the preview shows an editable title and text and the bar adds them, then goes to the list', async () => {
     const title = await fetchPage();
-    expect(calls.find((c) => c.path === '/api/preview-url')!.body).toEqual({ url: 'https://example.org/a' });
+    expect(calls.find((c) => c.path === '/api/preview-url')!.body).toEqual({ url: 'https://example.org/a', corpus_id: 1 });
     expect(title.value).toBe('Fetched title');
     const text = screen.getByLabelText('Text of the page') as HTMLTextAreaElement;
     expect(text.value).toBe('one two three');
@@ -113,7 +116,7 @@ describe('From the web: one page', () => {
     expect(c.params.get('background')).toBe('true');
     expect(c.body).toEqual({
       title: 'Edited', text: 'one two', source: 'https://example.org/final', kind: 'url',
-      tags: 'law', text_type: '', doc_date: '', author: '',
+      tags: 'law', text_type: '', doc_date: '', author: '', line_hashes: '',
     });
     await waitFor(() => expect(route.screen).toBe('sources'));
     expect(window.location.hash).toBe('#/sources');
@@ -149,6 +152,108 @@ describe('From the web: one page', () => {
     expect(screen.getByText('Text quality: poor')).toBeInTheDocument();
     expect(screen.getByRole('alert')).toHaveTextContent('Text quality: poor');
     expect(screen.getByText('Many words have no vowels: the text looks garbled.')).toBeInTheDocument();
+  });
+});
+
+describe('From the web: what cleaning removed', () => {
+  const cleaned = () => ({
+    url: 'https://example.org/final', title: 'Fetched title', text: 'one two three', warnings: [],
+    removed: [{ step: 'edges', lines: ['Inicio', 'Compartir'] }], repaired: {},
+    raw: ['Inicio\none two three\nCompartir'], fmt: 'html', line_hashes: 'ab12cd34',
+  });
+  async function fetchPage() {
+    open();
+    await fireEvent.input(screen.getByLabelText('Web address'), { target: { value: 'https://example.org/a' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Fetch & preview' }));
+    await screen.findByLabelText('Title of the page');
+  }
+  const cleanCalls = () => calls.filter((c) => c.path === '/api/clean');
+  const textArea = () => screen.getByLabelText('Text of the page') as HTMLTextAreaElement;
+
+  it('lists removed lines grouped by step', async () => {
+    previewReply = cleaned();
+    await fetchPage();
+    expect(screen.getByText('Removed while cleaning: 2 lines')).toBeInTheDocument();
+    expect(screen.getByText('Menus and links at the start or end')).toBeInTheDocument();
+    expect(screen.getByText('Inicio')).toBeInTheDocument();
+    expect(screen.getByText('Compartir')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Put back' })).toBeInTheDocument();
+  });
+
+  it('shows nothing about cleaning when nothing was removed', async () => {
+    await fetchPage();
+    expect(screen.queryByText(/Removed while cleaning/)).toBeNull();
+  });
+
+  it('shows at most 50 lines of a group and how many more there are', async () => {
+    previewReply = { ...cleaned(), removed: [{ step: 'noise', lines: Array.from({ length: 53 }, (_, i) => `--- ${i}`) }] };
+    await fetchPage();
+    expect(screen.getByText('Removed while cleaning: 53 lines')).toBeInTheDocument();
+    expect(screen.getByText('Lines without words')).toBeInTheDocument();
+    expect(screen.getByText('--- 49')).toBeInTheDocument();
+    expect(screen.queryByText('--- 50')).toBeNull();
+    expect(screen.getByText('and 3 more')).toBeInTheDocument();
+  });
+
+  it('put back re-cleans with the step skipped', async () => {
+    previewReply = cleaned();
+    cleanReply = { text: 'Inicio\none two three\nCompartir', removed: [], repaired: {}, warnings: ['Kept as extracted.'] };
+    await fetchPage();
+    await fireEvent.click(screen.getByRole('button', { name: 'Put back' }));
+    await waitFor(() => expect(cleanCalls()).toHaveLength(1));
+    expect(cleanCalls()[0].body).toEqual({
+      raw: ['Inicio\none two three\nCompartir'], fmt: 'html', corpus_id: 1, source: 'https://example.org/final', skip: ['edges'],
+    });
+    await waitFor(() => expect(textArea().value).toBe('Inicio\none two three\nCompartir'));
+    expect(screen.queryByText('Menus and links at the start or end')).toBeNull();
+    expect(screen.queryByText(/Removed while cleaning/)).toBeNull();
+    expect(screen.getByText('Kept as extracted.')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(draft.preview?.skipped).toEqual(['edges']);
+  });
+
+  it('a second put back keeps the steps already skipped', async () => {
+    previewReply = { ...cleaned(), removed: [{ step: 'edges', lines: ['Inicio'] }, { step: 'noise', lines: ['***'] }] };
+    cleanReply = { text: 'Inicio\none two three', removed: [{ step: 'noise', lines: ['***'] }], repaired: {}, warnings: [] };
+    await fetchPage();
+    const groups = screen.getAllByRole('button', { name: 'Put back' });
+    await fireEvent.click(groups[0]);
+    await waitFor(() => expect(screen.getAllByRole('button', { name: 'Put back' })).toHaveLength(1));
+    await fireEvent.click(screen.getByRole('button', { name: 'Put back' }));
+    await waitFor(() => expect(cleanCalls()).toHaveLength(2));
+    expect((cleanCalls()[1].body as { skip: string[] }).skip).toEqual(['edges', 'noise']);
+  });
+
+  it('put back after an edit asks first and cancel keeps the edit', async () => {
+    previewReply = cleaned();
+    await fetchPage();
+    await fireEvent.input(textArea(), { target: { value: 'my edit' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Put back' }));
+    const dlg = screen.getByRole('dialog');
+    expect(dlg).toHaveTextContent('Putting these lines back discards your edits to the text. Continue?');
+    await fireEvent.click(within(dlg).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(cleanCalls()).toHaveLength(0);
+    expect(textArea().value).toBe('my edit');
+    expect(screen.getByText('Menus and links at the start or end')).toBeInTheDocument();
+  });
+
+  it('put back after an edit, confirmed, replaces the edited text', async () => {
+    previewReply = cleaned();
+    await fetchPage();
+    await fireEvent.input(textArea(), { target: { value: 'my edit' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Put back' }));
+    await fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Put back' }));
+    await waitFor(() => expect(cleanCalls()).toHaveLength(1));
+    await waitFor(() => expect(textArea().value).toBe('Inicio\none two three\nCompartir'));
+  });
+
+  it('sends line hashes when adding the preview', async () => {
+    previewReply = cleaned();
+    await fetchPage();
+    await fireEvent.click(screen.getByRole('button', { name: 'Add to corpus' }));
+    await waitFor(() => expect(docPosts()).toHaveLength(1));
+    expect((docPosts()[0].body as { line_hashes: string }).line_hashes).toBe('ab12cd34');
   });
 });
 
