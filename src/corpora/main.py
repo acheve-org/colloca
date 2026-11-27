@@ -1341,7 +1341,7 @@ def bulk_update_documents(body: DocBulk):
         clean = metadata.clean_meta(body.text_type or "", body.doc_date or "", body.author or "")
     except metadata.MetadataError as exc:
         raise HTTPException(400, str(exc)) from exc
-    fields = {k: clean[k] for k in ("text_type", "doc_date", "author") if k in body.model_fields_set}
+    fields: dict[str, str] = {k: clean[k] for k in ("text_type", "doc_date", "author") if k in body.model_fields_set}
     with db.session() as conn:
         marks = ",".join("?" * len(ids))
         found = conn.execute(f"""SELECT COUNT(*) FROM documents d JOIN corpora c ON c.id=d.corpus_id
